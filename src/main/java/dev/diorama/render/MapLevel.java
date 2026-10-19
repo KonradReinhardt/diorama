@@ -81,7 +81,8 @@ public final class MapLevel implements ChunkSource {
 	private final Map<TileKey, Dirty> dirty = new HashMap<>();
 	private final Map<TileKey, Double> wanted = new HashMap<>();
 	private final Set<TileKey> inFlight = new HashSet<>();
-	private final ConcurrentLinkedQueue<TileImage> finished = new ConcurrentLinkedQueue<>();
+	private final BakeScheduler scheduler = new BakeScheduler(BAKERS);
+	private final RetryBackoff retries = new RetryBackoff();
 	/** Overview tiles the writer rebuilt; reloaded when next wanted. */
 	private final ConcurrentLinkedQueue<TileKey> overviewChanged = new ConcurrentLinkedQueue<>();
 	/** Overview tiles with nothing saved under them; not asked for again until that changes. */
@@ -514,8 +515,22 @@ public final class MapLevel implements ChunkSource {
 				this.dirty.computeIfAbsent(changedOverview, k -> new Dirty(0)).blocks.set(0);
 			}
 		}
-		TileImage image;
-		while ((image = this.finished.poll()) != null) {
+        BakeScheduler.Result result;
+        while ((result = this.scheduler.poll()) != null) {
+            TileKey completedKey = result.key();
+            if (result.failure() != null) {
+                this.inFlight.remove(completedKey);
+                boolean wasBackground = this.backgroundBakes.remove(completedKey);
+                if (result.generation() == this.generation(completedKey)) {
+                    Diorama.LOGGER.error("Failed to process tile {}; retrying with backoff", completedKey, result.failure());
+                    this.retries.failed(completedKey, System.currentTimeMillis());
+                    this.dirty.computeIfAbsent(completedKey, k -> new Dirty(0)).blocks.set(0, 256);
+                    if (wasBackground) this.unsaved.put(completedKey, 0L);
+                }
+                continue;
+            }
+            TileImage image = result.image();
+            this.retries.succeeded(completedKey);
 			this.inFlight.remove(image.key());
 			boolean background = this.backgroundBakes.remove(image.key());
 			if (this.closed) {
@@ -575,7 +590,7 @@ public final class MapLevel implements ChunkSource {
 					break;
 				}
 				TileKey key = entry.getKey();
-				if (this.inFlight.contains(key)) {
+				if (this.inFlight.contains(key) || !this.retries.ready(key, now)) {
 					continue;
 				}
 				boolean missing = !this.tiles.containsKey(key);
@@ -608,31 +623,22 @@ public final class MapLevel implements ChunkSource {
 		boolean fog = this.fogOfWar;
 		Overlays overlays = this.overlays;
 		TileStore store = key.isCave() ? null : this.store;
-		BAKERS.execute(() -> {
-			try {
-				long start = System.nanoTime();
-				int[] saved = store == null ? null : store.read(key);
-				this.finished.add(TileBaker.bake(key, this, looks, blocks, fog, saved, overlays).withGeneration(generation));
-				logBakeTime(System.nanoTime() - start, blocks == null);
-			} catch (Throwable t) {
-				Diorama.LOGGER.error("Failed to bake tile {}", key, t);
-				this.finished.add(TileImage.partial(key, List.of()).withGeneration(generation));
-			}
-		});
+        this.scheduler.submit(key, generation, () -> {
+            long start = System.nanoTime();
+            int[] saved = store == null ? null : store.read(key);
+            TileImage image = TileBaker.bake(key, this, looks, blocks, fog, saved, overlays);
+            logBakeTime(System.nanoTime() - start, blocks == null);
+            return image;
+        });
 	}
 
 	private void loadOverview(TileKey key, TileStore store) {
 		this.inFlight.add(key);
 		int generation = this.generation(key);
-		BAKERS.execute(() -> {
-			int[] pixels = null;
-			try {
-				pixels = store.read(key);
-			} catch (Throwable t) {
-				Diorama.LOGGER.error("Failed to load overview tile {}", key, t);
-			}
-			this.finished.add((pixels == null ? TileImage.partial(key, List.of()) : TileBaker.image(key, pixels)).withGeneration(generation));
-		});
+        this.scheduler.submit(key, generation, () -> {
+            int[] pixels = store.read(key);
+            return pixels == null ? TileImage.partial(key, List.of()) : TileBaker.image(key, pixels);
+        });
 	}
 
 	/**
@@ -647,7 +653,7 @@ public final class MapLevel implements ChunkSource {
 		while (it.hasNext()) {
 			Map.Entry<TileKey, Long> e = it.next();
 			TileKey key = e.getKey();
-			if (now - e.getValue() < BACKGROUND_QUIET_MS || this.inFlight.contains(key)) {
+			if (now - e.getValue() < BACKGROUND_QUIET_MS || this.inFlight.contains(key) || !this.retries.ready(key, now)) {
 				continue;
 			}
 			it.remove();
@@ -745,8 +751,11 @@ public final class MapLevel implements ChunkSource {
 	private void saveLastBakes(TileStore store) {
 		long deadline = System.currentTimeMillis() + 3000;
 		while (true) {
-			TileImage image;
-			while ((image = this.finished.poll()) != null) {
+			BakeScheduler.Result result;
+			while ((result = this.scheduler.poll()) != null) {
+                this.inFlight.remove(result.key());
+                if (result.failure() != null) continue;
+                TileImage image = result.image();
 				this.inFlight.remove(image.key());
 				if (!image.key().isCave() && image.key().lod() == 0 && image.generation() == this.generation(image.key())) {
 					store.baked(image);
