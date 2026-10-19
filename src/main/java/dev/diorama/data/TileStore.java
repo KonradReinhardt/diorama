@@ -6,32 +6,24 @@ import dev.diorama.bake.Mipmaps;
 import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
 import dev.diorama.bake.TilePixels;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.Iterator;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 import org.jspecify.annotations.Nullable;
 
@@ -52,7 +44,8 @@ import org.jspecify.annotations.Nullable;
  * children changed, so zooming out shows everything explored without baking anything. Only the
  * writer builds them: a missing overview tile means nothing under it was ever mapped.
  *
- * <p>File format: {@code OMT1}, the edge length, then the ABGR pixels deflated.
+ * <p>Reads legacy {@code OMT1} and writes atomic, checksummed {@code OMT2} day/night bundles.
+ * Legacy files remain untouched for rollback. Night alpha measures light-data availability.
  */
 public final class TileStore {
 	private static final int MAGIC = 0x4F4D5431;

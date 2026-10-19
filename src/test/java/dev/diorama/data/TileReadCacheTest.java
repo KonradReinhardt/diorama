@@ -5,6 +5,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TileReadCacheTest {
+    @Test void countsBothLightingPlanesAgainstTheSameBudget() {
+        TileReadCache cache = new TileReadCache(10, 32);
+        cache.put(key(0), new dev.diorama.bake.TilePixels(new int[4], new int[4]));
+        assertEquals(32, cache.bytes());
+        cache.put(key(1), new dev.diorama.bake.TilePixels(new int[4], null));
+        assertFalse(cache.contains(key(0)));
+        assertEquals(16, cache.bytes());
+    }
     private static TileKey key(int x) { return new TileKey(TileKey.SURFACE, x, 0); }
     @Test void boundsMemoryAndRetainsRecentlyReadTiles() {
         TileReadCache cache = new TileReadCache(3, 32);
