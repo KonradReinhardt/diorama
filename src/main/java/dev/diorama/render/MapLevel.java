@@ -679,7 +679,7 @@ public final class MapLevel implements ChunkSource {
 	/** Saves fog-of-war progress if it changed. Call now and then; tiles save themselves. */
 	public void saveSeen() {
 		if (this.folder != null) {
-			this.seen.save(this.folder.resolve("seen.bin"));
+			this.seen.saveAsync(this.folder.resolve("seen.bin"));
 		}
 	}
 
@@ -712,7 +712,7 @@ public final class MapLevel implements ChunkSource {
             if (result.failure() == null && !result.key().isCave() && result.key().lod() == 0
                 && result.generation() == this.generation(result.key())) completed.add(result.image());
         }
-        var save = this.scheduler.idle().handle((ignored, failure) -> null).thenRunAsync(() -> {
+        var save = java.util.concurrent.CompletableFuture.allOf(this.scheduler.idle(), this.seen.saving()).handle((ignored, failure) -> null).thenRunAsync(() -> {
             for (TileImage image : completed) retiring.baked(image);
             for (TileKey key : pending) {
                 if (looks == null) break;

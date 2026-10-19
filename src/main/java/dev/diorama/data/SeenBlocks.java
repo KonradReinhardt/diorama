@@ -26,6 +26,24 @@ public final class SeenBlocks {
 
 	private final ConcurrentHashMap<Long, long[]> sections = new ConcurrentHashMap<>();
 	private volatile boolean changed;
+    private static final java.util.concurrent.ExecutorService SAVER = java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "diorama-visibility-saver"); thread.setDaemon(true); return thread;
+    });
+    private java.util.concurrent.CompletableFuture<Void> saving = java.util.concurrent.CompletableFuture.completedFuture(null);
+
+    /** Coalesce periodic saves and leave compression and disk I/O off the client thread. */
+    public void saveAsync(Path file) {
+        if (!this.changed || !this.saving.isDone()) return;
+        SeenBlocks copy = this.snapshot();
+        this.changed = false;
+        this.saving = java.util.concurrent.CompletableFuture.runAsync(() -> {
+            copy.save(file);
+            if (copy.changed) this.changed = true;
+        }, SAVER);
+    }
+
+    public java.util.concurrent.CompletableFuture<Void> saving() { return this.saving; }
+
 
 	public boolean isSeen(int x, int y, int z) {
 		long[] bits = this.sections.get(SectionPos.asLong(x >> 4, y >> 4, z >> 4));

@@ -36,6 +36,7 @@ public final class MapSession {
 	private static final long LOAD_DELAY_MS = 750;
 	private static final long CHANGE_DELAY_MS = 250;
 	private static final int SNAPSHOTS_PER_TICK = 24;
+    private static final long SNAPSHOT_BUDGET_NANOS = 2_000_000;
 
 	private static @Nullable MapSession current;
 	private static final boolean DEBUG_CHANGES = Diorama.DEBUG;
@@ -336,9 +337,9 @@ public final class MapSession {
 		int playerChunkX = player == null ? 0 : player.blockPosition().getX() >> 4;
 		int playerChunkZ = player == null ? 0 : player.blockPosition().getZ() >> 4;
 		long now = System.currentTimeMillis();
-		int budget = SNAPSHOTS_PER_TICK;
+		TickBudget budget = new TickBudget(SNAPSHOTS_PER_TICK, SNAPSHOT_BUDGET_NANOS, System::nanoTime);
 		Iterator<Map.Entry<Long, Pending>> it = this.pending.entrySet().iterator();
-		while (it.hasNext() && budget > 0) {
+		while (it.hasNext() && budget.available()) {
 			Map.Entry<Long, Pending> entry = it.next();
 			Pending p = entry.getValue();
 			if (p.due > now) {
@@ -351,7 +352,7 @@ public final class MapSession {
 			if (this.level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false) instanceof LevelChunk chunk) {
 				boolean known = this.map.chunk(cx, cz) != null;
 				this.map.put(ChunkSnapshot.take(chunk, this.level), known ? p.box : null, playerChunkX, playerChunkZ);
-				budget--;
+				budget.completed();
 			}
 		}
 		boolean fog = ServerRules.fogOfWar(this.level.dimension() == Level.NETHER);
