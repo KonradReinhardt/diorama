@@ -1,7 +1,11 @@
 {
-  "diorama.settings.direction": "Direção do mapa",
-  "diorama.settings.direction.north": "Norte",
-  "diorama.settings.direction.east": "Leste",
-  "diorama.settings.direction.south": "Sul",
-  "diorama.settings.direction.west": "Oeste"
+	"diorama.settings.direction": "Direção do mapa",
+	"diorama.settings.direction.north": "Norte",
+	"diorama.settings.direction.east": "Leste",
+	"diorama.settings.direction.south": "Sul",
+	"diorama.settings.direction.west": "Oeste",
+	"diorama.settings.lighting": "Iluminação",
+	"diorama.settings.lighting.world": "Horário do mundo",
+	"diorama.settings.lighting.day": "Sempre dia",
+	"diorama.settings.lighting.night": "Sempre noite"
 }

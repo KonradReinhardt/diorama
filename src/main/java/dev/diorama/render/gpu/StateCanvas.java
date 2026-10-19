@@ -37,6 +37,18 @@ final class StateCanvas implements MapCanvas {
 		));
 	}
 
+    //? if >=26.3 {
+    @Override
+    public void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
+        float x0, float y0, float x1, float y1, dev.diorama.EnvironmentLighting lighting) {
+        this.graphics.guiRenderState.addGuiElement(QuadElement.rect(
+            DioramaPipelines.MAP_LIGHT,
+            StateTexture.pair((StateTexture) day, sampling, (StateTexture) (night == null ? day : night), sampling),
+            new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, 0, 0, 1, 1,
+            lighting.params(night != null), this.graphics.scissorStack.peek()));
+    }
+    //?}
+
 	@Override
 	public void solid(float[] corners, int argb) {
 		this.graphics.guiRenderState.addGuiElement(QuadElement.of(

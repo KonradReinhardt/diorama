@@ -146,6 +146,7 @@ public final class MapViewport {
 		// Minified tiles blend across mips; magnified ones stay crisp so blocks keep their edges.
 		Sampling sampling = view.zoom() >= Projection.PIXELS_PER_UNIT ? Sampling.TILE_CRISP : Sampling.TILE_SMOOTH;
 		MapCanvas canvas = MapCanvas.of(graphics);
+        var lighting = dev.diorama.EnvironmentLighting.current(view.layer() != TileKey.SURFACE || level.roofless());
 		float size = (float) (units * view.zoom());
 		for (int tu = tu0 - 1; tu <= tu1 + 1; tu++) {
 			for (int tv = tv0 - 1; tv <= tv1 + 1; tv++) {
@@ -160,7 +161,7 @@ public final class MapViewport {
 				}
 				float sx = view.screenX(tu * units);
 				float sy = view.screenY(tv * units);
-				canvas.rect(tile.texture(), sampling, sx, sy, sx + size, sy + size, 0, 0, 1, 1, -1);
+				canvas.lit(tile.texture(), tile.nightTexture(), sampling, sx, sy, sx + size, sy + size, lighting);
 				MapTexture overlay = overlays == 0 || lod > 0 ? null : tile.overlay(overlays);
 				if (overlay != null) {
 					canvas.rect(overlay, sampling, sx, sy, sx + size, sy + size, 0, 0, 1, 1, -1);

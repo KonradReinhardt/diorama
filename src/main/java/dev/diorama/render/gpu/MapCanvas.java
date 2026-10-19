@@ -39,6 +39,12 @@ public interface MapCanvas {
 		);
 	}
 
+    /** Surface endpoints share coverage; older backends retain their daytime rendering. */
+    default void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
+        float x0, float y0, float x1, float y1, dev.diorama.EnvironmentLighting lighting) {
+        this.rect(day, sampling, x0, y0, x1, y1, 0, 0, 1, 1, -1);
+    }
+
 	/** An untextured quad in one colour, corners counter-clockwise (the other winding is culled). */
 	void solid(float[] corners, int argb);
 
