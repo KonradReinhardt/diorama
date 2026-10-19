@@ -355,7 +355,7 @@ public final class TileStore {
     }
 
 	/** Writes the newest pixels of a tile. Writer thread. */
-	private void write(TileKey key) {
+	void write(TileKey key) {
 		if (this.closed) {
 			return;
 		}

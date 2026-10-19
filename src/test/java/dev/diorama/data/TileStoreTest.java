@@ -46,6 +46,21 @@ class TileStoreTest {
         assertEquals(0xFF123456, read.join()[0]);
         next.close();
     }
+    @Test void failedWriteRetainsPixelsForTheNextFlush() throws Exception {
+        var key = new TileKey(TileKey.SURFACE, 0, 0);
+        TileStore store = new TileStore(folder);
+        store.baked(image(key, 0xFF654321));
+        assertNotNull(store.read(key));
+        Path blocker = folder.resolve("0_0.omt.tmp");
+        Files.createDirectory(blocker);
+        store.write(key);
+        assertEquals(0xFF654321, store.read(key)[0]);
+        Files.delete(blocker);
+        store.close();
+        TileStore reopened = new TileStore(folder);
+        assertEquals(0xFF654321, reopened.read(key)[0]);
+        reopened.close();
+    }
     @Test void damagedTileIsTreatedAsUnknown() throws Exception {
         Files.write(folder.resolve("0_0.omt"), new byte[] {1, 2, 3});
         TileStore store = new TileStore(folder);
