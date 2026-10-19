@@ -75,11 +75,11 @@ public final class MinimapHud implements HudElement {
 		int x = right ? graphics.guiWidth() - size - MARGIN : MARGIN;
 		int y = top ? MARGIN + effects : graphics.guiHeight() - size - MARGIN - infoHeight;
 		int wantedLayer = settings.autoCaves ? session.autoLayer(player) : TileKey.SURFACE;
-		int layer = this.layerToShow(session.map(), new MapViewport.View(x, y, size, size, pos.x, Projection.v(pos.y, pos.z), settings.zoom(), wantedLayer));
+		int layer = this.layerToShow(session.map(), new MapViewport.View(x, y, size, size, Projection.u(pos.x, pos.z), Projection.worldV(pos.x, pos.y, pos.z), settings.zoom(), wantedLayer));
 
 		graphics.fill(x - 2, y - 2, x + size + 2, y + size + 2, 0xC0101418);
 		graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, 0x60FFFFFF);
-		MapViewport.View view = new MapViewport.View(x, y, size, size, pos.x, Projection.v(pos.y, pos.z), settings.zoom(), layer);
+		MapViewport.View view = new MapViewport.View(x, y, size, size, Projection.u(pos.x, pos.z), Projection.worldV(pos.x, pos.y, pos.z), settings.zoom(), layer);
 		this.viewport.draw(graphics, session.map(), view);
 		List<Radar.Blip> blips = ServerRules.radarAllowed() ? Radar.collect(view, partialTick, false) : List.of();
 		Radar.draw(graphics, view, blips, false, false);
@@ -144,10 +144,10 @@ public final class MinimapHud implements HudElement {
 
 	/** Letters on the frame. The map always faces north, so they never move. */
 	private void compass(GuiGraphicsExtractor graphics, Font font, int x, int y, int size) {
-		this.letter(graphics, font, "N", x + size / 2, y + 1, 0xFFFF6B6B);
-		this.letter(graphics, font, "S", x + size / 2, y + size - 9, 0xFFFFFFFF);
-		this.letter(graphics, font, "W", x + 5, y + size / 2 - 4, 0xFFFFFFFF);
-		this.letter(graphics, font, "E", x + size - 5, y + size / 2 - 4, 0xFFFFFFFF);
+		this.letter(graphics, font, Projection.direction().topLetter(), x + size / 2, y + 1, 0xFFFF6B6B);
+		this.letter(graphics, font, Projection.direction().bottomLetter(), x + size / 2, y + size - 9, 0xFFFFFFFF);
+		this.letter(graphics, font, Projection.direction().leftLetter(), x + 5, y + size / 2 - 4, 0xFFFFFFFF);
+		this.letter(graphics, font, Projection.direction().rightLetter(), x + size - 5, y + size / 2 - 4, 0xFFFFFFFF);
 	}
 
 	private void letter(GuiGraphicsExtractor graphics, Font font, String letter, int cx, int y, int color) {

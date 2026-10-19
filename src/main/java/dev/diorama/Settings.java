@@ -43,6 +43,7 @@ public final class Settings {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static Settings current;
 
+	public MapDirection mapDirection = MapDirection.NORTH;
 	public boolean minimap = true;
 	public Size minimapSize = Size.MEDIUM;
 	public Corner minimapCorner = Corner.TOP_RIGHT;
@@ -132,6 +133,7 @@ public final class Settings {
 	/** Pushes the settings that live elsewhere: the map look and fog of war. */
 	public void apply() {
 		// The map session re-bakes only if the tiles would look different.
+		Projection.setDirection(this.mapDirection);
 		MapStyle.set(this.style());
 		boolean fast = this.quality == Quality.FAST;
 		if (fast != TileBaker.fast()) {
@@ -158,6 +160,7 @@ public final class Settings {
 		if (settings == null) {
 			settings = new Settings();
 		}
+		if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;
 		}

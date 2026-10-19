@@ -44,10 +44,10 @@ public final class MapPick {
 			}
 			if (!skippingRock && (kind == BlockLooks.SOLID || kind == BlockLooks.LAVA || kind == BlockLooks.WATER)) {
 				// Fog of war: a cave the player hasn't seen can't be picked, or its floor would leak.
-				if ((cave || roofless) && fogOfWar && !source.isSeen(x, by, bz) && !source.isSeen(x, by + 1, bz)) {
+				if ((cave || roofless) && fogOfWar && !reader.isSeen(x, by, bz) && !reader.isSeen(x, by + 1, bz)) {
 					return null;
 				}
-				return new BlockPos(x, by + 1, bz);
+				return new BlockPos(reader.direction.worldBlockX(x, bz), by + 1, reader.direction.worldBlockZ(x, bz));
 			}
 			if (tMaxY < tMaxZ) {
 				by--;

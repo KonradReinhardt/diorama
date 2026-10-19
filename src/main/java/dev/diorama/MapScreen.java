@@ -44,6 +44,7 @@ public final class MapScreen extends Screen {
 	private double zoom = 2.0;
 	private int layer;
 	private boolean following = true;
+    private MapDirection direction = Projection.direction();
 	private List<Radar.Blip> blips = List.of();
 	private List<WaypointOverlay.Pin> pins = List.of();
 	private MapViewport.@Nullable View lastView;
@@ -81,9 +82,13 @@ public final class MapScreen extends Screen {
 		if (session == null || player == null) {
 			return;
 		}
+		if (this.direction != Projection.direction()) {
+            this.direction = Projection.direction();
+            this.following = true;
+        }
 		Vec3 pos = player.getPosition(a);
-		double playerU = pos.x;
-		double playerV = Projection.v(pos.y, pos.z);
+		double playerU = Projection.u(pos.x, pos.z);
+		double playerV = Projection.worldV(pos.x, pos.y, pos.z);
 		if (this.following) {
 			this.centerU = playerU;
 			this.centerV = playerV;

@@ -108,6 +108,7 @@ public final class TileBaker {
 	private final java.util.Map<Long, Boolean> slimeChunks = new java.util.HashMap<>();
 	private final ChunkSource source;
 	private final MapStyle style;
+	private final boolean fastQuality;
 	// The camera angle when this bake started; a change mid-bake makes the result stale anyway.
 	private final double sin;
 	private final double cos;
@@ -140,25 +141,26 @@ public final class TileBaker {
 	 */
 	private final double depthOrigin;
 
-	private TileBaker(TileKey key, ChunkSource source, BlockLooks looks, boolean fogOfWar, @Nullable Overlays overlays) {
+	private TileBaker(TileKey key, ChunkSource source, BlockLooks looks, boolean fogOfWar, @Nullable Overlays overlays, BakeContext context) {
 		this.key = key;
 		this.overlays = overlays;
 		this.looks = looks;
-		this.reader = new VoxelReader(source, looks.kind);
+		this.reader = new VoxelReader(source, looks.kind, context.direction());
 		this.cave = key.isCave();
 		this.roofless = !this.cave && source.roof() != ChunkSource.NO_ROOF;
 		this.lit = this.cave || this.roofless;
 		this.source = source;
 		this.fogOfWar = this.lit && fogOfWar;
-		this.style = MapStyle.get();
+		this.style = context.style();
+        this.fastQuality = context.fast();
 		double elevation = Math.toRadians(this.style.sunElevation());
 		this.sunX = Math.cos(elevation) * SUN_AZIMUTH_X;
 		this.sunY = Math.sin(elevation);
 		this.sunZ = Math.cos(elevation) * SUN_AZIMUTH_Z;
-		this.sin = Projection.sin();
-		this.cos = Projection.cos();
-		this.topY = localTop(key, source, 0);
-		this.rayTop = localTop(key, source, SKY_REACH);
+		this.sin = context.sin();
+		this.cos = context.cos();
+		this.topY = localTop(key, source, 0, context);
+		this.rayTop = localTop(key, source, SKY_REACH, context);
 		this.startY = this.cave ? Math.min(key.layer(), source.maxY()) : this.roofless ? Math.min(source.roof(), source.maxY()) : this.topY;
 		double originZ = (key.minV() + this.startY * this.cos) / this.sin;
 		this.depthOrigin = -(this.sin * this.startY + this.cos * originZ);
@@ -170,17 +172,22 @@ public final class TileBaker {
 	 * instead of at the tallest block in the whole dimension skips a lot of empty sky.
 	 */
 	static int localTop(TileKey key, ChunkSource source, int moreNorth) {
+        return localTop(key, source, moreNorth, BakeContext.capture());
+    }
+
+    private static int localTop(TileKey key, ChunkSource source, int moreNorth, BakeContext context) {
 		int globalTop = Math.min(source.maxY(), source.topY());
 		double minU = key.minU();
 		double minV = key.minV();
 		int x0 = Math.floorDiv((int) Math.floor(minU) - 1, 16);
 		int x1 = Math.floorDiv((int) Math.ceil(minU + Projection.TILE_UNITS) + SHADOW_REACH_X + 1, 16);
-		int z0 = Math.floorDiv((int) Math.floor(Projection.zAt(minV, source.minY())) - 1 - moreNorth, 16);
-		int z1 = Math.floorDiv((int) Math.ceil(Projection.zAt(minV + Projection.TILE_UNITS, globalTop)) + SHADOW_REACH_Z + 1, 16);
+		int z0 = Math.floorDiv((int) Math.floor(context.zAt(minV, source.minY())) - 1 - moreNorth, 16);
+		int z1 = Math.floorDiv((int) Math.ceil(context.zAt(minV + Projection.TILE_UNITS, globalTop)) + SHADOW_REACH_Z + 1, 16);
 		int top = Integer.MIN_VALUE;
 		for (int cx = x0 - 2; cx <= x1; cx++) {
 			for (int cz = z0; cz <= z1 + 1; cz++) {
-				ChunkSnapshot chunk = source.chunk(cx, cz);
+				dev.diorama.MapDirection direction = context.direction();
+                ChunkSnapshot chunk = source.chunk(direction.worldBlockX(cx, cz), direction.worldBlockZ(cx, cz));
 				if (chunk != null && chunk.maxY != Integer.MIN_VALUE) {
 					top = Math.max(top, chunk.maxY + 1);
 				}
@@ -219,7 +226,12 @@ public final class TileBaker {
 	public static TileImage bake(
 		TileKey key, ChunkSource source, BlockLooks looks, @Nullable BitSet blocks, boolean fogOfWar, int @Nullable [] saved, @Nullable Overlays overlays
 	) {
-		TileBaker baker = new TileBaker(key, source, looks, fogOfWar, overlays);
+		return bake(key, source, looks, blocks, fogOfWar, saved, overlays, BakeContext.capture());
+    }
+
+    public static TileImage bake(TileKey key, ChunkSource source, BlockLooks looks, @Nullable BitSet blocks,
+        boolean fogOfWar, int @Nullable [] saved, @Nullable Overlays overlays, BakeContext context) {
+        TileBaker baker = new TileBaker(key, source, looks, fogOfWar, overlays, context);
 		int size = Projection.TILE_PIXELS;
 		if (blocks == null) {
 			int[] pixels = new int[size * size];
@@ -287,7 +299,7 @@ public final class TileBaker {
 		double minU = this.key.minU();
 		double minV = this.key.minV();
 		double unitsPerPixel = 1.0 / Projection.PIXELS_PER_UNIT;
-		double[][] samples = fast ? FAST_SAMPLES : SAMPLES;
+		double[][] samples = this.fastQuality ? FAST_SAMPLES : SAMPLES;
 		for (int y = 0; y < h; y++) {
 			for (int x = 0; x < w; x++) {
 				float r = 0;
@@ -351,8 +363,8 @@ public final class TileBaker {
 		}
 		Long seed = this.overlays.slimeSeed();
 		if (seed != null) {
-			int cx = this.hitX >> 4;
-			int cz = this.hitZ >> 4;
+			int cx = this.reader.direction.worldBlockX(this.hitX, this.hitZ) >> 4;
+			int cz = this.reader.direction.worldBlockZ(this.hitX, this.hitZ) >> 4;
 			if (this.slimeChunks.computeIfAbsent(((long) cx << 32) | (cz & 0xFFFFFFFFL), k -> Overlays.slimeChunk(seed, cx, cz))) {
 				bits |= Overlays.SLIME;
 			}
@@ -447,8 +459,8 @@ public final class TileBaker {
 
 			switch (kind) {
 				case BlockLooks.SOLID, BlockLooks.LAVA -> {
-					if (this.fogOfWar && !this.source.isSeen(x, by, bz)
-						&& !(enteredTop ? this.source.isSeen(x, by + 1, bz) : this.source.isSeen(x, by, bz + 1))) {
+					if (this.fogOfWar && !this.reader.isSeen(x, by, bz)
+						&& !(enteredTop ? this.reader.isSeen(x, by + 1, bz) : this.reader.isSeen(x, by, bz + 1))) {
 						return false;
 					}
 					double hitY = y0 - t * sin;
@@ -508,7 +520,7 @@ public final class TileBaker {
 			}
 		}
 
-		if (this.fogOfWar && (skippingRock || waterId < 0 || !this.source.isSeen(x, waterBy, waterBz))) {
+		if (this.fogOfWar && (skippingRock || waterId < 0 || !this.reader.isSeen(x, waterBy, waterBz))) {
 			return false;
 		}
 		this.outDepth = (float) (-(sin * (y0 - t * sin) + cos * (z0 - t * cos)) - this.depthOrigin);
@@ -557,7 +569,9 @@ public final class TileBaker {
 		if (snapshot == null) {
 			return 0xFFFFFF;
 		}
-		int i = ((z & 15) << 4) | (x & 15);
+		int wx = this.reader.direction.worldBlockX(x, z);
+        int wz = this.reader.direction.worldBlockZ(x, z);
+        int i = ((wz & 15) << 4) | (wx & 15);
 		ChunkSnapshot.Tints tints = BiomeTints.of(snapshot);
 		return switch (kind) {
 			case BlockLooks.TINT_GRASS -> tints.grass()[i];

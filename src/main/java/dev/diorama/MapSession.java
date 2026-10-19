@@ -46,6 +46,7 @@ public final class MapSession {
 	private final Map<Long, Pending> pending = new LinkedHashMap<>();
 	private boolean underground;
 	private MapStyle style = MapStyle.get();
+	private MapDirection direction = Projection.direction();
 
 	private MapSession(ClientLevel level, @Nullable String key) {
 		this.level = level;
@@ -94,9 +95,10 @@ public final class MapSession {
 		}
 		if (BlockLooks.get() == null) {
 			BlockLooks.build();
-		} else if (session.style != MapStyle.get()) {
+		} else if (session.style != MapStyle.get() || session.direction != Projection.direction()) {
 			// Only a change the tiles show re-bakes them; the fog edge is drawn over them.
-			boolean rebake = !MapStyle.get().looksLike(session.style);
+			boolean rebake = !MapStyle.get().looksLike(session.style) || session.direction != Projection.direction();
+			session.direction = Projection.direction();
 			session.style = MapStyle.get();
 			if (rebake) {
 				session.map.colorsChanged();

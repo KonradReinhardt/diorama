@@ -90,5 +90,10 @@
 	"diorama.settings.spawn_spots": "Spawn spots",
 	"diorama.settings.spawn_spots.off": "Off",
 	"diorama.settings.spawn_spots.always_dark": "Always dark",
-	"diorama.settings.spawn_spots.at_night_too": "Also at night"
+	"diorama.settings.spawn_spots.at_night_too": "Also at night",
+  "diorama.settings.direction": "Map direction",
+  "diorama.settings.direction.north": "North",
+  "diorama.settings.direction.east": "East",
+  "diorama.settings.direction.south": "South",
+  "diorama.settings.direction.west": "West"
 }

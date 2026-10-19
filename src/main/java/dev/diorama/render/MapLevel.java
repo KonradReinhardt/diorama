@@ -231,10 +231,14 @@ public final class MapLevel implements ChunkSource {
 	private String storeName() {
 		long pitch = Math.round(dev.diorama.MapStyle.get().pitchDegrees());
 		if (this.roofless()) {
-			return "under-roof-" + pitch + (this.fogOfWar ? "-fog" : "");
+			return "under-roof-" + pitch + (this.fogOfWar ? "-fog" : "") + directionSuffix();
 		}
-		return pitch == 60 ? "surface" : "surface-" + pitch;
+		return (pitch == 60 ? "surface" : "surface-" + pitch) + directionSuffix();
 	}
+
+    private static String directionSuffix() {
+        return Projection.direction() == dev.diorama.MapDirection.NORTH ? "" : "-" + Projection.direction().name().toLowerCase(java.util.Locale.ROOT);
+    }
 
 	/** Moves to another folder if the kind of view changed, and queues everything loaded to be saved there. */
 	private void switchStoreIfNeeded() {
@@ -348,6 +352,12 @@ public final class MapLevel implements ChunkSource {
 	 * false when only light changed: the sky view's pixels stay the same, so nothing to save.
 	 */
 	private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain) {
+        dev.diorama.MapDirection direction = Projection.direction();
+        int au = direction.blockU(x0, z0), av = direction.blockDepth(x0, z0);
+        int bu = direction.blockU(x1, z1), bv = direction.blockDepth(x1, z1);
+        x0 = Math.min(au, bu); x1 = Math.max(au, bu);
+        z0 = Math.min(av, bv); z1 = Math.max(av, bv);
+
 		Set<Integer> layers = new HashSet<>();
 		for (TileKey key : this.tiles.keySet()) {
 			layers.add(key.layer());
@@ -462,10 +472,14 @@ public final class MapLevel implements ChunkSource {
 		double units = Projection.TILE_UNITS;
 		int x0 = snapshot.chunkX << 4;
 		int z0 = snapshot.chunkZ << 4;
-		int tu0 = (int) Math.floor(x0 / units);
-		int tu1 = (int) Math.floor((x0 + 16) / units);
-		int tv0 = (int) Math.floor(Projection.v(snapshot.maxY + 1, z0) / units);
-		int tv1 = (int) Math.floor(Projection.v(snapshot.floorY, z0 + 16) / units);
+		dev.diorama.MapDirection direction = Projection.direction();
+        double u0 = Math.min(direction.u(x0, z0), direction.u(x0 + 16, z0 + 16));
+        double u1 = Math.max(direction.u(x0, z0), direction.u(x0 + 16, z0 + 16));
+        double d0 = Math.min(direction.depth(x0, z0), direction.depth(x0 + 16, z0 + 16));
+        double d1 = Math.max(direction.depth(x0, z0), direction.depth(x0 + 16, z0 + 16));
+        int tu0 = (int) Math.floor(u0 / units), tu1 = (int) Math.floor(u1 / units);
+        int tv0 = (int) Math.floor(Projection.v(snapshot.maxY + 1, d0) / units);
+        int tv1 = (int) Math.floor(Projection.v(snapshot.floorY, d1) / units);
 		for (int tu = tu0; tu <= tu1; tu++) {
 			for (int tv = tv0; tv <= tv1; tv++) {
 				TileKey key = new TileKey(TileKey.SURFACE, tu, tv);
@@ -623,10 +637,11 @@ public final class MapLevel implements ChunkSource {
 		boolean fog = this.fogOfWar;
 		Overlays overlays = this.overlays;
 		TileStore store = key.isCave() ? null : this.store;
+        dev.diorama.bake.BakeContext context = dev.diorama.bake.BakeContext.capture();
         this.scheduler.submit(key, generation, () -> {
             long start = System.nanoTime();
             int[] saved = store == null ? null : store.read(key);
-            TileImage image = TileBaker.bake(key, this, looks, blocks, fog, saved, overlays);
+            TileImage image = TileBaker.bake(key, this, looks, blocks, fog, saved, overlays, context);
             logBakeTime(System.nanoTime() - start, blocks == null);
             return image;
         });

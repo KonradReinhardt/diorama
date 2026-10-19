@@ -23,6 +23,12 @@ public final class Projection {
 	/** Fog coverage cells per tile edge (one cell covers {@code TILE_UNITS / COVERAGE_CELLS} units). */
 	public static final int COVERAGE_CELLS = 64;
 
+    private static volatile MapDirection direction = MapDirection.NORTH;
+    public static MapDirection direction() { return direction; }
+    static void setDirection(MapDirection value) { direction = value; }
+    public static double u(double x, double z) { return direction.u(x, z); }
+    public static double worldV(double x, double y, double z) { return v(y, direction.depth(x, z)); }
+
 	private Projection() {
 	}
 

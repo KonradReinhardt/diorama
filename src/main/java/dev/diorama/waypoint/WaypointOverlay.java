@@ -37,8 +37,8 @@ public final class WaypointOverlay {
 			if (!waypoint.visible) {
 				continue;
 			}
-			float x = view.screenX(waypoint.x + 0.5);
-			float y = view.screenY(Projection.v(waypoint.y, waypoint.z + 0.5));
+			float x = view.screenX(Projection.u(waypoint.x + 0.5, waypoint.z + 0.5));
+			float y = view.screenY(Projection.worldV(waypoint.x + 0.5, waypoint.y, waypoint.z + 0.5));
 			float dx = x - cx;
 			float dy = y - cy;
 			float reach = Math.max(Math.abs(dx) / halfW, Math.abs(dy) / halfH);

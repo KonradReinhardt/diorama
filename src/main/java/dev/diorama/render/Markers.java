@@ -13,7 +13,7 @@ public final class Markers {
 	 * 90 faces west.
 	 */
 	public static void player(GuiGraphicsExtractor graphics, float x, float y, float yawDegrees, float size) {
-		double yaw = Math.toRadians(yawDegrees);
+		double yaw = Math.toRadians(yawDegrees - dev.diorama.Projection.direction().ordinal() * 90);
 		// Screen direction of travel. North-south distances look shorter under the tilted camera.
 		double dx = -Math.sin(yaw);
 		double dy = Math.cos(yaw) * dev.diorama.Projection.sin();
