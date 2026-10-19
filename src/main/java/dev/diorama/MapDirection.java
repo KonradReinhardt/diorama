@@ -9,10 +9,10 @@ public enum MapDirection {
     public double depth(double x, double z) { return this.c * x + this.d * z; }
     public double worldX(double u, double depth) { return this.a * u + this.c * depth; }
     public double worldZ(double u, double depth) { return this.b * u + this.d * depth; }
-    public int worldBlockX(int u, int depth) { return (int) Math.floor(worldX(u + 0.5, depth + 0.5)); }
-    public int worldBlockZ(int u, int depth) { return (int) Math.floor(worldZ(u + 0.5, depth + 0.5)); }
-    public int blockU(int x, int z) { return (int) Math.floor(u(x + 0.5, z + 0.5)); }
-    public int blockDepth(int x, int z) { return (int) Math.floor(depth(x + 0.5, z + 0.5)); }
+    public int worldBlockX(int u, int depth) { return this.a * u + this.c * depth + (this.a < 0 || this.c < 0 ? -1 : 0); }
+    public int worldBlockZ(int u, int depth) { return this.b * u + this.d * depth + (this.b < 0 || this.d < 0 ? -1 : 0); }
+    public int blockU(int x, int z) { return this.a * x + this.b * z + (this.a < 0 || this.b < 0 ? -1 : 0); }
+    public int blockDepth(int x, int z) { return this.c * x + this.d * z + (this.c < 0 || this.d < 0 ? -1 : 0); }
     public String topLetter() { return name().substring(0, 1); }
     public String rightLetter() { return values()[(ordinal() + 1) % 4].topLetter(); }
     public String bottomLetter() { return values()[(ordinal() + 2) % 4].topLetter(); }
