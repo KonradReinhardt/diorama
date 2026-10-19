@@ -25,7 +25,19 @@ fabricApi {
 	}
 }
 
+repositories {
+    maven("https://maven.terraformersmc.com/releases/") { name = "Terraformers" }
+    maven("https://maven.nucleoid.xyz/") { name = "Nucleoid" }
+}
+
 dependencies {
+    // Only the API is required to compile. Players can use Diorama without Mod Menu.
+    compileOnly("com.terraformersmc:modmenu:21.0.0") { isTransitive = false }
+    if (providers.gradleProperty("dioramaModMenuTest").orNull == "true" && sc.current.version == "26.3") {
+        runtimeOnly("com.terraformersmc:modmenu:21.0.0")
+        runtimeOnly("eu.pb4:placeholder-api:3.2.0+26.3")
+    }
+
 	minecraft("com.mojang:minecraft:${property("minecraft_version")}")
 	implementation("net.fabricmc:fabric-loader:${property("loader_version")}")
 	implementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")

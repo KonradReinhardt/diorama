@@ -66,3 +66,7 @@ Saved maps use separate folders per direction. Existing north-facing maps keep t
 The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> MapTile/TileStore`.
 `BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.
 Session retirement freezes chunks and settings and finishes unsaved surface tiles asynchronously. Application shutdown waits for those saves.
+
+When Mod Menu is installed on Fabric, Diorama's configure button opens the same screen as Settings in the world map.
+Mod Menu is optional. To verify its entrypoint in development, use
+`DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.

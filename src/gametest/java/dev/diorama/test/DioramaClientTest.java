@@ -122,7 +122,10 @@ public class DioramaClientTest implements FabricClientGameTest {
 			if (tests.contains("fog-of-war")) {
 				fogOfWar(context, world);
 			}
-			if (tests.contains("settings-refresh")) SettingsRefreshScenario.run(context);
+			//? if fabric {
+            if (tests.contains("modmenu")) dev.diorama.test.fabric.ModMenuScenario.run(context);
+            //?}
+            if (tests.contains("settings-refresh")) SettingsRefreshScenario.run(context);
 			if (tests.contains("settings")) {
 				settings(context, world);
 			}

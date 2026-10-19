@@ -33,7 +33,14 @@ if (hasGameTestApi) {
 	}
 }
 
+repositories {
+    maven("https://maven.terraformersmc.com/releases/") { name = "Terraformers" }
+}
+
 dependencies {
+    // Stable ConfigScreenFactory API; Loom remaps its Screen signature for each older version.
+    modCompileOnly("com.terraformersmc:modmenu:11.0.5") { isTransitive = false }
+
 	minecraft("com.mojang:minecraft:${property("minecraft_version")}")
 	mappings(loom.officialMojangMappings())
 	modImplementation("net.fabricmc:fabric-loader:${property("loader_version")}")
