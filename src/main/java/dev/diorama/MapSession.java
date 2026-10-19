@@ -224,7 +224,7 @@ public final class MapSession {
 			int x0 = section.minBlockX();
 			int y0 = section.minBlockY();
 			int z0 = section.minBlockZ();
-			int surface = current.map.spawnSpots() || current.map.roofless() ? MapLevel.CHANGED_SURFACE_LIGHT : 0;
+			int surface = MapLevel.CHANGED_SURFACE_LIGHT;
 			current.schedule(section.x(), section.z(), CHANGE_DELAY_MS, new ChangeBounds(x0, y0, z0, x0 + 15, y0 + 15, z0 + 15, surface));
 		}
 	}
@@ -233,7 +233,7 @@ public final class MapSession {
 		if (current != null && current.level == level) {
 			int x0 = chunkX << 4;
 			int z0 = chunkZ << 4;
-			int surface = current.map.spawnSpots() || current.map.roofless() ? MapLevel.CHANGED_SURFACE_LIGHT : 0;
+			int surface = MapLevel.CHANGED_SURFACE_LIGHT;
 			current.schedule(chunkX, chunkZ, CHANGE_DELAY_MS, new ChangeBounds(x0, level.getMinY(), z0, x0 + 15, level.getMaxY(), z0 + 15, surface));
 		}
 	}

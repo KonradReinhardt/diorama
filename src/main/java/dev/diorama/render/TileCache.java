@@ -13,12 +13,13 @@ final class TileCache extends AbstractMap<TileKey, MapTile> {
     @Override public MapTile remove(Object key) { return this.entries.remove(key); }
     void evict(long frame, int maxTiles, Consumer<TileKey> evicted) {
 		int resident = 0;
+        long bytes = this.values().stream().mapToLong(MapTile::gpuBytes).sum();
 		for (MapTile tile : this.values()) {
 			if (!tile.isEmpty()) {
 				resident++;
 			}
 		}
-		if (resident <= maxTiles && frame % 600 != 0) {
+		if (resident <= maxTiles && bytes <= TextureMemory.BUDGET && frame % 600 != 0) {
 			return;
 		}
 		List<Map.Entry<TileKey, MapTile>> entries = new ArrayList<>(this.entrySet());
@@ -27,13 +28,14 @@ final class TileCache extends AbstractMap<TileKey, MapTile> {
 		while (it.hasNext()) {
 			Map.Entry<TileKey, MapTile> e = it.next();
 			boolean stale = frame - e.getValue().lastDrawn > 3600;
-			if (resident <= maxTiles * 3 / 4 && !stale) {
+			if (resident <= maxTiles * 3 / 4 && bytes <= TextureMemory.BUDGET * 3 / 4 && !stale) {
 				break;
 			}
 			if (!e.getValue().isEmpty()) {
 				resident--;
 			}
-			e.getValue().close();
+			bytes -= e.getValue().gpuBytes();
+            e.getValue().close();
 			this.remove(e.getKey());
             evicted.accept(e.getKey());
 		}

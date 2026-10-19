@@ -83,7 +83,14 @@ public final class MapLevel implements ChunkSource {
 	private final Map<TileKey, Double> wanted = new HashMap<>();
 	private final Set<TileKey> inFlight = new HashSet<>();
 	private final BakeScheduler scheduler = new BakeScheduler(BAKERS);
-	private final RetryBackoff retries = new RetryBackoff();
+	private final TileFreshness freshness = new TileFreshness();
+    private final Map<TileKey, TileFreshness.Version> jobVersions = new HashMap<>();
+    private long submittedJobs;
+    public long submittedJobs() { return this.submittedJobs; }
+    public long gpuBytes() { return this.tiles.values().stream().mapToLong(MapTile::gpuBytes).sum(); }
+    public long tileWrites() { return this.store == null ? 0 : this.store.writes(); }
+    public long writtenBytes() { return this.store == null ? 0 : this.store.writtenBytes(); }
+    private final RetryBackoff retries = new RetryBackoff();
 	/** Overview tiles the writer rebuilt; reloaded when next wanted. */
 	private final ConcurrentLinkedQueue<TileKey> overviewChanged = new ConcurrentLinkedQueue<>();
 	/** Overview tiles with nothing saved under them; not asked for again until that changes. */
@@ -349,9 +356,9 @@ public final class MapLevel implements ChunkSource {
 			this.invalidate(x0, Math.min(snapshot.floorY, this.topY), this.minY, z0, x0 + 15, this.topY, z0 + 15, true, true);
 		} else {
 			// Under a roof the sky view is lit by block light, so light is part of what's saved.
-			boolean terrain = (changed.flags() & CHANGED_SURFACE) != 0 || this.roofless() && (changed.flags() & CHANGED_SURFACE_LIGHT) != 0;
+			boolean terrain = (changed.flags() & (CHANGED_SURFACE | CHANGED_SURFACE_LIGHT)) != 0;
 			boolean surface = terrain || (changed.flags() & CHANGED_SURFACE_LIGHT) != 0;
-			this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain);
+			this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain, (changed.flags() & CHANGED_SURFACE) == 0);
 		}
 		this.playerChunkX = playerChunkX;
 		this.playerChunkZ = playerChunkZ;
@@ -374,16 +381,20 @@ public final class MapLevel implements ChunkSource {
 	 * false when only light changed: the sky view's pixels stay the same, so nothing to save.
 	 */
 	private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain) {
+        this.invalidate(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, terrain, false);
+    }
+
+    private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain, boolean lightOnly) {
         Set<Integer> layers = new HashSet<>();
         for (TileKey key : this.tiles.keySet()) layers.add(key.layer());
         for (TileKey key : this.inFlight) layers.add(key.layer());
         if (this.store != null) layers.add(TileKey.SURFACE);
         long now = System.currentTimeMillis();
-        for (var region : TileInvalidation.regions(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, this.roofless(), this.roof, layers, Projection.direction()))
-            this.markDirty(region.layer(), region.minU(), region.minV(), region.maxU(), region.maxV(), now, terrain);
+        for (var region : TileInvalidation.regions(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, this.roofless(), this.roof, layers, Projection.direction(), lightOnly))
+            this.markDirty(region.layer(), region.minU(), region.minV(), region.maxU(), region.maxV(), now, terrain, lightOnly);
 	}
 
-	private void markDirty(int layer, double u0, double v0, double u1, double v1, long now, boolean terrain) {
+	private void markDirty(int layer, double u0, double v0, double u1, double v1, long now, boolean terrain, boolean lightOnly) {
 		double units = Projection.TILE_UNITS;
 		double blockUnits = (double) TileImage.BLOCK / Projection.PIXELS_PER_UNIT;
 		int perRow = Projection.TILE_PIXELS / TileImage.BLOCK;
@@ -404,7 +415,8 @@ public final class MapLevel implements ChunkSource {
 				int bx1 = Math.min(perRow - 1, (int) Math.floor((u1 - tu * units) / blockUnits));
 				int by0 = Math.max(0, (int) Math.floor((v0 - tv * units) / blockUnits));
 				int by1 = Math.min(perRow - 1, (int) Math.floor((v1 - tv * units) / blockUnits));
-				Dirty d = this.dirty.computeIfAbsent(key, k -> new Dirty(now));
+				this.freshness.changed(key, lightOnly);
+                Dirty d = this.dirty.computeIfAbsent(key, k -> new Dirty(now));
 				d.last = now;
 				for (int by = by0; by <= by1; by++) {
 					d.blocks.set(by * perRow + bx0, by * perRow + bx1 + 1);
@@ -511,8 +523,10 @@ public final class MapLevel implements ChunkSource {
 			}
 		}
         BakeScheduler.Result result;
-        while ((result = this.scheduler.poll()) != null) {
+        int uploads = 0;
+        while (uploads < 2 && (result = this.scheduler.poll()) != null) {
             TileKey completedKey = result.key();
+            TileFreshness.Version version = this.jobVersions.remove(completedKey);
             if (result.failure() != null) {
                 this.inFlight.remove(completedKey);
                 boolean wasBackground = this.backgroundBakes.remove(completedKey);
@@ -531,7 +545,9 @@ public final class MapLevel implements ChunkSource {
 			if (this.closed) {
 				continue;
 			}
-			if (image.generation() != this.generation(image.key())) {
+			if (image.generation() != this.generation(image.key()) || !this.freshness.accepts(image.key(), version)) {
+                // Requeue every part of a rejected result, including patches dirtied before that job.
+                this.dirty.computeIfAbsent(image.key(), k -> new Dirty(0)).blocks.set(0, 256);
 				// Baked under old colours or the other cave mode; bake it again.
 				if (background) {
 					this.unsaved.put(image.key(), 0L);
@@ -560,6 +576,7 @@ public final class MapLevel implements ChunkSource {
 				this.tiles.put(image.key(), tile);
 			}
 			tile.upload(image);
+            uploads++;
 			this.coverageVersion++;
 			if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {
 				this.store.baked(image);
@@ -609,6 +626,8 @@ public final class MapLevel implements ChunkSource {
 	/** Bakes one tile on a baker thread: all of it if {@code blocks} is null, else those blocks. */
 	private void bake(TileKey key, BlockLooks looks, @Nullable BitSet blocks) {
 		this.inFlight.add(key);
+        this.jobVersions.put(key, this.freshness.get(key));
+        this.submittedJobs++;
 		int generation = this.generation(key);
 		boolean fog = this.fogOfWar;
 		Overlays overlays = this.overlays;
@@ -616,8 +635,8 @@ public final class MapLevel implements ChunkSource {
         dev.diorama.bake.BakeContext context = dev.diorama.bake.BakeContext.capture();
         this.scheduler.submit(key, generation, () -> {
             long start = System.nanoTime();
-            int[] saved = store == null ? null : store.read(key);
-            TileImage image = TileBaker.bake(key, this, looks, blocks, fog, saved, overlays, context);
+            var saved = store == null ? null : store.readPixels(key);
+            TileImage image = TileBaker.bakePaired(key, this, looks, blocks, fog, saved, overlays, context);
             logBakeTime(System.nanoTime() - start, blocks == null);
             return image;
         });
@@ -625,10 +644,12 @@ public final class MapLevel implements ChunkSource {
 
 	private void loadOverview(TileKey key, TileStore store) {
 		this.inFlight.add(key);
+        this.jobVersions.put(key, this.freshness.get(key));
+        this.submittedJobs++;
 		int generation = this.generation(key);
         this.scheduler.submit(key, generation, () -> {
-            int[] pixels = store.read(key);
-            return pixels == null ? TileImage.partial(key, List.of()) : TileBaker.image(key, pixels);
+            var pixels = store.readPixels(key);
+            return pixels == null ? TileImage.partial(key, List.of()) : TileBaker.imagePaired(key, pixels);
         });
 	}
 
@@ -679,6 +700,7 @@ public final class MapLevel implements ChunkSource {
     private void evict() {
         this.tiles.evict(this.frame, MAX_GPU_TILES, key -> {
             this.coverageVersion++;
+            if (!this.inFlight.contains(key)) this.freshness.remove(key);
             if (this.dirty.remove(key) != null && this.store != null && !key.isCave() && key.lod() == 0)
                 this.unsaved.put(key, 0L);
         });
@@ -728,8 +750,8 @@ public final class MapLevel implements ChunkSource {
             for (TileKey key : pending) {
                 if (looks == null) break;
                 try {
-                    int[] saved = retiring.read(key);
-                    retiring.baked(TileBaker.bake(key, source, looks, null, fog, saved, overlays, context));
+                    var saved = retiring.readPixels(key);
+                    retiring.baked(TileBaker.bakePaired(key, source, looks, null, fog, saved, overlays, context));
                 } catch (RuntimeException failure) {
                     Diorama.LOGGER.error("Couldn't finish pending map tile {}", key, failure);
                 }

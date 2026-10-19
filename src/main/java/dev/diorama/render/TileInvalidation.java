@@ -10,6 +10,10 @@ final class TileInvalidation {
     private static final int LIGHT_REACH = 15;
     static List<Region> regions(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1,
         boolean visibleFromSky, boolean roofless, int roof, Set<Integer> layers, dev.diorama.MapDirection direction) {
+        return regions(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, roofless, roof, layers, direction, false);
+    }
+    static List<Region> regions(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1,
+        boolean visibleFromSky, boolean roofless, int roof, Set<Integer> layers, dev.diorama.MapDirection direction, boolean lightOnly) {
         List<Region> regions = new ArrayList<>();
         int au = direction.blockU(x0, z0), av = direction.blockDepth(x0, z0);
         int bu = direction.blockU(x1, z1), bv = direction.blockDepth(x1, z1);
@@ -22,10 +26,11 @@ final class TileInvalidation {
 			if (!cave && !visibleFromSky) {
 				continue;
 			}
-			int reachX = cave ? LIGHT_REACH : TileBaker.SHADOW_REACH_X;
-			int reachZ = cave ? LIGHT_REACH : TileBaker.SHADOW_REACH_Z;
-			int reachY = cave ? LIGHT_REACH : TileBaker.SHADOW_REACH_Y;
-			double top = y1 + 2 + (cave ? LIGHT_REACH : 0);
+			boolean light = cave || lightOnly;
+            int reachX = light ? LIGHT_REACH : TileBaker.SHADOW_REACH_X;
+			int reachZ = light ? LIGHT_REACH : TileBaker.SHADOW_REACH_Z;
+			int reachY = light ? LIGHT_REACH : TileBaker.SHADOW_REACH_Y;
+			double top = y1 + 2 + (light ? LIGHT_REACH : 0);
 			double bottom = (cave ? caveY0 : y0) - 1 - reachY;
 			if (layer != TileKey.SURFACE) {
 				top = Math.min(top, layer);
@@ -37,7 +42,7 @@ final class TileInvalidation {
 				top = Math.min(top, roof);
 			}
 			// The sky view's sky occlusion looks this far round every block, so a change reaches back.
-			int around = cave ? LIGHT_REACH : TileBaker.SKY_REACH;
+			int around = light ? LIGHT_REACH : TileBaker.SKY_REACH;
 			if (!cave) {
 				bottom = Math.min(bottom, (cave ? caveY0 : y0) - 1 - TileBaker.SKY_REACH);
 			}
