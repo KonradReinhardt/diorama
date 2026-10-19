@@ -709,6 +709,8 @@ public final class MapLevel implements ChunkSource {
         java.util.List<TileImage> completed = new ArrayList<>();
         BakeScheduler.Result result;
         while ((result = this.scheduler.poll()) != null) {
+            this.inFlight.remove(result.key());
+            this.backgroundBakes.remove(result.key());
             if (result.failure() == null && !result.key().isCave() && result.key().lod() == 0
                 && result.generation() == this.generation(result.key())) completed.add(result.image());
         }
