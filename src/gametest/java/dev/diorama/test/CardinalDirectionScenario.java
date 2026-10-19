@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 /** End-to-end coverage of rotated terrain, picking, markers, settings and view retirement. */
 final class CardinalDirectionScenario {
     static void run(ClientGameTestContext context, TestSingleplayerContext world) {
+        double[] origin = context.computeOnClient(mc -> new double[] {mc.player.getX(), mc.player.getY(), mc.player.getZ()});
         world.getServer().runCommand("fill -32 200 -32 32 200 32 stone");
         world.getServer().runCommand("fill 2 201 2 4 206 4 gold_block");
         world.getServer().runCommand("tp @a -12.5 201 -9.5");
@@ -48,6 +49,10 @@ final class CardinalDirectionScenario {
         } finally {
             context.runOnClient(mc -> { Settings.get().mapDirection = original; Settings.get().save(); });
             context.setScreen(() -> null);
+            world.getServer().runCommand("fill -32 200 -32 32 200 32 air");
+            world.getServer().runCommand("fill 2 201 2 4 206 4 air");
+            world.getServer().runCommand("tp @a " + origin[0] + " " + origin[1] + " " + origin[2]);
+            context.waitTicks(40);
         }
     }
     /** Closing before the debounce must still save chunks no viewport ever requested. */
