@@ -6,7 +6,7 @@ import java.util.LinkedHashMap;
 final class TileReadCache {
     private final int maxEntries;
     private final long maxBytes;
-    private final LinkedHashMap<dev.diorama.bake.TileKey, int[]> entries = new LinkedHashMap<>(16, 0.75F, true);
+    private final LinkedHashMap<dev.diorama.bake.TileKey, dev.diorama.bake.TilePixels> entries = new LinkedHashMap<>(16, 0.75F, true);
     private long bytes;
 
     TileReadCache(int maxEntries, long maxBytes) {
@@ -15,13 +15,13 @@ final class TileReadCache {
     }
 
     boolean contains(dev.diorama.bake.TileKey key) { return this.entries.containsKey(key); }
-    int[] get(dev.diorama.bake.TileKey key) { return this.entries.get(key); }
+    dev.diorama.bake.TilePixels get(dev.diorama.bake.TileKey key) { return this.entries.get(key); }
     int size() { return this.entries.size(); }
     long bytes() { return this.bytes; }
     void clear() { this.entries.clear(); this.bytes = 0; }
 
-    void put(dev.diorama.bake.TileKey key, int[] pixels) {
-        int[] previous = this.entries.put(key, pixels);
+    void put(dev.diorama.bake.TileKey key, dev.diorama.bake.TilePixels pixels) {
+        dev.diorama.bake.TilePixels previous = this.entries.put(key, pixels);
         this.bytes += weight(pixels) - weight(previous);
         var it = this.entries.entrySet().iterator();
         while ((this.entries.size() > this.maxEntries || this.bytes > this.maxBytes) && it.hasNext()) {
@@ -30,5 +30,5 @@ final class TileReadCache {
         }
     }
 
-    private static long weight(int[] pixels) { return pixels == null ? 0 : (long) pixels.length * Integer.BYTES; }
+    private static long weight(dev.diorama.bake.TilePixels pixels) { return pixels == null ? 0 : pixels.bytes(); }
 }

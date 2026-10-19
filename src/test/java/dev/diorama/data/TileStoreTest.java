@@ -51,7 +51,7 @@ class TileStoreTest {
         TileStore store = new TileStore(folder);
         store.baked(image(key, 0xFF654321));
         assertNotNull(store.read(key));
-        Path blocker = folder.resolve("0_0.omt.tmp");
+        Path blocker = folder.resolve("0_0.omt2.tmp");
         Files.createDirectory(blocker);
         store.write(key);
         assertEquals(0xFF654321, store.read(key)[0]);

@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  * pixels per coverage cell, 0..255, which places the fog. {@code info} holds {@link Overlays} bits
  * per pixel, or is null when the bake didn't record them.
  */
-public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] coverage, byte @Nullable [] info, List<Patch> patches, int generation) {
+public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] coverage, byte @Nullable [] info, List<Patch> patches, int generation, int @Nullable [][] nightMips) {
 	/** Edge of a re-bake block in pixels. A power of two at least 2^(mip levels - 1), so mips stay aligned. */
 	public static final int BLOCK = 32;
 
@@ -20,16 +20,20 @@ public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] 
 	}
 
 	public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info) {
-		return new TileImage(key, mips, coverage, info, List.of(), 0);
+		return full(key, mips, coverage, info, null);
 	}
 
+    public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
+        return new TileImage(key, mips, coverage, info, List.of(), 0, nightMips);
+    }
+
 	public static TileImage partial(TileKey key, List<Patch> patches) {
-		return new TileImage(key, null, null, null, patches, 0);
+		return new TileImage(key, null, null, null, patches, 0, null);
 	}
 
 	/** Tags the image with the map state it was baked under; see {@code MapLevel}. */
 	public TileImage withGeneration(int generation) {
-		return new TileImage(this.key, this.mips, this.coverage, this.info, this.patches, generation);
+		return new TileImage(this.key, this.mips, this.coverage, this.info, this.patches, generation, this.nightMips);
 	}
 
 	public boolean isFull() {
@@ -37,6 +41,9 @@ public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] 
 	}
 
 	/** One re-baked block at block coordinates {@code (blockX, blockY)} within the tile. */
-	public record Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info) {
+	public record Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
+        public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info) {
+            this(blockX, blockY, mips, coverage, info, null);
+        }
 	}
 }
