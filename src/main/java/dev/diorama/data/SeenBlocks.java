@@ -23,6 +23,7 @@ import net.minecraft.core.SectionPos;
  */
 public final class SeenBlocks {
 	private static final int MAGIC = 0x4F4D5331;
+    private static final ConcurrentHashMap<Path, java.lang.ref.WeakReference<SeenBlocks>> OPEN = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<Long, long[]> sections = new ConcurrentHashMap<>();
 	private volatile boolean changed;
@@ -34,9 +35,15 @@ public final class SeenBlocks {
     /** Coalesce periodic saves and leave compression and disk I/O off the client thread. */
     public void saveAsync(Path file) {
         if (!this.changed || !this.saving.isDone()) return;
+        this.saveFinalAsync(file);
+    }
+
+    /** Chain a final snapshot after earlier writes, including when a world reopens immediately. */
+    public void saveFinalAsync(Path file) {
+        if (!this.changed) return;
         SeenBlocks copy = this.snapshot();
         this.changed = false;
-        this.saving = java.util.concurrent.CompletableFuture.runAsync(() -> {
+        this.saving = this.saving.handle((ignored, failure) -> null).thenRunAsync(() -> {
             copy.save(file);
             if (copy.changed) this.changed = true;
         }, SAVER);
@@ -80,7 +87,13 @@ public final class SeenBlocks {
 	}
 
 	public static SeenBlocks load(Path file) {
-		SeenBlocks seen = new SeenBlocks();
+        file = file.toAbsolutePath().normalize();
+        OPEN.entrySet().removeIf(entry -> entry.getValue().get() == null);
+        var reference = OPEN.get(file);
+        SeenBlocks live = reference == null ? null : reference.get();
+        if (live != null) return live;
+        SeenBlocks seen = new SeenBlocks();
+        OPEN.put(file, new java.lang.ref.WeakReference<>(seen));
 		if (!Files.isRegularFile(file)) {
 			return seen;
 		}

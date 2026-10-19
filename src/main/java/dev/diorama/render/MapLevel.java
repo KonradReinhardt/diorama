@@ -700,6 +700,7 @@ public final class MapLevel implements ChunkSource {
         for (TileKey key : this.inFlight) if (!key.isCave() && key.lod() == 0) pending.add(key);
         // Dirty visible tiles also need a final full bake, even if their debounce hasn't elapsed.
         for (TileKey key : this.dirty.keySet()) if (!key.isCave() && key.lod() == 0) pending.add(key);
+        if (saveVisibility && this.folder != null) this.seen.saveFinalAsync(this.folder.resolve("seen.bin"));
         var visibility = this.seen.snapshot();
         var source = new dev.diorama.bake.FrozenChunks(this.chunks, this.minY, this.maxY, this.topY, this.roof, visibility);
         var context = this.bakeContext;
@@ -725,7 +726,6 @@ public final class MapLevel implements ChunkSource {
                     Diorama.LOGGER.error("Couldn't finish pending map tile {}", key, failure);
                 }
             }
-            if (saveVisibility && this.folder != null) visibility.save(this.folder.resolve("seen.bin"));
         }, SAVER).thenCompose(ignored -> retiring.closeAsync());
         retiring.finishing(save);
         SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
