@@ -325,7 +325,7 @@ public final class MapLevel implements ChunkSource {
 		}
 	}
 
-	/** Light changed in these sections; only cave slices use block and sky light. */
+	/** Light changed in these sections; refresh the affected map regions. */
 	public void lightChanged(int chunkX, int chunkZ, int y0, int y1) {
 		int x0 = chunkX << 4;
 		int z0 = chunkZ << 4;
@@ -344,7 +344,8 @@ public final class MapLevel implements ChunkSource {
 	 *     the whole chunk is new
 	 */
 	public void put(ChunkSnapshot snapshot, @Nullable ChangeBounds changed, int playerChunkX, int playerChunkZ) {
-		this.chunks.put(snapshot.key(), snapshot);
+        ChunkSnapshot previous = this.chunks.put(snapshot.key(), snapshot);
+        if (previous != null && changed != null && changed.flags() == CHANGED_SURFACE_LIGHT && snapshot.sameLighting(previous)) return;
 		if (snapshot.maxY != Integer.MIN_VALUE && snapshot.maxY + 1 > this.topY) {
 			this.topY = Math.min(this.maxY, snapshot.maxY + 1);
 		}
@@ -355,10 +356,10 @@ public final class MapLevel implements ChunkSource {
 			// view only reaches down to the surface; cave slices can be anywhere below it.
 			this.invalidate(x0, Math.min(snapshot.floorY, this.topY), this.minY, z0, x0 + 15, this.topY, z0 + 15, true, true);
 		} else {
-			// Under a roof the sky view is lit by block light, so light is part of what's saved.
+			// Both surface lighting endpoints are saved, including light-only changes.
 			boolean terrain = (changed.flags() & (CHANGED_SURFACE | CHANGED_SURFACE_LIGHT)) != 0;
 			boolean surface = terrain || (changed.flags() & CHANGED_SURFACE_LIGHT) != 0;
-			this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain, (changed.flags() & CHANGED_SURFACE) == 0);
+            this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain, (changed.flags() & (CHANGED_SURFACE | CHANGED_BLOCKS)) == 0);
 		}
 		this.playerChunkX = playerChunkX;
 		this.playerChunkZ = playerChunkZ;
@@ -369,8 +370,10 @@ public final class MapLevel implements ChunkSource {
 
 	/** Change flag: blocks the sky view can show changed, so its tiles re-bake and get saved. */
 	public static final int CHANGED_SURFACE = 1;
-	/** Change flag: only light changed, which the sky view shows only through spawn spots. */
+	/** Change flag: block or sky light changed, including the surface night endpoint. */
 	public static final int CHANGED_SURFACE_LIGHT = 2;
+    /** A block changed even when hidden from the sky; prevents deduplicating a mixed cave edit. */
+    public static final int CHANGED_BLOCKS = 4;
 
 	/** Light from a changed block reaches this far, which matters for cave slices. */
 	private static final int LIGHT_REACH = 15;
@@ -378,7 +381,7 @@ public final class MapLevel implements ChunkSource {
 	/**
 	 * Marks tile blocks that can look different after blocks in this box changed. {@code y0} is the
 	 * bottom of the box for the sky view and {@code caveY0} for cave slices. {@code terrain} is
-	 * false when only light changed: the sky view's pixels stay the same, so nothing to save.
+	 * false when the change only reveals cave visibility and has no surface data to save.
 	 */
 	private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain) {
         this.invalidate(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, terrain, false);
@@ -524,7 +527,7 @@ public final class MapLevel implements ChunkSource {
 		}
         BakeScheduler.Result result;
         int uploads = 0;
-        while (uploads < 2 && (result = this.scheduler.poll()) != null) {
+        while (uploads < 2 && MapUploads.available() && (result = this.scheduler.poll()) != null) {
             TileKey completedKey = result.key();
             TileFreshness.Version version = this.jobVersions.remove(completedKey);
             if (result.failure() != null) {
@@ -576,6 +579,7 @@ public final class MapLevel implements ChunkSource {
 				this.tiles.put(image.key(), tile);
 			}
 			tile.upload(image);
+            MapUploads.take();
             uploads++;
 			this.coverageVersion++;
 			if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {

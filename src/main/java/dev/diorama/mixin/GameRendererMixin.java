@@ -21,6 +21,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(GameRenderer.class)
 public abstract class GameRendererMixin {
+    //? if >=26.3 {
+    @Inject(method = "extract", at = @At("HEAD"))
+    private void diorama$mapUploadFrame(CallbackInfo ci) {
+        dev.diorama.render.MapUploads.beginFrame();
+    }
+    //?}
 	//? if >=26.1 {
 	// Before 26.3, renderLevel sets the projection a second time, for the hand.
 	@Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;setProjectionMatrix", ordinal = 0))

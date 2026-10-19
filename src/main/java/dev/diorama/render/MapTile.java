@@ -30,6 +30,7 @@ public final class MapTile {
 		if (image.isFull()) {
 			this.coverage = image.coverage();
 			this.info = image.info();
+            if (this.info == null && this.overlay != null) { this.overlay.close(); this.overlay = null; }
 			this.overlayShown = -1;
 			this.empty = isEmpty(this.coverage);
 			if (this.empty) {
