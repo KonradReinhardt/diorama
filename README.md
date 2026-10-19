@@ -70,3 +70,6 @@ Session retirement freezes chunks and settings and finishes unsaved surface tile
 When Mod Menu is installed on Fabric, Diorama's configure button opens the same screen as Settings in the world map.
 Mod Menu is optional. To verify its entrypoint in development, use
 `DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.
+
+The fork's branch and validation workflow is documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+The proposed next rendering feature is described in [Day/night lighting](docs/design/day-night-lighting.md); it is a design for review, not an implemented option.
