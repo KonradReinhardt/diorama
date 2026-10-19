@@ -111,6 +111,8 @@ public final class Settings {
 	public MapStyle style() {
 		MapStyle base = this.depthShading ? MapStyle.DEFAULT : MapStyle.FLAT;
 		return base.withName("Settings")
+            // Shading changes lighting, not the camera or the explored map footprint.
+            .withPitch(MapStyle.DEFAULT.pitchDegrees())
 			.withOutline(this.outlines ? MapStyle.DEFAULT.outline() : 0)
 			.withRoundedFog(this.roundedFog);
 	}
@@ -134,16 +136,10 @@ public final class Settings {
 	public void apply() {
 		// The map session re-bakes only if the tiles would look different.
 		Projection.setDirection(this.mapDirection);
-		MapStyle.set(this.style());
-		boolean fast = this.quality == Quality.FAST;
-		if (fast != TileBaker.fast()) {
-			TileBaker.setFast(fast);
-			// Bake what's on screen again at the new quality.
-			MapSession session = MapSession.get();
-			if (session != null) {
-				session.map().colorsChanged();
-			}
-		}
+		MapStyle next = this.style();
+        if (!next.equals(MapStyle.get())) MapStyle.set(next);
+        // MapSession coalesces quality and appearance changes into one refresh on the next tick.
+        TileBaker.setFast(this.quality == Quality.FAST);
 		ServerRules.setAlwaysFogOfWar(this.alwaysFogOfWar);
 	}
 
