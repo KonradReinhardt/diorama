@@ -25,7 +25,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Iterator;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -69,7 +70,10 @@ public final class TileStore {
 		return thread;
 	});
 
-	private final Path folder;
+	private static final ConcurrentHashMap<Path, CompletableFuture<Void>> CLOSING = new ConcurrentHashMap<>();
+    private final CompletableFuture<Void> previousClose;
+    private CompletableFuture<Void> closeFuture;
+    private final Path folder;
 	/** Set by close(), whose flush writes everything; writes still scheduled then do nothing. */
 	private volatile boolean closed;
 	/**
@@ -101,7 +105,8 @@ public final class TileStore {
 	};
 
 	public TileStore(Path folder) {
-		this.folder = folder;
+		this.folder = folder.toAbsolutePath().normalize();
+        this.previousClose = CLOSING.getOrDefault(this.folder, CompletableFuture.completedFuture(null));
 	}
 
 	public void onOverviewChanged(Consumer<TileKey> listener) {
@@ -197,6 +202,7 @@ public final class TileStore {
 	 * far. Not on the render thread: it can wait for the disk. Don't modify the array.
 	 */
 	public int @Nullable [] read(TileKey key) {
+        this.previousClose.join();
 		synchronized (this.io) {
 			this.merge(key);
 			return this.saved(key);
@@ -234,13 +240,13 @@ public final class TileStore {
 				return;
 			}
 		}
-		WRITER.execute(() -> {
+		this.previousClose.thenRunAsync(() -> {
 			// Cleared first, so a bake handed over during this merge queues another.
 			synchronized (this) {
 				this.mergeQueued.remove(key);
 			}
 			this.merge(key);
-		});
+		}, WRITER);
 	}
 
 	/**
@@ -305,12 +311,19 @@ public final class TileStore {
 	}
 
 	/** Writes everything pending and waits until it's on disk. Call when leaving the world. */
-	public void close() {
-		if (this.closed) {
-			return;
-		}
-		this.closed = true;
-		Future<?> flush = WRITER.submit(() -> {
+    /** Publish retirement before a view can reopen this folder, including its pending bake time. */
+    public void finishing(java.util.concurrent.CompletableFuture<Void> completion) {
+        CLOSING.put(this.folder, completion);
+        completion.whenComplete((ignored, failure) -> CLOSING.remove(this.folder, completion));
+    }
+
+    public void close() { this.closeAsync().join(); }
+
+    /** Schedule the final flush without blocking a render or client thread. */
+    public synchronized CompletableFuture<Void> closeAsync() {
+        if (this.closeFuture != null) return this.closeFuture;
+        this.closed = true;
+        this.closeFuture = this.previousClose.thenRunAsync(() -> {
 			Set<TileKey> handed;
 			synchronized (this) {
 				handed = new HashSet<>(this.handedOver.keySet());
@@ -335,15 +348,11 @@ public final class TileStore {
 				this.unwritten.clear();
 				this.cache.clear();
 			}
-		});
-		try {
-			flush.get();
-		} catch (ExecutionException e) {
-			Diorama.LOGGER.error("Couldn't save map tiles", e);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
+        }, WRITER);
+        CLOSING.put(this.folder, this.closeFuture);
+        this.closeFuture.whenComplete((ignored, failure) -> CLOSING.remove(this.folder, this.closeFuture));
+        return this.closeFuture;
+    }
 
 	/** Writes the newest pixels of a tile. Writer thread. */
 	private void write(TileKey key) {

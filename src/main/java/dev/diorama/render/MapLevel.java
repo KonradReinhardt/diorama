@@ -110,6 +110,13 @@ public final class MapLevel implements ChunkSource {
 	private int playerChunkZ;
 	private long frame;
 	private volatile boolean closed;
+    private dev.diorama.bake.BakeContext bakeContext = dev.diorama.bake.BakeContext.capture();
+    private static final java.util.concurrent.ConcurrentLinkedQueue<java.util.concurrent.CompletableFuture<Void>> SAVES = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private static final java.util.concurrent.ExecutorService SAVER = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "diorama-session-saver");
+        thread.setDaemon(true);
+        return thread;
+    });
 
 	/** See {@link ChunkSource#roof()}. */
 	private final int roof;
@@ -245,7 +252,7 @@ public final class MapLevel implements ChunkSource {
 		if (this.store == null || this.storeName().equals(this.storeName)) {
 			return;
 		}
-		this.store.close();
+		this.retireStore(this.store, false);
 		this.store = this.openStore();
 		this.unsaved.clear();
 		this.emptyOverviews.clear();
@@ -262,6 +269,7 @@ public final class MapLevel implements ChunkSource {
 		this.caveGeneration++;
 		this.dropTiles(false);
 		this.switchStoreIfNeeded();
+        this.bakeContext = dev.diorama.bake.BakeContext.capture();
 	}
 
 	private void dropTiles(boolean cavesOnly) {
@@ -739,55 +747,62 @@ public final class MapLevel implements ChunkSource {
 		}
 	}
 
-	public void close() {
-		if (this.closed) {
-			return;
-		}
-		if (this.store != null) {
-			this.saveLastBakes(this.store);
-		}
-		this.closed = true;
-		if (this.store != null) {
-			this.store.close();
-		}
-		this.saveSeen();
-		for (MapTile tile : this.tiles.values()) {
-			tile.close();
-		}
-		this.tiles.clear();
-		this.coverageVersion++;
-		this.chunks.clear();
-	}
+    public void close() {
+        if (this.closed) return;
+        this.closed = true;
+        if (this.store != null) this.retireStore(this.store, true);
+        else this.saveSeen();
+        for (MapTile tile : this.tiles.values()) tile.close();
+        this.tiles.clear();
+        this.coverageVersion++;
+        this.scheduler.idle().whenComplete((ignored, failure) -> this.chunks.clear());
+    }
 
-	/**
-	 * Saves surface bakes that finished since the last update, waiting a moment for the ones still
-	 * running: they hold the latest look of their tiles.
-	 */
-	private void saveLastBakes(TileStore store) {
-		long deadline = System.currentTimeMillis() + 3000;
-		while (true) {
-			BakeScheduler.Result result;
-			while ((result = this.scheduler.poll()) != null) {
-                this.inFlight.remove(result.key());
-                if (result.failure() != null) continue;
-                TileImage image = result.image();
-				this.inFlight.remove(image.key());
-				if (!image.key().isCave() && image.key().lod() == 0 && image.generation() == this.generation(image.key())) {
-					store.baked(image);
-				}
-			}
-			boolean surfaceBaking = this.inFlight.stream().anyMatch(key -> !key.isCave() && key.lod() == 0);
-			if (!surfaceBaking || System.currentTimeMillis() > deadline) {
-				return;
-			}
-			try {
-				Thread.sleep(5);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return;
-			}
-		}
-	}
+    /** Freeze ownership now; finish all pending surface work away from the client thread. */
+    private void retireStore(TileStore retiring, boolean saveVisibility) {
+        Set<TileKey> pending = new HashSet<>(this.unsaved.keySet());
+        for (TileKey key : this.inFlight) if (!key.isCave() && key.lod() == 0) pending.add(key);
+        // Dirty visible tiles also need a final full bake, even if their debounce hasn't elapsed.
+        for (TileKey key : this.dirty.keySet()) if (!key.isCave() && key.lod() == 0) pending.add(key);
+        var visibility = this.seen.snapshot();
+        var source = new dev.diorama.bake.FrozenChunks(this.chunks, this.minY, this.maxY, this.topY, this.roof, visibility);
+        var context = this.bakeContext;
+        BlockLooks looks = BlockLooks.get();
+        boolean fog = this.roofless() ? this.storeName.contains("-fog") : this.fogOfWar;
+        Overlays overlays = this.overlays;
+        java.util.List<TileImage> completed = new ArrayList<>();
+        BakeScheduler.Result result;
+        while ((result = this.scheduler.poll()) != null) {
+            if (result.failure() == null && !result.key().isCave() && result.key().lod() == 0
+                && result.generation() == this.generation(result.key())) completed.add(result.image());
+        }
+        var save = this.scheduler.idle().handle((ignored, failure) -> null).thenRunAsync(() -> {
+            for (TileImage image : completed) retiring.baked(image);
+            for (TileKey key : pending) {
+                if (looks == null) break;
+                try {
+                    int[] saved = retiring.read(key);
+                    retiring.baked(TileBaker.bake(key, source, looks, null, fog, saved, overlays, context));
+                } catch (RuntimeException failure) {
+                    Diorama.LOGGER.error("Couldn't finish pending map tile {}", key, failure);
+                }
+            }
+            if (saveVisibility && this.folder != null) visibility.save(this.folder.resolve("seen.bin"));
+        }, SAVER).thenCompose(ignored -> retiring.closeAsync());
+        retiring.finishing(save);
+        SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
+        SAVES.add(save);
+        save.exceptionally(failure -> { Diorama.LOGGER.error("Couldn't finish saving map", failure); return null; });
+    }
+
+    /** Only the application shutdown hook waits; changing worlds and settings stays asynchronous. */
+    public static void awaitSaves() {
+        for (var save : SAVES) {
+            try { save.join(); }
+            catch (java.util.concurrent.CompletionException failure) { Diorama.LOGGER.error("Map save failed", failure); }
+        }
+        SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
+    }
 
 	public int bakingCount() {
 		return this.inFlight.size();

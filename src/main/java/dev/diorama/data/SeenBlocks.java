@@ -49,6 +49,14 @@ public final class SeenBlocks {
 		return true;
 	}
 
+    /** Client-thread snapshot, safe to save and read after the live session moves on. */
+    public SeenBlocks snapshot() {
+        SeenBlocks copy = new SeenBlocks();
+        this.sections.forEach((key, bits) -> copy.sections.put(key, bits.clone()));
+        copy.changed = true;
+        return copy;
+    }
+
 	private static int index(int x, int y, int z) {
 		return ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
 	}

@@ -85,6 +85,7 @@ public final class MapSession {
 			current.map.close();
 			current = null;
 		}
+        MapLevel.awaitSaves();
 	}
 
 	/** Keeps the session in step with the client's level. Call every client tick. */
