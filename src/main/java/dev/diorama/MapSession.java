@@ -55,7 +55,8 @@ public final class MapSession {
 		this.level = level;
 		// The Nether's roof: its sky view looks down from just under it.
 		int roof = level.dimensionType().hasCeiling() ? level.getMinY() + level.dimensionType().logicalHeight() : MapLevel.NO_ROOF;
-		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key));
+		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key),
+            EnvironmentLighting.cycles(false, level.dimensionType().hasCeiling(), level.dimensionType().hasSkyLight(), level.dimensionType().hasFixedTime()));
 	}
 
 	/** {@code .minecraft/diorama/<world>/<dimension>}, or null outside a world. */

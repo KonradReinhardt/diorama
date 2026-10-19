@@ -128,11 +128,18 @@ public final class MapLevel implements ChunkSource {
 
 	/** See {@link ChunkSource#roof()}. */
 	private final int roof;
+    private final boolean nightLighting;
+    @Override public boolean nightLighting() { return this.nightLighting; }
 
 	public MapLevel(int minY, int maxY, int roof, @Nullable Path folder) {
+        this(minY, maxY, roof, folder, true);
+    }
+
+    public MapLevel(int minY, int maxY, int roof, @Nullable Path folder, boolean nightLighting) {
 		this.minY = minY;
 		this.maxY = maxY;
 		this.roof = roof;
+        this.nightLighting = nightLighting;
 		this.folder = folder;
 		this.store = this.openStore();
 		this.seen = folder == null ? new SeenBlocks() : SeenBlocks.load(folder.resolve("seen.bin"));
@@ -736,7 +743,7 @@ public final class MapLevel implements ChunkSource {
         for (TileKey key : this.dirty.keySet()) if (!key.isCave() && key.lod() == 0) pending.add(key);
         if (saveVisibility && this.folder != null) this.seen.saveFinalAsync(this.folder.resolve("seen.bin"));
         var visibility = this.seen.snapshot();
-        var source = new dev.diorama.bake.FrozenChunks(this.chunks, this.minY, this.maxY, this.topY, this.roof, visibility);
+        var source = new dev.diorama.bake.FrozenChunks(this.chunks, this.minY, this.maxY, this.topY, this.roof, visibility, this.nightLighting);
         var context = this.bakeContext;
         BlockLooks looks = BlockLooks.get();
         boolean fog = this.roofless() ? this.storeName.contains("-fog") : this.fogOfWar;

@@ -18,7 +18,7 @@ public record EnvironmentLighting(float daylight, float rain) {
     public static EnvironmentLighting current(boolean cave) {
         if (cave || !supported()) return DAY;
         var level = Minecraft.getInstance().level;
-        if (level == null || level.dimensionType().hasCeiling() || !level.dimensionType().hasSkyLight()) return DAY;
+        if (level == null || !cycles(false, level.dimensionType().hasCeiling(), level.dimensionType().hasSkyLight(), level.dimensionType().hasFixedTime())) return DAY;
         Mode mode = Settings.get().lighting;
         if (mode == Mode.DAY) return DAY;
         if (mode == Mode.NIGHT) return new EnvironmentLighting(0, 0);
@@ -34,6 +34,11 @@ public record EnvironmentLighting(float daylight, float rain) {
 
     public static EnvironmentLighting fromSkyFactor(float sky, float rain, float thunder) {
         return new EnvironmentLighting(clamp((sky - 0.24F) / 0.76F), clamp(Math.max(rain, thunder)));
+    }
+
+    /** Fixed-light dimensions keep their original rendering, even if they expose sky-light data. */
+    public static boolean cycles(boolean cave, boolean ceiling, boolean skyLight, boolean fixedTime) {
+        return !cave && !ceiling && skyLight && !fixedTime;
     }
 
     public int params(boolean hasNight) {

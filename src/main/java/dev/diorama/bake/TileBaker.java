@@ -241,7 +241,7 @@ public final class TileBaker {
 		int size = Projection.TILE_PIXELS;
 		if (blocks == null) {
 			int[] pixels = new int[size * size];
-            int[] night = baker.lit || !dev.diorama.EnvironmentLighting.supported() ? null : new int[pixels.length];
+            int[] night = baker.lit || !source.nightLighting() || !dev.diorama.EnvironmentLighting.supported() ? null : new int[pixels.length];
 			byte[] info = overlays == null ? null : new byte[size * size];
 			baker.bakePixels(0, 0, size, size, pixels, night, info);
 			merge(pixels, night, saved, 0, 0, size);
@@ -253,7 +253,7 @@ public final class TileBaker {
 			int bx = i % perRow;
 			int by = i / perRow;
 			int[] pixels = new int[TileImage.BLOCK * TileImage.BLOCK];
-            int[] night = baker.lit || !dev.diorama.EnvironmentLighting.supported() ? null : new int[pixels.length];
+            int[] night = baker.lit || !source.nightLighting() || !dev.diorama.EnvironmentLighting.supported() ? null : new int[pixels.length];
 			byte[] info = overlays == null ? null : new byte[TileImage.BLOCK * TileImage.BLOCK];
 			baker.bakePixels(bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK, TileImage.BLOCK, pixels, night, info);
 			merge(pixels, night, saved, bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK);

@@ -26,5 +26,8 @@ public interface ChunkSource {
 
 	int NO_ROOF = Integer.MIN_VALUE;
 
+    /** Whether this dimension uses the outdoor day/night endpoints. */
+    default boolean nightLighting() { return true; }
+
 	boolean isSeen(int x, int y, int z);
 }
