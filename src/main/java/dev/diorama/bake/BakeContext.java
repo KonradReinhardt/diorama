@@ -7,6 +7,9 @@ import dev.diorama.Projection;
 /** Immutable settings for one job, including jobs finishing after a view changes. */
 public record BakeContext(MapStyle style, MapDirection direction, boolean fast) {
     public static BakeContext capture() { return new BakeContext(MapStyle.get(), Projection.direction(), TileBaker.fast()); }
+    public boolean sameProjection(BakeContext other) {
+        return this.direction == other.direction && this.style.pitchDegrees() == other.style.pitchDegrees();
+    }
     public double sin() { return Math.sin(Math.toRadians(this.style.pitchDegrees())); }
     public double cos() { return Math.cos(Math.toRadians(this.style.pitchDegrees())); }
     public double zAt(double v, double y) { return (v + y * cos()) / sin(); }

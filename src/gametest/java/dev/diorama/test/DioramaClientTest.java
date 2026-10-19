@@ -122,6 +122,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 			if (tests.contains("fog-of-war")) {
 				fogOfWar(context, world);
 			}
+			if (tests.contains("settings-refresh")) SettingsRefreshScenario.run(context);
 			if (tests.contains("settings")) {
 				settings(context, world);
 			}
@@ -2319,10 +2320,10 @@ public class DioramaClientTest implements FabricClientGameTest {
 		}
 		if (env == null || env.isBlank()) {
 			//? if >=1.21.4 {
-			return Set.of("directions", "tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings", "overlays", "screens", "dimensions", "saved-map", "multiplayer", "server-id", "tracked-players");
+			return Set.of("directions", "tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings-refresh", "settings", "overlays", "screens", "dimensions", "saved-map", "multiplayer", "server-id", "tracked-players");
 			//?} else {
 			/*// Before 1.21.4 the tests run on src/gameshim, which can't start a dedicated server.
-			return Set.of("directions", "tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings", "overlays", "screens", "dimensions", "saved-map");
+			return Set.of("directions", "tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings-refresh", "settings", "overlays", "screens", "dimensions", "saved-map");
 			*///?}
 		}
 		return Set.of(env.split(","));

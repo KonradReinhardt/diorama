@@ -264,14 +264,27 @@ public final class MapLevel implements ChunkSource {
 		}
 	}
 
-	/** Block colours or the map style changed: every tile has to be baked again. */
-	public void colorsChanged() {
-		this.surfaceGeneration++;
-		this.caveGeneration++;
-		this.dropTiles(false);
-		this.switchStoreIfNeeded();
-        this.bakeContext = dev.diorama.bake.BakeContext.capture();
-	}
+	/** Refresh pixels in place; only a different camera requires throwing away their geometry. */
+    public void colorsChanged() {
+        var next = dev.diorama.bake.BakeContext.capture();
+        boolean reproject = !this.bakeContext.sameProjection(next);
+        this.surfaceGeneration++;
+        this.caveGeneration++;
+        if (reproject) {
+            this.dropTiles(false);
+            this.switchStoreIfNeeded();
+        } else {
+            // Keep both texture and exploration coverage until their replacements are uploaded.
+            // Pending old jobs must not erase these tiles when their generations are rejected.
+            Set<TileKey> refresh = new HashSet<>(this.tiles.keySet());
+            refresh.addAll(this.inFlight);
+            int blocks = (Projection.TILE_PIXELS / TileImage.BLOCK) * (Projection.TILE_PIXELS / TileImage.BLOCK);
+            for (TileKey key : refresh) {
+                this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, blocks);
+            }
+        }
+        this.bakeContext = next;
+    }
 
 	private void dropTiles(boolean cavesOnly) {
 		Iterator<Map.Entry<TileKey, MapTile>> it = this.tiles.entrySet().iterator();
@@ -520,11 +533,6 @@ public final class MapLevel implements ChunkSource {
 			}
 			if (image.generation() != this.generation(image.key())) {
 				// Baked under old colours or the other cave mode; bake it again.
-				MapTile stale = this.tiles.remove(image.key());
-				if (stale != null) {
-					stale.close();
-					this.coverageVersion++;
-				}
 				if (background) {
 					this.unsaved.put(image.key(), 0L);
 				}
