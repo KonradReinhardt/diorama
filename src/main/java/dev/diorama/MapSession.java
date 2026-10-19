@@ -259,8 +259,8 @@ public final class MapSession {
 	}
 
 	/**
-	 * Queues a chunk for a fresh snapshot. {@code box} is the changed blocks as
-	 * {x0, y0, z0, x1, y1, z1, visibleFromSky}; null means the whole chunk is new.
+	 * Queues a chunk for a fresh snapshot. {@code box} holds inclusive world-space bounds
+	 * and surface/light flags; null means the whole chunk is new.
 	 */
 	private void schedule(int chunkX, int chunkZ, long delayMs, @Nullable ChangeBounds box) {
 		long key = ChunkSnapshot.key(chunkX, chunkZ);

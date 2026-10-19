@@ -142,7 +142,7 @@ public final class MinimapHud implements HudElement {
 		return Math.max(SMALLEST, Math.min(size, fitted));
 	}
 
-	/** Letters on the frame. The map always faces north, so they never move. */
+	/** Cardinal letters on the frame, following the selected map direction. */
 	private void compass(GuiGraphicsExtractor graphics, Font font, int x, int y, int size) {
 		this.letter(graphics, font, Projection.direction().topLetter(), x + size / 2, y + 1, 0xFFFF6B6B);
 		this.letter(graphics, font, Projection.direction().bottomLetter(), x + size / 2, y + size - 9, 0xFFFFFFFF);

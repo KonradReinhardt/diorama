@@ -3,8 +3,8 @@ package dev.diorama;
 /**
  * The oblique camera every map pixel is traced through.
  *
- * <p>The camera looks north and down at the style's pitch from the horizon, so the map shows
- * block tops and their south faces. Map space is measured in blocks:
+ * <p>The camera looks toward the selected cardinal direction and down at the style's pitch.
+ * The formulas below describe camera-local coordinates; MapDirection converts world x/z. Map space is measured in blocks:
  * <ul>
  *   <li>{@code u = x} (east is right)</li>
  *   <li>{@code v = z * sin - y * cos} (south is down, and higher blocks move up the screen)</li>

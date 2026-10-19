@@ -319,8 +319,8 @@ public final class MapLevel implements ChunkSource {
 	/**
 	 * Stores a fresh snapshot and marks the parts of tiles that can look different because of it.
 	 *
-	 * @param changed the blocks that changed, as {x0, y0, z0, x1, y1, z1} inclusive plus a last
-	 *     element of {@link #CHANGED_SURFACE} and {@link #CHANGED_SURFACE_LIGHT} flags; null when
+	 * @param changed inclusive world-space bounds with {@link #CHANGED_SURFACE} and
+	 *     {@link #CHANGED_SURFACE_LIGHT} flags; null when
 	 *     the whole chunk is new
 	 */
 	public void put(ChunkSnapshot snapshot, @Nullable ChangeBounds changed, int playerChunkX, int playerChunkZ) {
