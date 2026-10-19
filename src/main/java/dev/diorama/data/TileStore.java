@@ -86,12 +86,7 @@ public final class TileStore {
 	/** Tiles with a merge waiting on the writer thread, so a run of bakes queues one. Guarded by {@code this}. */
 	private final Set<TileKey> mergeQueued = new HashSet<>();
 	/** Recently used tiles, decompressed. Guarded by {@code this}. */
-	private final LinkedHashMap<TileKey, int[]> cache = new LinkedHashMap<>(16, 0.75F, true) {
-		@Override
-		protected boolean removeEldestEntry(Map.Entry<TileKey, int[]> eldest) {
-			return this.size() > CACHED_TILES && !TileStore.this.unwritten.containsKey(eldest.getKey());
-		}
-	};
+	private final TileReadCache cache = new TileReadCache(CACHED_TILES, (long) CACHED_TILES * Projection.TILE_PIXELS * Projection.TILE_PIXELS * Integer.BYTES);
 	/**
 	 * Tiles changed since they were last written, kept until a write of exactly these pixels
 	 * succeeds. They're never evicted from the cache meanwhile. Guarded by {@code this}.
@@ -215,7 +210,7 @@ public final class TileStore {
 			if (pending != null) {
 				return pending;
 			}
-			if (this.cache.containsKey(key)) {
+			if (this.cache.contains(key)) {
 				return this.cache.get(key);
 			}
 		}
@@ -405,12 +400,7 @@ public final class TileStore {
 
 	/** Drops the least recently used written tiles until the cache is back under its limit. */
 	private void trimCache() {
-		Iterator<TileKey> it = this.cache.keySet().iterator();
-		while (this.cache.size() > CACHED_TILES && it.hasNext()) {
-			if (!this.unwritten.containsKey(it.next())) {
-				it.remove();
-			}
-		}
+		// Pending pixels live in unwritten, independently of the bounded read cache.
 	}
 
 	private Path file(TileKey key) {
