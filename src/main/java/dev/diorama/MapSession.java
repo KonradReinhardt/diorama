@@ -4,6 +4,7 @@ import dev.diorama.bake.BlockLooks;
 import dev.diorama.bake.Overlays;
 import dev.diorama.bake.TileKey;
 import dev.diorama.data.ChunkSnapshot;
+import dev.diorama.data.ChangeBounds;
 import dev.diorama.render.MapLevel;
 import java.nio.file.Path;
 import java.util.Iterator;
@@ -155,11 +156,11 @@ public final class MapSession {
 				}
 				int x0 = around.chunkX << 4;
 				int z0 = around.chunkZ << 4;
-				int[] strip = {
+				ChangeBounds strip = new ChangeBounds(
 					dx < 0 ? x0 + 16 - reach : x0, level.getMinY(), dz < 0 ? z0 + 16 - reach : z0,
 					dx > 0 ? x0 + reach - 1 : x0 + 15, level.getMaxY(), dz > 0 ? z0 + reach - 1 : z0 + 15,
 					MapLevel.CHANGED_SURFACE
-				};
+				);
 				session.schedule(around.chunkX, around.chunkZ, CHANGE_DELAY_MS, strip);
 			}
 		}
@@ -186,7 +187,7 @@ public final class MapSession {
 		int cx = pos.getX() >> 4;
 		int cz = pos.getZ() >> 4;
 		int surface = current.visibleFromSky(pos) ? MapLevel.CHANGED_SURFACE : 0;
-		int[] box = {pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ(), surface};
+		ChangeBounds box = new ChangeBounds(pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ(), surface);
 		current.schedule(cx, cz, CHANGE_DELAY_MS, box);
 		// A light source changing relights every neighbouring chunk, diagonals included. Other
 		// edits only reach a neighbour through shading that reads across the border.
@@ -220,7 +221,7 @@ public final class MapSession {
 			int y0 = section.minBlockY();
 			int z0 = section.minBlockZ();
 			int surface = current.map.spawnSpots() || current.map.roofless() ? MapLevel.CHANGED_SURFACE_LIGHT : 0;
-			current.schedule(section.x(), section.z(), CHANGE_DELAY_MS, new int[] {x0, y0, z0, x0 + 15, y0 + 15, z0 + 15, surface});
+			current.schedule(section.x(), section.z(), CHANGE_DELAY_MS, new ChangeBounds(x0, y0, z0, x0 + 15, y0 + 15, z0 + 15, surface));
 		}
 	}
 
@@ -229,7 +230,7 @@ public final class MapSession {
 			int x0 = chunkX << 4;
 			int z0 = chunkZ << 4;
 			int surface = current.map.spawnSpots() || current.map.roofless() ? MapLevel.CHANGED_SURFACE_LIGHT : 0;
-			current.schedule(chunkX, chunkZ, CHANGE_DELAY_MS, new int[] {x0, level.getMinY(), z0, x0 + 15, level.getMaxY(), z0 + 15, surface});
+			current.schedule(chunkX, chunkZ, CHANGE_DELAY_MS, new ChangeBounds(x0, level.getMinY(), z0, x0 + 15, level.getMaxY(), z0 + 15, surface));
 		}
 	}
 
@@ -260,31 +261,27 @@ public final class MapSession {
 	 * Queues a chunk for a fresh snapshot. {@code box} is the changed blocks as
 	 * {x0, y0, z0, x1, y1, z1, visibleFromSky}; null means the whole chunk is new.
 	 */
-	private void schedule(int chunkX, int chunkZ, long delayMs, int @Nullable [] box) {
+	private void schedule(int chunkX, int chunkZ, long delayMs, @Nullable ChangeBounds box) {
 		long key = ChunkSnapshot.key(chunkX, chunkZ);
 		long due = System.currentTimeMillis() + delayMs;
 		Pending p = this.pending.get(key);
 		if (p == null) {
-			this.pending.put(key, new Pending(due, box == null ? null : box.clone()));
+			this.pending.put(key, new Pending(due, box));
 			return;
 		}
 		p.due = Math.min(p.due, due);
 		if (p.box == null || box == null) {
 			p.box = null;
 		} else {
-			for (int i = 0; i < 3; i++) {
-				p.box[i] = Math.min(p.box[i], box[i]);
-				p.box[i + 3] = Math.max(p.box[i + 3], box[i + 3]);
-			}
-			p.box[6] |= box[6];
+			p.box = p.box.union(box);
 		}
 	}
 
 	private static final class Pending {
 		long due;
-		int @Nullable [] box;
+		@Nullable ChangeBounds box;
 
-		Pending(long due, int @Nullable [] box) {
+		Pending(long due, @Nullable ChangeBounds box) {
 			this.due = due;
 			this.box = box;
 		}

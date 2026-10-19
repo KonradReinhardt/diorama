@@ -9,6 +9,7 @@ import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
 import dev.diorama.data.ChunkSnapshot;
+import dev.diorama.data.ChangeBounds;
 import dev.diorama.data.SeenBlocks;
 import dev.diorama.data.TileStore;
 import java.nio.file.Path;
@@ -75,7 +76,7 @@ public final class MapLevel implements ChunkSource {
 	private int caveGeneration;
 
 	// Render thread only below here.
-	private final Map<TileKey, MapTile> tiles = new HashMap<>();
+	private final TileCache tiles = new TileCache();
 	/** Goes up whenever a tile's coverage changes or a tile comes or goes; see {@link #coverageVersion()}. */
 	private long coverageVersion;
 	private final Map<TileKey, Dirty> dirty = new HashMap<>();
@@ -322,7 +323,7 @@ public final class MapLevel implements ChunkSource {
 	 *     element of {@link #CHANGED_SURFACE} and {@link #CHANGED_SURFACE_LIGHT} flags; null when
 	 *     the whole chunk is new
 	 */
-	public void put(ChunkSnapshot snapshot, int @Nullable [] changed, int playerChunkX, int playerChunkZ) {
+	public void put(ChunkSnapshot snapshot, @Nullable ChangeBounds changed, int playerChunkX, int playerChunkZ) {
 		this.chunks.put(snapshot.key(), snapshot);
 		if (snapshot.maxY != Integer.MIN_VALUE && snapshot.maxY + 1 > this.topY) {
 			this.topY = Math.min(this.maxY, snapshot.maxY + 1);
@@ -335,9 +336,9 @@ public final class MapLevel implements ChunkSource {
 			this.invalidate(x0, Math.min(snapshot.floorY, this.topY), this.minY, z0, x0 + 15, this.topY, z0 + 15, true, true);
 		} else {
 			// Under a roof the sky view is lit by block light, so light is part of what's saved.
-			boolean terrain = (changed[6] & CHANGED_SURFACE) != 0 || this.roofless() && (changed[6] & CHANGED_SURFACE_LIGHT) != 0;
-			boolean surface = terrain || (changed[6] & CHANGED_SURFACE_LIGHT) != 0;
-			this.invalidate(changed[0], changed[1], changed[1], changed[2], changed[3], changed[4], changed[5], surface, terrain);
+			boolean terrain = (changed.flags() & CHANGED_SURFACE) != 0 || this.roofless() && (changed.flags() & CHANGED_SURFACE_LIGHT) != 0;
+			boolean surface = terrain || (changed.flags() & CHANGED_SURFACE_LIGHT) != 0;
+			this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain);
 		}
 		this.playerChunkX = playerChunkX;
 		this.playerChunkZ = playerChunkZ;
@@ -360,54 +361,13 @@ public final class MapLevel implements ChunkSource {
 	 * false when only light changed: the sky view's pixels stay the same, so nothing to save.
 	 */
 	private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain) {
-        dev.diorama.MapDirection direction = Projection.direction();
-        int au = direction.blockU(x0, z0), av = direction.blockDepth(x0, z0);
-        int bu = direction.blockU(x1, z1), bv = direction.blockDepth(x1, z1);
-        x0 = Math.min(au, bu); x1 = Math.max(au, bu);
-        z0 = Math.min(av, bv); z1 = Math.max(av, bv);
-
-		Set<Integer> layers = new HashSet<>();
-		for (TileKey key : this.tiles.keySet()) {
-			layers.add(key.layer());
-		}
-		for (TileKey key : this.inFlight) {
-			layers.add(key.layer());
-		}
-		if (this.store != null) {
-			layers.add(TileKey.SURFACE);
-		}
-		long now = System.currentTimeMillis();
-		for (int layer : layers) {
-			// Under a roof the sky view is lit like a cave, so light reaches it the same way.
-			boolean cave = layer != TileKey.SURFACE || this.roofless();
-			if (!cave && !visibleFromSky) {
-				continue;
-			}
-			int reachX = cave ? LIGHT_REACH : TileBaker.SHADOW_REACH_X;
-			int reachZ = cave ? LIGHT_REACH : TileBaker.SHADOW_REACH_Z;
-			int reachY = cave ? LIGHT_REACH : TileBaker.SHADOW_REACH_Y;
-			double top = y1 + 2 + (cave ? LIGHT_REACH : 0);
-			double bottom = (cave ? caveY0 : y0) - 1 - reachY;
-			if (layer != TileKey.SURFACE) {
-				top = Math.min(top, layer);
-				bottom = Math.max(bottom, layer - TileBaker.CAVE_DEPTH - 1);
-				if (top < bottom) {
-					continue;
-				}
-			} else if (cave) {
-				top = Math.min(top, this.roof);
-			}
-			// The sky view's sky occlusion looks this far round every block, so a change reaches back.
-			int around = cave ? LIGHT_REACH : TileBaker.SKY_REACH;
-			if (!cave) {
-				bottom = Math.min(bottom, (cave ? caveY0 : y0) - 1 - TileBaker.SKY_REACH);
-			}
-			double u0 = x0 - 1 - around;
-			double u1 = x1 + 2 + Math.max(reachX, cave ? 0 : TileBaker.SKY_REACH);
-			double v0 = Projection.v(top, z0 - 1 - Math.max(reachZ, cave ? 0 : TileBaker.SKY_REACH));
-			double v1 = Projection.v(bottom, z1 + 2 + around);
-			this.markDirty(layer, u0, v0, u1, v1, now, terrain);
-		}
+        Set<Integer> layers = new HashSet<>();
+        for (TileKey key : this.tiles.keySet()) layers.add(key.layer());
+        for (TileKey key : this.inFlight) layers.add(key.layer());
+        if (this.store != null) layers.add(TileKey.SURFACE);
+        long now = System.currentTimeMillis();
+        for (var region : TileInvalidation.regions(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, this.roofless(), this.roof, layers, Projection.direction()))
+            this.markDirty(region.layer(), region.minU(), region.minV(), region.maxU(), region.maxV(), now, terrain);
 	}
 
 	private void markDirty(int layer, double u0, double v0, double u1, double v1, long now, boolean terrain) {
@@ -708,37 +668,13 @@ public final class MapLevel implements ChunkSource {
 		}
 	}
 
-	private void evict() {
-		int resident = 0;
-		for (MapTile tile : this.tiles.values()) {
-			if (!tile.isEmpty()) {
-				resident++;
-			}
-		}
-		if (resident <= MAX_GPU_TILES && this.frame % 600 != 0) {
-			return;
-		}
-		List<Map.Entry<TileKey, MapTile>> entries = new ArrayList<>(this.tiles.entrySet());
-		entries.sort(Comparator.comparingLong(e -> e.getValue().lastDrawn));
-		Iterator<Map.Entry<TileKey, MapTile>> it = entries.iterator();
-		while (it.hasNext()) {
-			Map.Entry<TileKey, MapTile> e = it.next();
-			boolean stale = this.frame - e.getValue().lastDrawn > 3600;
-			if (resident <= MAX_GPU_TILES * 3 / 4 && !stale) {
-				break;
-			}
-			if (!e.getValue().isEmpty()) {
-				resident--;
-			}
-			e.getValue().close();
-			this.tiles.remove(e.getKey());
-			this.coverageVersion++;
-			if (this.dirty.remove(e.getKey()) != null && this.store != null && !e.getKey().isCave() && e.getKey().lod() == 0) {
-				// Changed since it was last baked: bake it once more in the background so the change is saved.
-				this.unsaved.put(e.getKey(), 0L);
-			}
-		}
-	}
+    private void evict() {
+        this.tiles.evict(this.frame, MAX_GPU_TILES, key -> {
+            this.coverageVersion++;
+            if (this.dirty.remove(key) != null && this.store != null && !key.isCave() && key.lod() == 0)
+                this.unsaved.put(key, 0L);
+        });
+    }
 
 	/** Saves fog-of-war progress if it changed. Call now and then; tiles save themselves. */
 	public void saveSeen() {
