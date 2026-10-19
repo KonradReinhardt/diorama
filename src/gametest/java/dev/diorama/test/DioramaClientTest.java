@@ -94,6 +94,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 			settle(context, 100);
 			save = world.getWorldSave();
 			spawnCell = tests.contains("saved-map") ? knownSpawnCell(context) : null;
+			if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
 			if (tests.contains("styles")) {
 				styleTour(context, world);
 			}
@@ -2318,10 +2319,10 @@ public class DioramaClientTest implements FabricClientGameTest {
 		}
 		if (env == null || env.isBlank()) {
 			//? if >=1.21.4 {
-			return Set.of("tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings", "overlays", "screens", "dimensions", "saved-map", "multiplayer", "server-id", "tracked-players");
+			return Set.of("directions", "tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings", "overlays", "screens", "dimensions", "saved-map", "multiplayer", "server-id", "tracked-players");
 			//?} else {
 			/*// Before 1.21.4 the tests run on src/gameshim, which can't start a dedicated server.
-			return Set.of("tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings", "overlays", "screens", "dimensions", "saved-map");
+			return Set.of("directions", "tour", "radar", "waypoints", "xaero-import", "fog-of-war", "settings", "overlays", "screens", "dimensions", "saved-map");
 			*///?}
 		}
 		return Set.of(env.split(","));

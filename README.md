@@ -51,3 +51,18 @@ Versions named `<minecraft>-neoforge` build for NeoForge; the rest build for Fab
 `./gradlew :1.21.1-neoforge:runClientGameTest` runs the same scenarios on NeoForge, all but the dedicated server one. NeoForge has no client game test API, so they run on `src/gameshim`, the test-only stand-in for Fabric's that the Fabric jars before 1.21.4 use too.
 
 `./gradlew :1.21.11:runProductionClientGameTest` runs the same tests against the remapped release jar in a normal install, with Fabric API as published. In development 1.21.11 uses Mojang's names, but a normal install uses intermediary ones, so anything that looks the game up by name only fails there.
+
+## Contributing
+
+Use JDK 25 and the checked-in Gradle wrapper. Keep Stonecutter active at 26.3.
+`./gradlew --configure-on-demand :26.3:build` runs the fast JUnit regression tests as well as compiling the mod.
+The tests cover rotated and negative coordinates, dirty regions, retry backoff, cache limits and disk persistence.
+`DIORAMA_TESTS=directions ./gradlew --configure-on-demand :26.3:runClientGameTest` exercises all four map orientations inside Minecraft.
+The GitHub Actions workflow builds every supported version and runs selected client scenarios on 26.3.
+
+Map direction is configured in Settings under Look. North is the default; East, South and West preserve the angled camera.
+Saved maps use separate folders per direction. Existing north-facing maps keep their original paths.
+
+The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> MapTile/TileStore`.
+`BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.
+Session retirement freezes chunks and settings and finishes unsaved surface tiles asynchronously. Application shutdown waits for those saves.
