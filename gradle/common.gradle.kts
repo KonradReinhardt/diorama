@@ -34,6 +34,9 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
 	useJUnitPlatform()
+	val testTemp = layout.buildDirectory.dir("tmp/tests")
+	systemProperty("java.io.tmpdir", testTemp.get().asFile.absolutePath)
+	doFirst { testTemp.get().asFile.mkdirs() }
 }
 
 tasks.named<Jar>("jar") {
