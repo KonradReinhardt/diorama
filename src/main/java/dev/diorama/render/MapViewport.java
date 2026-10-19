@@ -19,6 +19,8 @@ import org.jspecify.annotations.Nullable;
  * Each on-screen map (minimap, fullscreen) owns one, because each keeps its own fog mask.
  */
 public final class MapViewport {
+    private static long maskBuilds;
+    public static long maskBuilds() { return maskBuilds; }
 	private static final int MASK = 256;
 	private static final double MASK_MARGIN = 24;
 	/** Zooming out past this (GUI pixels per block) switches to overview tiles. */
@@ -66,8 +68,9 @@ public final class MapViewport {
 		boolean cave = view.layer() != TileKey.SURFACE;
 		graphics.fill(view.x(), view.y(), view.x() + view.width(), view.y() + view.height(), cave ? 0xFF0C0E12 : 0xFF8C99AB);
 
-		this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0);
-		this.drawFog(graphics, level, view);
+		var lighting = dev.diorama.EnvironmentLighting.current(cave || level.roofless());
+        this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0, lighting);
+        this.drawFog(graphics, level, view, lighting);
 		graphics.disableScissor();
 	}
 
@@ -132,7 +135,7 @@ public final class MapViewport {
 		return Math.sqrt(du * du + dv * dv);
 	}
 
-	private void drawTiles(GuiGraphicsExtractor graphics, MapLevel level, View view, int overlays) {
+	private void drawTiles(GuiGraphicsExtractor graphics, MapLevel level, View view, int overlays, dev.diorama.EnvironmentLighting lighting) {
 		int lod = lodFor(level, view);
 		double units = (double) Projection.TILE_UNITS * (1 << lod);
 		double u0 = view.minU();
@@ -146,7 +149,6 @@ public final class MapViewport {
 		// Minified tiles blend across mips; magnified ones stay crisp so blocks keep their edges.
 		Sampling sampling = view.zoom() >= Projection.PIXELS_PER_UNIT ? Sampling.TILE_CRISP : Sampling.TILE_SMOOTH;
 		MapCanvas canvas = MapCanvas.of(graphics);
-        var lighting = dev.diorama.EnvironmentLighting.current(view.layer() != TileKey.SURFACE || level.roofless());
 		float size = (float) (units * view.zoom());
 		for (int tu = tu0 - 1; tu <= tu1 + 1; tu++) {
 			for (int tv = tv0 - 1; tv <= tv1 + 1; tv++) {
@@ -170,7 +172,7 @@ public final class MapViewport {
 		}
 	}
 
-	private void drawFog(GuiGraphicsExtractor graphics, MapLevel level, View view) {
+	private void drawFog(GuiGraphicsExtractor graphics, MapLevel level, View view, dev.diorama.EnvironmentLighting lighting) {
 		double viewW = view.width() / view.zoom();
 		double viewH = view.height() / view.zoom();
 		// Zoomed out past the detailed zoom, the fog's noise grows with the view so it keeps its
@@ -204,7 +206,10 @@ public final class MapViewport {
 		int fogCode = (cave ? 128 : 0) | steps << 4 | fraction;
 		// The mask scale code takes the alpha byte's high nibble; 4 in the low nibble asks for fast fog.
 		int quality = fast ? 4 : 0;
-		int params = (scaleCode * 16 | quality) << 24 | (noiseU * 32) << 16 | (noiseV * 32) << 8 | fogCode;
+		int daylight = Math.round(lighting.daylight() * 255);
+        // Noise offsets occupy the high three bits; the low bits carry draw-time daylight.
+        int params = (scaleCode * 16 | quality) << 24 | (noiseU * 32 | daylight & 31) << 16
+            | (noiseV * 32 | daylight >> 5) << 8 | fogCode;
 
 		MapCanvas.of(graphics).fog(
 			this.maskTexture, FogTextures.noise(),
@@ -227,6 +232,7 @@ public final class MapViewport {
 		if (this.maskLevel.get() == level && inputs.equals(this.maskInputs)) {
 			return;
 		}
+        maskBuilds++;
 		this.maskInputs = inputs;
 		this.maskLevel = new WeakReference<>(level);
 		double units = (double) Projection.TILE_UNITS * (1 << lod);

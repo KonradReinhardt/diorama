@@ -79,7 +79,8 @@ layout(location = 0) in vec2 maskUv;
 //?} else {
 /*in vec2 maskUv;
 *///?}
-// rg: noise offset in eighths of the coarser noise period; b: cave flag (128), fog scale steps
+// rg high 3 bits: noise offset; r low 5 and g low 3 bits: daylight, 0..255.
+// b: cave flag (128), fog scale steps
 // (bits 4-6) and sixteenths of a step (bits 0-3); a: mask texel size code (bits 4-7) and the fast
 // quality flag (4).
 //? if >=26.3 {
@@ -205,7 +206,7 @@ float hash(vec2 p) {
 
 void main() {
     seconds = GameTime * 1200.0;
-    noiseOrigin = floor(params.rg * 255.0 / 32.0 + 0.5) / 8.0;
+    noiseOrigin = floor((params.rg * 255.0 + 0.001) / 32.0) / 8.0;
     float alphaCode = floor(params.a * 255.0 + 0.5);
     unitsPerUv = MASK_TEXELS * 2.0 * exp2(floor(alphaCode / 16.0));
     fast = mod(alphaCode, 16.0) >= 2.0;
@@ -224,8 +225,9 @@ void main() {
     clear = flags.g > 0.5;
     deep = flags.b > 0.5;
 
-    vec3 lit = cave ? vec3(0.24, 0.26, 0.33) : vec3(0.97, 0.97, 0.99);
-    vec3 shade = cave ? vec3(0.035, 0.04, 0.055) : vec3(0.48, 0.55, 0.67);
+    float daylight = (mod(floor(params.r * 255.0 + 0.5), 32.0) + 32.0 * mod(floor(params.g * 255.0 + 0.5), 32.0)) / 255.0;
+    vec3 lit = cave ? vec3(0.24, 0.26, 0.33) : mix(vec3(0.11, 0.13, 0.20), vec3(0.97, 0.97, 0.99), daylight);
+    vec3 shade = cave ? vec3(0.035, 0.04, 0.055) : mix(vec3(0.025, 0.035, 0.065), vec3(0.48, 0.55, 0.67), daylight);
     vec2 toSun = vec2(-1.0, -0.4) * (9.0 * fogScale / unitsPerUv);
 
     vec3 color = vec3(0.0);

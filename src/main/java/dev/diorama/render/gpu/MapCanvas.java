@@ -59,7 +59,7 @@ public interface MapCanvas {
 
 	/**
 	 * The fog over a view: the known-area mask in sampler 0 (clamped), the noise in sampler 1
-	 * (repeating), and the shader's parameters packed into the vertex colour. Clipped to the view.
+	 * (repeating), and the shader's noise/daylight parameters packed into the vertex colour. Clipped to the view.
 	 */
 	void fog(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params);
 }
