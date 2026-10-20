@@ -6,6 +6,7 @@ import dev.diorama.bake.TileKey;
 import dev.diorama.data.ChunkSnapshot;
 import dev.diorama.data.ChangeBounds;
 import dev.diorama.render.MapLevel;
+import dev.diorama.preview.SeedPreview;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -45,6 +46,17 @@ public final class MapSession {
 
 	private final ClientLevel level;
 	private final MapLevel map;
+    private @Nullable SeedPreview seedPreview;
+    private boolean previewAttempted;
+    private final @Nullable Path previewFolder;
+
+    public @Nullable SeedPreview seedPreview() {
+        if (!previewAttempted) {
+            previewAttempted = true;
+            seedPreview = dev.diorama.preview.SeedBiomeSource.open(level, previewFolder);
+        }
+        return seedPreview;
+    }
 	private final Map<Long, Pending> pending = new LinkedHashMap<>();
 	private boolean underground;
 	private MapStyle style = MapStyle.get();
@@ -53,6 +65,7 @@ public final class MapSession {
 
 	private MapSession(ClientLevel level, @Nullable String key) {
 		this.level = level;
+        this.previewFolder = mapFolder(level, key);
 		// The Nether's roof: its sky view looks down from just under it.
 		int roof = level.dimensionType().hasCeiling() ? level.getMinY() + level.dimensionType().logicalHeight() : MapLevel.NO_ROOF;
 		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key),
@@ -86,6 +99,7 @@ public final class MapSession {
 	/** Saves and ends the session. For closing the game; leaving a world is noticed by {@link #tick}. */
 	public static void close() {
 		if (current != null) {
+            if (current.seedPreview != null) current.seedPreview.close();
 			current.map.close();
 			current = null;
 		}
@@ -111,6 +125,7 @@ public final class MapSession {
 				session.map.colorsChanged();
 			}
 		} else if (BlockLooks.isStale()) {
+            dev.diorama.render.FogTextures.reload();
 			BlockLooks.build();
 			session.map.colorsChanged();
 			// Snapshots hold biome tints from the old colormaps. Retake every loaded chunk;
@@ -126,6 +141,7 @@ public final class MapSession {
 	 */
 	private static @Nullable MapSession forLevel(@Nullable ClientLevel level) {
 		if (current != null && current.level != level) {
+            if (current.seedPreview != null) current.seedPreview.close();
 			current.map.close();
 			current = null;
 		}
@@ -327,6 +343,9 @@ public final class MapSession {
 	}
 
 	private void tickSession(Minecraft mc) {
+        if (this.seedPreview != null && (Settings.get().fogStyle != Settings.FogStyle.ANCIENT_MAP || !Settings.get().seedPreview
+            || (!Settings.get().minimap && !(mc.gui.screen() instanceof MapScreen))))
+            this.seedPreview.request(null);
 		LocalPlayer player = mc.player;
 		if (player != null && this.ticks++ % 40 == 0) {
 			this.sweepLoadedChunks(player);

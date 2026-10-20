@@ -62,4 +62,7 @@ public interface MapCanvas {
 	 * (repeating), and the shader's noise/daylight parameters packed into the vertex colour. Clipped to the view.
 	 */
 	void fog(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params);
+
+    /** Sepia terrain using the fog shader's tile mode, also available to legacy renderers. */
+    void antiqueTile(MapTexture terrain, MapTexture paper, float x0, float y0, float x1, float y1);
 }

@@ -99,5 +99,9 @@
 	"diorama.settings.lighting": "Lighting",
 	"diorama.settings.lighting.world": "World time",
 	"diorama.settings.lighting.day": "Always day",
-	"diorama.settings.lighting.night": "Always night"
+	"diorama.settings.lighting.night": "Always night",
+	"diorama.settings.fog_style": "Fog style",
+	"diorama.settings.fog_style.clouds": "Clouds",
+	"diorama.settings.fog_style.ancient_map": "Antique map",
+	"diorama.settings.seed_preview": "Seed cartography"
 }

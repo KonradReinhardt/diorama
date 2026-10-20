@@ -97,6 +97,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 			save = world.getWorldSave();
 			spawnCell = tests.contains("saved-map") ? knownSpawnCell(context) : null;
 			if (tests.contains("atomic-appearance")) AtomicAppearanceScenario.run(context, world);
+            if (tests.contains("antique-fog")) AntiqueFogScenario.run(context, world);
             if (tests.contains("day-night")) DayNightScenario.run(context, world);
             if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
 			if (tests.contains("styles")) {

@@ -87,6 +87,7 @@ public final class MapScreen extends Screen {
 		}
 		if (this.direction != Projection.direction()) {
             this.direction = Projection.direction();
+            this.smoothZoom.reset(this.zoom);
             this.following = true;
         }
 		long zoomNow = System.nanoTime();

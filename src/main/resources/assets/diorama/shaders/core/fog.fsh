@@ -122,25 +122,31 @@ bool clear;
 // Every mask texel this pixel can read is fully unknown: every known share is exactly 0, so the
 // mask reads are skipped. The noise still shapes the fog there, so its reads stay.
 bool deep;
+float revealProgress;
+
+float sampleKnown(vec2 uv) {
+    vec4 mask = texture(Sampler0, uv);
+    return mix(mask.a, mask.r, revealProgress);
+}
 
 // The known share at uv, without the read where the answer is already known.
 float knownAt(vec2 uv) {
-    return deep ? 0.0 : texture(Sampler0, uv).r;
+    return deep ? 0.0 : sampleKnown(uv);
 }
 
 // Known share blurred over a radius in map units, so chunk-shaped edges melt away.
 float knownBlur(vec2 uv, float units) {
     float r = max(units / unitsPerUv, 1.0 / MASK_TEXELS);
-    float k = texture(Sampler0, uv).r * 0.2;
-    k += texture(Sampler0, uv + vec2(r, 0.0)).r * 0.1;
-    k += texture(Sampler0, uv - vec2(r, 0.0)).r * 0.1;
-    k += texture(Sampler0, uv + vec2(0.0, r)).r * 0.1;
-    k += texture(Sampler0, uv - vec2(0.0, r)).r * 0.1;
+    float k = sampleKnown(uv) * 0.2;
+    k += sampleKnown(uv + vec2(r, 0.0)) * 0.1;
+    k += sampleKnown(uv - vec2(r, 0.0)) * 0.1;
+    k += sampleKnown(uv + vec2(0.0, r)) * 0.1;
+    k += sampleKnown(uv - vec2(0.0, r)) * 0.1;
     float d = r * 1.9;
-    k += texture(Sampler0, uv + vec2(d, d)).r * 0.1;
-    k += texture(Sampler0, uv + vec2(-d, d)).r * 0.1;
-    k += texture(Sampler0, uv + vec2(d, -d)).r * 0.1;
-    k += texture(Sampler0, uv + vec2(-d, -d)).r * 0.1;
+    k += sampleKnown(uv + vec2(d, d)) * 0.1;
+    k += sampleKnown(uv + vec2(-d, d)) * 0.1;
+    k += sampleKnown(uv + vec2(d, -d)) * 0.1;
+    k += sampleKnown(uv + vec2(-d, -d)) * 0.1;
     return k;
 }
 
@@ -204,12 +210,81 @@ float hash(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+float biomeAt(ivec2 p) {
+    return floor(texelFetch(Sampler0, clamp(p, ivec2(0), ivec2(255)), 0).g * 255.0 / 32.0 + 0.5);
+}
+
+// Deliberately square, world-anchored ink pixels. Easing changes opacity, never this grid.
+void antiqueMap(ivec2 texel, vec4 mask) {
+    vec2 mapUnits = noiseOrigin * (NOISE_PERIOD * exp2(scaleSteps + 1.0)) + maskUv * unitsPerUv;
+    vec2 pixel = floor(mapUnits / 2.0);
+    vec2 q = mod(pixel, 32.0);
+    vec2 paperUv = mapUnits / 256.0;
+    vec3 paper = texture(Sampler1, paperUv).rgb;
+    paper = mix(vec3(0.92, 0.82, 0.62), paper, 0.45);
+    float kind = biomeAt(texel);
+    float water = kind == 1.0 ? 1.0 : 0.0;
+    float coast = 0.0;
+    vec2 local = fract(maskUv * MASK_TEXELS);
+    float stroke = min(.5, 1.0 / (unitsPerUv / MASK_TEXELS));
+    if (kind > 0.0) {
+        float west = biomeAt(texel + ivec2(-1, 0)), east = biomeAt(texel + ivec2(1, 0));
+        float north = biomeAt(texel + ivec2(0, -1)), south = biomeAt(texel + ivec2(0, 1));
+        // Unknown cache boundaries are blank paper, never fabricated shorelines.
+        coast = ((local.x < stroke && west > 0.0 && (west == 1.0) != (kind == 1.0))
+            || (local.x > 1.0 - stroke && east > 0.0 && (east == 1.0) != (kind == 1.0))
+            || (local.y < stroke && north > 0.0 && (north == 1.0) != (kind == 1.0))
+            || (local.y > 1.0 - stroke && south > 0.0 && (south == 1.0) != (kind == 1.0))) ? 1.0 : 0.0;
+    }
+    float ink = coast * 0.58;
+    // Offset repeated symbols deterministically by a few grid pixels, like a hand-sketched atlas.
+    vec2 cell = floor(pixel / 32.0);
+    q += floor(vec2(hash(cell), hash(cell.yx + 7.0)) * 3.0) - 1.0;
+    if (kind == 1.0) {
+        float wave = mod(q.x + floor(q.y / 3.0), 13.0);
+        if ((q.y == 9.0 || q.y == 21.0) && wave < 7.0) ink = max(ink, .25);
+        paper *= vec3(.93, .92, .87);
+    } else if (kind == 3.0) {
+        float dx = abs(q.x - 16.0);
+        float width = floor((q.y - 6.0) / 3.0) * 2.0 + 2.0;
+        bool crown = q.y >= 6.0 && q.y <= 20.0 && dx <= width && (dx >= width - 1.0 || mod(q.y - 5.0, 3.0) == 0.0);
+        bool trunk = q.x == 16.0 && q.y >= 20.0 && q.y <= 25.0;
+        if (crown || trunk) ink = max(ink, .45);
+    } else if (kind == 4.0) {
+        float stair = floor((26.0 - q.y) / 2.0);
+        float dx = abs(q.x - 16.0);
+        if (q.y >= 6.0 && q.y <= 26.0 && (dx == stair || (q.x > 16.0 && dx < stair && mod(q.x + q.y, 4.0) == 0.0))) ink = max(ink, .48);
+    } else if (kind == 5.0) {
+        if (mod(q.y, 13.0) == 0.0 && mod(q.x, 11.0) < 3.0) ink = max(ink, .22);
+    } else if (kind == 6.0) {
+        if ((q.x == 16.0 && q.y >= 12.0 && q.y <= 20.0) || (q.y == 16.0 && q.x >= 12.0 && q.x <= 20.0)) ink = max(ink, .24);
+    } else if (kind > 0.0) {
+        if ((q.x == 14.0 || q.x == 18.0) && q.y >= 18.0 && q.y <= 20.0) ink = max(ink, .2);
+    }
+    vec3 cartography = mix(paper, vec3(.30, .17, .075), ink);
+    float known = mix(mask.a, mask.r, revealProgress);
+    // A narrow square-pixel frontier fades to the detailed map; the paper grain remains everywhere.
+    float unknown = 1.0 - smoothstep(.05, .98, known);
+    float alpha = mix(.13, 1.0, unknown);
+    fragColor = vec4(mix(paper, cartography, unknown), alpha) * ColorModulator;
+}
+
 void main() {
+    // Reserved tile-mode sentinel; impossible for fog at mask scale zero and noise step seven.
+    if (params.a == 0.0 && params.b > .99 && params.r > .99 && params.g > .99) {
+        vec4 terrain = texture(Sampler0, maskUv);
+        if (terrain.a <= 0.0) discard;
+        float value = dot(terrain.rgb, vec3(.299, .587, .114));
+        fragColor = vec4(mix(vec3(.22, .12, .055), vec3(.92, .81, .59), smoothstep(0.0, .95, value)), terrain.a) * ColorModulator;
+        return;
+    }
     seconds = GameTime * 1200.0;
     noiseOrigin = floor((params.rg * 255.0 + 0.001) / 32.0) / 8.0;
     float alphaCode = floor(params.a * 255.0 + 0.5);
     unitsPerUv = MASK_TEXELS * 2.0 * exp2(floor(alphaCode / 16.0));
-    fast = mod(alphaCode, 16.0) >= 2.0;
+    fast = mod(floor(alphaCode / 4.0), 2.0) >= 1.0;
+    float greenCode = floor(params.g * 255.0 + 0.5);
+    revealProgress = (mod(floor(greenCode / 2.0), 16.0) + 16.0 * mod(alphaCode, 4.0)) / 63.0;
     float fogCode = floor(params.b * 255.0 + 0.5);
     bool cave = fogCode >= 128.0;
     fogCode = mod(fogCode, 128.0);
@@ -222,10 +297,17 @@ void main() {
     blurUnits = cave ? 2.5 : 7.0;
     ivec2 texel = clamp(ivec2(floor(maskUv * MASK_TEXELS)), ivec2(0), ivec2(int(MASK_TEXELS) - 1));
     vec4 flags = texelFetch(Sampler0, texel, 0);
+    if (mod(floor(alphaCode / 8.0), 2.0) >= 1.0) {
+        antiqueMap(texel, flags);
+        return;
+    }
     clear = flags.g > 0.5;
     deep = flags.b > 0.5;
 
-    float daylight = (mod(floor(params.r * 255.0 + 0.5), 32.0) + 32.0 * mod(floor(params.g * 255.0 + 0.5), 32.0)) / 255.0;
+    // A fully revealed neighborhood contributes exactly zero: avoid the layer march and noise.
+    if (clear) discard;
+
+    float daylight = (mod(floor(params.r * 255.0 + 0.5), 32.0) + 32.0 * mod(greenCode, 2.0)) / 63.0;
     vec3 lit = cave ? vec3(0.24, 0.26, 0.33) : mix(vec3(0.11, 0.13, 0.20), vec3(0.97, 0.97, 0.99), daylight);
     vec3 shade = cave ? vec3(0.035, 0.04, 0.055) : mix(vec3(0.025, 0.035, 0.065), vec3(0.48, 0.55, 0.67), daylight);
     vec2 toSun = vec2(-1.0, -0.4) * (9.0 * fogScale / unitsPerUv);
