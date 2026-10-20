@@ -123,6 +123,8 @@ public final class SettingsScreen extends Screen {
 			Settings.get().save();
 			b.setMessage(label(label, name.apply(next)));
 		}).bounds(x, y, this.buttonWidth, this.buttonHeight).build();
+        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.fog_style"))
+            button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable(key + ".tooltip")));
 		this.addRenderableWidget(button);
 		return y + this.row;
 	}

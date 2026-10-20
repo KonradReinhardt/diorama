@@ -33,6 +33,7 @@ final class AntiqueFogScenario {
             // Stay inside one preview region, well outside the explored world, to test prediction alone.
             context.runOnClient(mc -> ((MapScreen)mc.gui.screen()).lookAt(Projection.u(6000, 6000),
                 Projection.worldV(6000, 64, 6000), .5, TileKey.SURFACE));
+            //? if >=26.3 {
             context.waitFor(mc -> {
                 var preview = MapSession.get().seedPreview();
                 if (preview == null) throw new AssertionError("Vanilla singleplayer preview source unavailable");
@@ -47,6 +48,10 @@ final class AntiqueFogScenario {
                 dev.diorama.Diorama.LOGGER.info("PREVIEW samples={}, total={} ms, worst={} ms, initialization={} ms",
                     preview.samples(), preview.sampleNanos() / 1e6, preview.worstSampleNanos() / 1e6, preview.initializationNanos() / 1e6);
             });
+            //?} else {
+            /*context.waitTicks(30);
+            context.takeScreenshot("antique-unexplored-paper-fallback");
+            *///?}
 
             // Move back to the player and exercise wheel easing through the actual screen frame path.
             context.runOnClient(mc -> {

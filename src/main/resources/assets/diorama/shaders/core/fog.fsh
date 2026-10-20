@@ -222,6 +222,11 @@ void antiqueMap(ivec2 texel, vec4 mask) {
     vec2 paperUv = mapUnits / 256.0;
     vec3 paper = texture(Sampler1, paperUv).rgb;
     paper = mix(vec3(0.92, 0.82, 0.62), paper, 0.45);
+    float known = mix(mask.a, mask.r, revealProgress);
+    if (known >= 1.0) {
+        fragColor = vec4(paper, .13) * ColorModulator;
+        return;
+    }
     float kind = biomeAt(texel);
     float water = kind == 1.0 ? 1.0 : 0.0;
     float coast = 0.0;
@@ -251,7 +256,7 @@ void antiqueMap(ivec2 texel, vec4 mask) {
         bool trunk = q.x == 16.0 && q.y >= 20.0 && q.y <= 25.0;
         if (crown || trunk) ink = max(ink, .45);
     } else if (kind == 4.0) {
-        float stair = floor((26.0 - q.y) / 2.0);
+        float stair = floor((q.y - 6.0) / 2.0);
         float dx = abs(q.x - 16.0);
         if (q.y >= 6.0 && q.y <= 26.0 && (dx == stair || (q.x > 16.0 && dx < stair && mod(q.x + q.y, 4.0) == 0.0))) ink = max(ink, .48);
     } else if (kind == 5.0) {
@@ -262,7 +267,6 @@ void antiqueMap(ivec2 texel, vec4 mask) {
         if ((q.x == 14.0 || q.x == 18.0) && q.y >= 18.0 && q.y <= 20.0) ink = max(ink, .2);
     }
     vec3 cartography = mix(paper, vec3(.30, .17, .075), ink);
-    float known = mix(mask.a, mask.r, revealProgress);
     // A narrow square-pixel frontier fades to the detailed map; the paper grain remains everywhere.
     float unknown = 1.0 - smoothstep(.05, .98, known);
     float alpha = mix(.13, 1.0, unknown);
