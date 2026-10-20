@@ -186,6 +186,12 @@ public final class MapViewport {
 		return Math.sqrt(du * du + dv * dv);
 	}
 
+	/** Whether a texture pixel of this level covers at least one screen pixel, so it is drawn crisp, not blurred. */
+	static boolean magnified(View view, int lod) {
+		double screenPixelsPerUnit = view.zoom() * Minecraft.getInstance().getWindow().getGuiScale();
+		return screenPixelsPerUnit * (1 << lod) >= Projection.PIXELS_PER_UNIT;
+	}
+
 	private void drawTiles(GuiGraphicsExtractor graphics, MapLevel level, View view, int overlays, dev.diorama.EnvironmentLighting lighting) {
 		int lod = lodFor(level, view);
 		double units = (double) Projection.TILE_UNITS * (1 << lod);
@@ -198,7 +204,8 @@ public final class MapViewport {
 		int tu1 = (int) Math.floor(u1 / units);
 		int tv1 = (int) Math.floor(v1 / units);
 		// Minified tiles blend across mips; magnified ones stay crisp so blocks keep their edges.
-		Sampling sampling = view.zoom() >= Projection.PIXELS_PER_UNIT ? Sampling.TILE_CRISP : Sampling.TILE_SMOOTH;
+		// Magnified means on the real screen: the GUI scale enlarges every texture pixel too.
+		Sampling sampling = magnified(view, lod) ? Sampling.TILE_CRISP : Sampling.TILE_SMOOTH;
 		MapCanvas canvas = MapCanvas.of(graphics);
 		float size = (float) (units * view.zoom());
 		for (int tu = tu0 - 1; tu <= tu1 + 1; tu++) {

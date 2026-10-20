@@ -63,6 +63,9 @@ The GitHub Actions workflow builds every supported version and runs selected cli
 Map direction is configured in Settings under Look. North is the default; East, South and West preserve the angled camera.
 Saved maps use separate folders per direction. Existing north-facing maps keep their original paths.
 
+Map pixels stay sharp: tiles are magnified with nearest-neighbour sampling whenever a texture
+pixel covers at least one real screen pixel, GUI scale included; only smaller pixels use mipmaps.
+
 Appearance changes such as outlines, depth shading and quality prepare a complete
 revision in the background and replace resident tiles together. Exploration stays
 visible while it prepares, and distant overviews wait for their updated detail tiles.
