@@ -47,6 +47,22 @@ public final class BookWidgets {
 		return Component.literal(font.plainSubstrByWidth(text.getString(), Math.max(0, width - font.width(ellipsis))) + ellipsis);
 	}
 
+	private static long lastRustle;
+
+	/**
+	 * A soft rustle of cloth as a banner is pointed at, on the map or in the book: the leather sound
+	 * of putting on armour, quiet and at a slightly different pitch each time, at most every 60 ms.
+	 */
+	public static void rustle() {
+		long now = System.currentTimeMillis();
+		if (now - lastRustle < 60) {
+			return;
+		}
+		lastRustle = now;
+		float pitch = 0.9F + (float) Math.random() * 0.35F;
+		Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.ARMOR_EQUIP_LEATHER, pitch));
+	}
+
 	/** Plays a page turning, as the book's ribbons and arrows do. */
 	static void pageTurn(SoundManager sounds) {
 		sounds.play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
@@ -206,23 +222,31 @@ public final class BookWidgets {
 		void draw(GuiGraphicsExtractor graphics, int x, int y, int width, int height, float alpha);
 	}
 
-	/** A framed slot with a picture, picked by a click: a style, a direction, a waypoint. */
+	/**
+	 * A framed slot with a picture, picked by a click: a style, a direction, a waypoint. A banner's
+	 * slot rustles when pointed at and turns a page when picked.
+	 */
 	public static final class Slot extends BookWidget {
 		private final Art art;
 		private final BooleanSupplier selected;
 		private final Runnable action;
-		private final boolean pageTurn;
+		private final boolean banner;
+		private boolean wasHovered;
 
-		public Slot(int x, int y, int width, int height, Component name, Art art, BooleanSupplier selected, Runnable action, boolean pageTurn) {
+		public Slot(int x, int y, int width, int height, Component name, Art art, BooleanSupplier selected, Runnable action, boolean banner) {
 			super(x, y, width, height, name);
 			this.art = art;
 			this.selected = selected;
 			this.action = action;
-			this.pageTurn = pageTurn;
+			this.banner = banner;
 		}
 
 		@Override
 		protected void draw(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean lit) {
+			if (this.banner && this.isHovered && !this.wasHovered) {
+				rustle();
+			}
+			this.wasHovered = this.isHovered;
 			BookSprites.Region r = this.selected.getAsBoolean() ? BookSprites.SLOT_SELECTED : lit ? BookSprites.SLOT_HOVER : BookSprites.SLOT;
 			BookSprites.nine(graphics, r, this.getX(), this.getY(), this.width, this.height, fade(-1, this.alpha), true);
 			this.art.draw(graphics, this.getX(), this.getY(), this.width, this.height, this.alpha);
@@ -235,7 +259,7 @@ public final class BookWidgets {
 
 		@Override
 		public void playDownSound(SoundManager sounds) {
-			if (this.pageTurn) {
+			if (this.banner) {
 				pageTurn(sounds);
 			} else {
 				super.playDownSound(sounds);
@@ -243,19 +267,25 @@ public final class BookWidgets {
 		}
 	}
 
+	/** An item's icon as an {@link Art}, 16 pixels across, centred. */
+	public static Art item(ItemStack stack) {
+		return (graphics, x, y, width, height, alpha) -> BookSprites.item(graphics, stack, x + (width - 16) / 2, y + (height - 16) / 2);
+	}
+
 	/**
-	 * A bookmark ribbon with an item on it, sticking out to the right of {@link #edge}: {@link #reach}
-	 * pixels of it show. The book moves both as it opens and shuts.
+	 * A bookmark ribbon with an icon on it, reaching out to the right of {@link #edge}: {@link #reach}
+	 * pixels of it show, its right end, as if the rest were under the book. Shut, the whole ribbon
+	 * shows, notched at both ends. The book moves both as it opens and shuts.
 	 */
 	public static final class Ribbon extends BookWidget {
 		private final int tint;
-		private final ItemStack icon;
+		private final Art icon;
 		private final boolean leaves;
 		private final Runnable action;
 		int edge;
 		int reach;
 
-		public Ribbon(int y, int tint, ItemStack icon, boolean leaves, Component name, Runnable action) {
+		public Ribbon(int y, int tint, Art icon, boolean leaves, Component name, Runnable action) {
 			super(0, y, BookLayout.RIBBON_OUT, BookLayout.RIBBON_H, name);
 			this.tint = tint;
 			this.icon = icon;
@@ -274,10 +304,15 @@ public final class BookWidgets {
 
 		@Override
 		protected void draw(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean lit) {
-			int show = Math.min(BookSprites.RIBBON.w(), this.reach + (lit ? 3 : 0));
-			BookSprites.part(graphics, BookSprites.RIBBON, this.edge, this.getY(), BookSprites.RIBBON.w() - show, 0, show, BookSprites.RIBBON.h(), this.tint);
-			int iconX = this.edge + show - 23;
-			BookSprites.item(graphics, this.icon, iconX, this.getY() + 3);
+			int full = BookSprites.RIBBON.w();
+			// Pointed at, it reaches out a little; a whole ribbon slides out instead.
+			int wanted = this.reach + (lit ? 3 : 0);
+			int show = Math.min(full, wanted);
+			int x = this.edge - Math.max(0, wanted - full);
+			BookSprites.part(graphics, BookSprites.RIBBON, x, this.getY(), full - show, 0, show, BookSprites.RIBBON.h(), this.tint);
+			// Between the notches when it shows whole; short of the right notch over the book.
+			int iconX = show >= full ? x + (full - 16) / 2 : x + show - 22;
+			this.icon.draw(graphics, iconX, this.getY() + 3, 16, 16, 1);
 			if (this.leaves) {
 				BookSprites.sprite(graphics, BookSprites.LEAVE, iconX + 13, this.getY() + 2, -1);
 			}
@@ -294,13 +329,13 @@ public final class BookWidgets {
 		}
 	}
 
-	/** A tab on the book's top edge with an item on it. */
+	/** A tab on the book's top edge with an icon on it. */
 	public static final class Tab extends BookWidget {
-		private final ItemStack icon;
+		private final Art icon;
 		private final BooleanSupplier selected;
 		private final Runnable action;
 
-		public Tab(int x, int y, ItemStack icon, Component name, BooleanSupplier selected, Runnable action) {
+		public Tab(int x, int y, Art icon, Component name, BooleanSupplier selected, Runnable action) {
 			super(x, y, BookLayout.TAB_W, BookLayout.TAB_RISE, name);
 			this.icon = icon;
 			this.selected = selected;
@@ -314,7 +349,7 @@ public final class BookWidgets {
 			int lift = on ? 2 : lit ? 1 : 0;
 			BookSprites.part(graphics, on ? BookSprites.TAB_SELECTED : BookSprites.TAB, this.getX(), this.getY() - lift, 0, 0,
 				BookLayout.TAB_W, this.height + lift, fade(-1, this.alpha));
-			BookSprites.item(graphics, this.icon, this.getX() + 4, this.getY() + 2 - lift);
+			this.icon.draw(graphics, this.getX() + 4, this.getY() + 2 - lift, 16, 16, this.alpha);
 		}
 
 		@Override

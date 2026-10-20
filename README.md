@@ -23,8 +23,8 @@ Saved maps and waypoints live in `.minecraft/diorama/`, one folder per world. On
 
 ## Keys
 
-- `M` opens the fullscreen map. Drag to pan, scroll to zoom, right-click to plant a banner (named in the book), click a banner to open its page in the book.
-- In the fullscreen map, `C` toggles the cave slice, `PgUp`/`PgDn` move the slice by 4 blocks, `U` opens the book's banners, `Space` recenters on you, and `Esc` shuts the book before the map.
+- `M` opens the fullscreen map. Drag to pan, scroll to zoom, click a banner to open its page in the book. Right-click anywhere for a menu: plant a banner there (named in the book), copy its coordinates, or teleport there if the server lets you use `/tp` (on ground the map hasn't seen, `/spreadplayers` lands you on the surface).
+- In the fullscreen map, `C` toggles the cave slice, `PgUp`/`PgDn` move the slice by 4 blocks, `U` opens the book's banners, `Space` recenters on you, and `Esc` shuts the right-click menu, then the book, before the map.
 - `B` adds a waypoint where you stand, and `U` opens the waypoint list.
 - `=` and `-` zoom the minimap. Map settings and hiding the minimap have keys too, unbound by default.
 

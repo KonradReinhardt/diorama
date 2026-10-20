@@ -40,7 +40,7 @@ public final class BookSprites {
 	public static final Region BUTTON_OFF = new Region(80, 64, 16, 16, 4);
 	public static final Region LABEL = new Region(96, 64, 16, 16, 4);
 	public static final Region FIELD = new Region(112, 64, 16, 16, 4);
-	public static final Region RIBBON = new Region(0, 80, 40, 22);
+	public static final Region RIBBON = new Region(0, 80, 36, 22);
 	public static final Region TAB = new Region(40, 80, 24, 20);
 	public static final Region TAB_SELECTED = new Region(64, 80, 24, 20);
 	public static final Region CLOSE = new Region(88, 80, 11, 11);

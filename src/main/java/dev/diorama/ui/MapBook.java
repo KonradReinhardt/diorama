@@ -78,6 +78,15 @@ public final class MapBook {
 		void draw(GuiGraphicsExtractor graphics, int dy, float alpha);
 	}
 
+	/** The banners' icon: a plain white banner as the maps draw it, waving with them. */
+	public static final BookWidgets.Art BANNER_ICON = (graphics, x, y, width, height, alpha) -> dev.diorama.render.BannerAtlas.shared().draw(graphics,
+		new dev.diorama.waypoint.BannerDesign(dev.diorama.waypoint.BannerDesign.Dye.WHITE, List.of()), dev.diorama.render.BannerCompositor.Size.SMALL,
+		x + width / 2.0F, y + height + 1, 1, dev.diorama.render.BannerAtlas.frameNow(Settings.get().animateBanners), false, BookWidgets.fade(-1, alpha));
+
+	private static BookWidgets.Art icon(Section s) {
+		return s == Section.BANNERS ? BANNER_ICON : BookWidgets.item(BookSprites.stack(s.item));
+	}
+
 	/** How far below its place the book starts as it opens. */
 	private static final int RISE = 10;
 
@@ -147,7 +156,7 @@ public final class MapBook {
 		this.decorations.clear();
 		this.stale = false;
 		for (Section s : Section.values()) {
-			BookWidgets.Ribbon ribbon = new BookWidgets.Ribbon(layout.ribbons().get(s.ordinal()).y(), s.tint, BookSprites.stack(s.item),
+			BookWidgets.Ribbon ribbon = new BookWidgets.Ribbon(layout.ribbons().get(s.ordinal()).y(), s.tint, icon(s),
 				s == Section.MINIMAP, Component.translatable(s.key), () -> this.ribbon(s));
 			this.ribbons.add(this.host.add(ribbon));
 		}
@@ -155,11 +164,12 @@ public final class MapBook {
 			this.page(new BookWidgets.Mark(layout.close().x(), layout.close().y(), BookSprites.CLOSE, BookSprites.CLOSE_HOVER,
 				Component.translatable("diorama.book.close"), this::close));
 			if (this.section == Section.BANNERS) {
-				String[][] tabs = {{"red_banner", "diorama.book.list"}, {"loom", "diorama.book.options"}};
-				for (int i = 0; i < tabs.length; i++) {
+				BookWidgets.Art[] icons = {BANNER_ICON, BookWidgets.item(BookSprites.stack("loom"))};
+				String[] names = {"diorama.book.list", "diorama.book.options"};
+				for (int i = 0; i < names.length; i++) {
 					int index = i;
-					this.page(new BookWidgets.Tab(layout.left().x() + 4 + i * (BookLayout.TAB_W + 2), layout.tabY(), BookSprites.stack(tabs[i][0]),
-						Component.translatable(tabs[i][1]), () -> this.tab == index, () -> this.showTab(index)));
+					this.page(new BookWidgets.Tab(layout.left().x() + 4 + i * (BookLayout.TAB_W + 2), layout.tabY(), icons[i],
+						Component.translatable(names[i]), () -> this.tab == index, () -> this.showTab(index)));
 				}
 			}
 			PageFlow flow = new PageFlow(this, layout, this.sheet);
@@ -284,7 +294,6 @@ public final class MapBook {
 	public void newWaypoint(Waypoint waypoint) {
 		this.banners.draft(waypoint);
 		this.show(Section.BANNERS, 0);
-		this.banners.focusName(this);
 	}
 
 	/** Saves edits not yet written; the map screen calls this as it is left. */
@@ -317,6 +326,7 @@ public final class MapBook {
 	public void frame(long nanos) {
 		this.shown = this.openness.update(this.open ? 1 : 0, nanos);
 		if (this.stale && (this.open || this.shown <= 0.001)) {
+			this.stale = false;
 			this.host.rebuild();
 			return;
 		}

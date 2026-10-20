@@ -170,27 +170,27 @@ hline(112, 79, 16, INK_SOFT)
 hline(113, 78, 14, PAGE_SHADE)
 
 
-# --- Ribbon: 40x22 at (0, 80), grey so the game tints it. The left end tucks under the book. ---
+# --- Ribbon: 36x22 at (0, 80), grey so the game tints it, notched at both ends. ----------------
 def ribbon(x, y):
-    w, h = 40, 22
+    """Swallowtail notches at both ends, so a ribbon reads whole at the screen's edge. Over the
+    book only its right part is drawn, from the cover's edge, as if the rest were under it."""
+    w, h = 36, 22
     for j in range(h):
-        # Swallowtail notch on the right end.
         notch = max(0, 5 - abs(j - h // 2))
-        end = w - 1 - notch
-        for i in range(end + 1):
+        start, end = notch, w - 1 - notch
+        for i in range(start, end + 1):
             c = WHITE
             if j <= 1:
                 c = GREY if j == 1 else INK
             elif j >= h - 2:
                 c = GREY_DARK if j == h - 2 else INK
-            elif i == end:
+            elif i == start or i == end:
                 c = INK
-            elif i == end - 1:
+            elif i == start + 1 or i == end - 1:
                 c = GREY
             put(x + i, y + j, c)
-    # A fold line near the book edge, and stitching along the ribbon.
-    vline(x + 6, y + 2, h - 4, GREY)
-    for i in range(9, w - 8, 3):
+    # Stitching along both edges.
+    for i in range(8, w - 7, 3):
         put(x + i, y + 3, GREY)
         put(x + i, y + h - 4, GREY)
 

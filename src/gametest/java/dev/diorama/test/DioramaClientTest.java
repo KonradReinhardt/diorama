@@ -1359,8 +1359,8 @@ public class DioramaClientTest implements FabricClientGameTest {
 		lookAtPlayer(context, 4.0, TileKey.SURFACE);
 		context.waitTicks(3);
 
-		// Right-click a spot left of the player: a new banner waits in the map's book on the block
-		// shown there, which is the first solid block on the camera ray through that point (a canopy
+		// Right-click a spot left of the player and plant a banner from the menu: a new banner waits
+		// in the map's book on the block shown there, which is the first solid block on the camera ray through that point (a canopy
 		// can hide the ground behind it). The classic editor then checks the fields on it.
 		double[] click = context.computeOnClient(mc -> {
 			MapScreen screen = (MapScreen) mc.gui.screen();
@@ -1372,6 +1372,20 @@ public class DioramaClientTest implements FabricClientGameTest {
 		});
 		context.getInput().setCursorPos(click[2], click[3]);
 		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+		context.waitTicks(3);
+		if (!context.computeOnClient(mc -> mc.gui.screen() instanceof MapScreen map && map.menu() != null && map.menu().target().heightKnown())) {
+			throw new AssertionError("Right-clicking the map didn't open its menu on a known block");
+		}
+		context.takeScreenshot("waypoints-04-map-menu");
+		String plant = net.minecraft.network.chat.Component.translatable("diorama.menu.plant").getString();
+		clickAt(context, context.computeOnClient(mc -> {
+			for (var child : mc.gui.screen().children()) {
+				if (child instanceof net.minecraft.client.gui.components.AbstractWidget w && w.getMessage().getString().equals(plant)) {
+					return w;
+				}
+			}
+			throw new AssertionError("The map menu has no " + plant);
+		}));
 		context.waitTicks(3);
 		Waypoint planted = context.computeOnClient(mc -> mc.gui.screen() instanceof MapScreen map && map.book().drafting() ? map.book().picked() : null);
 		if (planted == null) {

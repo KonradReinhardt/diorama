@@ -42,7 +42,8 @@ final class BannersPage {
 	private @Nullable Waypoint fieldsFor;
 	private boolean dirty;
 	private boolean deleteArmed;
-	private @Nullable EditBox nameBox;
+	/** The name field takes the keyboard when it is next built: a banner was just planted. */
+	private boolean nameFirst;
 	private @Nullable CompletableFuture<XaeroImport.@Nullable Found> xaero;
 	private boolean xaeroShown;
 	private @Nullable Component imported;
@@ -64,6 +65,7 @@ final class BannersPage {
 		this.draft = waypoint;
 		selected = null;
 		this.deleteArmed = false;
+		this.nameFirst = true;
 	}
 
 	/** The waypoint the right page shows: the draft, or the one picked if it still exists. */
@@ -97,12 +99,6 @@ final class BannersPage {
 		this.dirty = false;
 	}
 
-	void focusName(MapBook book) {
-		if (this.nameBox != null) {
-			book.host().focus(this.nameBox);
-		}
-	}
-
 	/** Rebuilds once Xaero's files have been read, to offer the import. */
 	void frame(MapBook book) {
 		if (this.xaero != null && this.xaero.isDone() && !this.xaeroShown && book.isOpen() && book.section() == MapBook.Section.BANNERS) {
@@ -112,7 +108,6 @@ final class BannersPage {
 	}
 
 	void build(MapBook book, PageFlow flow) {
-		this.nameBox = null;
 		if (this.xaero == null) {
 			// Read on the client thread, then the files on another.
 			XaeroImport.Request request = XaeroImport.request();
@@ -259,7 +254,10 @@ final class BannersPage {
 		};
 		if (name != null) {
 			name.setResponder(text -> edited.run());
-			this.nameBox = name;
+			if (this.nameFirst) {
+				this.nameFirst = false;
+				book.host().focus(name);
+			}
 		}
 		for (EditBox box : coords) {
 			if (box != null) {

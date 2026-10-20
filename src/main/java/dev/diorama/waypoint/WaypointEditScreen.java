@@ -241,8 +241,13 @@ public final class WaypointEditScreen extends Screen {
 
 	/** The server only sends the commands a player may use, so {@code tp} being there means it's allowed. */
 	public static boolean canTeleport() {
+		return commandAllowed("tp");
+	}
+
+	/** Whether the server lets this player use a command: it only sends the ones they may. */
+	public static boolean commandAllowed(String name) {
 		var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
-		return connection != null && connection.getCommands().getRoot().getChild("tp") != null;
+		return connection != null && connection.getCommands().getRoot().getChild(name) != null;
 	}
 
 	private void save() {

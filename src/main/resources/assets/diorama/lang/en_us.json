@@ -186,5 +186,11 @@
 	"diorama.book.status.chunks": "%s chunks",
 	"diorama.book.status.baking": "drawing",
 	"diorama.book.help_name": "Controls",
-	"diorama.book.help": "Drag to pan, scroll to zoom\nRight-click: plant a banner\nC caves · Page Up/Down slice · Space recenter\nThe ribbons on the right open the book"
+	"diorama.book.help": "Drag to pan, scroll to zoom\nRight-click: plant a banner, copy coordinates, teleport\nC caves · Page Up/Down slice · Space recenter\nThe ribbons on the right open the book",
+	"diorama.menu.plant": "Plant a banner here",
+	"diorama.menu.copy": "Copy coordinates",
+	"diorama.menu.teleport": "Teleport here",
+	"diorama.menu.copied": "Copied %s",
+	"diorama.menu.teleporting": "Teleporting…",
+	"diorama.menu.unknown_height": "%s, ?, %s"
 }

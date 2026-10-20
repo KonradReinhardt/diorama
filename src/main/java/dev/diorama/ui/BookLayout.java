@@ -39,8 +39,8 @@ public record BookLayout(
 	public static final int COVER = 6, SPINE = 8;
 	/** How far a ribbon reaches out of the book, and one more when it is the open section. */
 	public static final int RIBBON_OUT = 24, RIBBON_SELECTED = 6, RIBBON_H = 22;
-	/** How much of a ribbon shows at the screen's edge while the book is shut. */
-	public static final int RIBBON_SHUT = 26;
+	/** A ribbon shows whole at the screen's edge while the book is shut, this far from it. */
+	public static final int RIBBON_SHUT = 36, RIBBON_EDGE_GAP = 3;
 	/** Tabs rise this far over the cover's top. */
 	public static final int TAB_RISE = 18, TAB_W = 24;
 	public static final int MARGIN = 6;
@@ -68,7 +68,7 @@ public record BookLayout(
 			ribbons.add(new Rect(cover.right(), y + 10 + i * pitch, RIBBON_OUT, RIBBON_H));
 		}
 		Rect close = new Rect(cover.right() - 13, y - 4, 11, 11);
-		return new BookLayout(width, height, two, cover, left, right, spine, ribbons, cover.right(), width - RIBBON_SHUT, close, y - TAB_RISE);
+		return new BookLayout(width, height, two, cover, left, right, spine, ribbons, cover.right(), width - RIBBON_SHUT - RIBBON_EDGE_GAP, close, y - TAB_RISE);
 	}
 
 	/** The part of a page that holds its contents, inside its frame. */

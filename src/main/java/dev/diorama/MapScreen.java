@@ -10,6 +10,7 @@ import dev.diorama.render.Radar;
 import dev.diorama.ui.BookSprites;
 import dev.diorama.ui.BookWidgets;
 import dev.diorama.ui.MapBook;
+import dev.diorama.ui.MapMenu;
 import dev.diorama.ui.OpeningZoom;
 import dev.diorama.waypoint.Waypoint;
 import dev.diorama.waypoint.WaypointOverlay;
@@ -71,6 +72,17 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	/** Where "Center" on a waypoint is gliding the view to, or null. */
 	private double @Nullable [] panTarget;
 	private BookWidgets.@Nullable Mark help;
+	/** What a right-click offers for the spot under it, or null. */
+	private @Nullable MapMenu menu;
+	/** A short note in parchment at the top of the map ("Copied ..."), and until when it shows. */
+	private @Nullable Component note;
+	private long noteUntil;
+	/** The widgets are to be built again before the next frame; see {@link #rebuild}. */
+	private boolean rebuildSoon;
+	/** The press closed the right-click menu, so its release does nothing more. */
+	private boolean pressClosedMenu;
+	/** The waypoint pointed at last frame, so pointing at another one rustles once. */
+	private java.util.@Nullable UUID pointedPin;
 	/** Until when the controls show by themselves: the first seconds the map is open in a session. */
 	private static long helpUntil;
 
@@ -98,6 +110,9 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		this.help = this.addRenderableWidget(new BookWidgets.Mark(6, this.height - 18, BookSprites.HELP, BookSprites.HELP_HOVER,
 			Component.translatable("diorama.book.help_name"), null));
 		this.help.setTooltip(Tooltip.create(Component.translatable("diorama.book.help")));
+		if (this.menu != null) {
+			this.menu.build(this, this.width, this.height);
+		}
 	}
 
 	/** The zoom drawn pixel perfect nearest {@code zoom}, as {@link MapViewport.View#pixelPerfect} snaps it. */
@@ -117,6 +132,10 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			// The server can switch maps off while this screen is open.
 			this.onClose();
 			return;
+		}
+		if (this.rebuildSoon) {
+			this.rebuildSoon = false;
+			this.rebuildWidgets();
 		}
 		MapSession session = MapSession.get();
 		LocalPlayer player = this.minecraft.player;
@@ -173,6 +192,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		WaypointStore store = WaypointStore.get();
 		this.pins = store == null || !Settings.get().waypointsOnMap ? List.of() : WaypointOverlay.layout(view, store.in(this.minecraft.level.dimension().identifier().toString()), true);
 		WaypointOverlay.Pin hoveredPin = onMap ? WaypointOverlay.under(this.pins, mouseX, mouseY) : null;
+		java.util.UUID pointed = hoveredPin != null ? hoveredPin.waypoint().id : null;
+		if (pointed != null && !pointed.equals(this.pointedPin)) {
+			BookWidgets.rustle();
+		}
+		this.pointedPin = pointed;
 		WaypointOverlay.draw(graphics, view, this.pins, true, hoveredPin);
 		Radar.draw(graphics, view, this.blips, true, true);
 		Markers.player(graphics, view.screenX(playerU), view.screenY(playerV), player.getViewYRot(a), 2);
@@ -194,6 +218,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		if (this.help != null) {
 			this.help.visible = !this.book.isOpen();
+		}
+		if (this.note != null && System.currentTimeMillis() < this.noteUntil) {
+			int w = this.font.width(this.note) + 12;
+			BookSprites.nine(graphics, BookSprites.LABEL, (this.width - w) / 2, 4, w, 16, -1, true);
+			graphics.text(this.font, this.note, (this.width - w) / 2 + 6, 8, BookSprites.INK, false);
 		}
 		this.book.frame(zoomNow);
 		// The book and its widgets draw over the map and its labels.
@@ -238,7 +267,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	//? if >=1.21.9 {
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		return this.clicked(super.mouseClicked(event, doubleClick), event.x(), event.y());
+		return this.clicked(super.mouseClicked(event, doubleClick), event.x(), event.y(), event.button());
 	}
 
 	@Override
@@ -259,7 +288,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	//?} else {
 	/*@Override
 	public boolean mouseClicked(double x, double y, int button) {
-		return this.clicked(super.mouseClicked(x, y, button), x, y);
+		return this.clicked(super.mouseClicked(x, y, button), x, y, button);
 	}
 
 	@Override
@@ -280,11 +309,14 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	*///?}
 
 	/** A press; {@code widgetTook} if a widget (the settings button) took it. */
-	private boolean clicked(boolean widgetTook, double x, double y) {
+	private boolean clicked(boolean widgetTook, double x, double y, int button) {
 		if (widgetTook) {
 			this.dragged = true;
 			return true;
 		}
+		// A click away from the right-click menu shuts it; a right-click opens it again where it lands.
+		this.pressClosedMenu = this.menu != null && button != InputConstants.MOUSE_BUTTON_RIGHT;
+		this.closeMenu();
 		this.pressOnBook = this.book.covers(x, y);
 		if (!this.pressOnBook) {
 			// A click on the map leaves the book's fields.
@@ -302,6 +334,10 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			this.pressOnBook = false;
 			return false;
 		}
+		if (this.pressClosedMenu) {
+			this.pressClosedMenu = false;
+			return true;
+		}
 		if (this.dragged || Math.hypot(x - this.pressX, y - this.pressY) > 3) {
 			return true;
 		}
@@ -313,10 +349,98 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			return true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_RIGHT) {
-			this.addWaypointAt(x, y);
+			this.openMenu(x, y);
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * The block under a screen point: where the map knows the ground, the one it draws there;
+	 * elsewhere the column under the point at the player's height, with the height unknown.
+	 */
+	private MapMenu.@Nullable Target target(double screenX, double screenY) {
+		MapSession session = MapSession.get();
+		BlockLooks looks = BlockLooks.get();
+		MapViewport.View view = this.lastView;
+		LocalPlayer player = this.minecraft.player;
+		if (session == null || looks == null || view == null || player == null) {
+			return null;
+		}
+		double u = view.centerU() + (screenX - view.x() - view.width() / 2.0) / view.zoom();
+		double v = view.centerV() + (screenY - view.y() - view.height() / 2.0) / view.zoom();
+		BlockPos spot = MapPick.standingSpot(session.map(), looks, u, v, this.layer, session.map().fogOfWar());
+		if (spot != null) {
+			return new MapMenu.Target(spot.getX(), spot.getY(), spot.getZ(), true);
+		}
+		// Undo the projection at a guessed height: the column is right, the height may not be.
+		int y = this.layer != TileKey.SURFACE ? this.layer : player.getBlockY();
+		double depth = (v + y * Projection.yScale()) / Projection.zScale();
+		MapDirection d = Projection.direction();
+		return new MapMenu.Target((int) Math.floor(d.worldX(u, depth)), y, (int) Math.floor(d.worldZ(u, depth)), false);
+	}
+
+	/** Opens the right-click menu for the spot under a screen point. */
+	public void openMenu(double screenX, double screenY) {
+		MapMenu.Target target = this.target(screenX, screenY);
+		if (target == null) {
+			return;
+		}
+		List<MapMenu.Entry> entries = new java.util.ArrayList<>();
+		entries.add(new MapMenu.Entry(Component.translatable("diorama.menu.plant"), MapBook.BANNER_ICON, () -> {
+			this.closeMenu();
+			Waypoint waypoint = Waypoints.at(new BlockPos(target.x(), target.y(), target.z()));
+			if (waypoint != null) {
+				this.book.newWaypoint(waypoint);
+			}
+		}));
+		entries.add(new MapMenu.Entry(Component.translatable("diorama.menu.copy"), BookWidgets.item(BookSprites.stack("paper")), () -> {
+			this.minecraft.keyboardHandler.setClipboard(target.command());
+			this.say(Component.translatable("diorama.menu.copied", target.command()));
+			this.closeMenu();
+		}));
+		MapSession session = MapSession.get();
+		boolean roofed = session != null && session.map().roof() != dev.diorama.bake.ChunkSource.NO_ROOF;
+		// Unknown ground is reached by spreadplayers, which lands on the surface; under a roof that
+		// surface is the roof, so there it isn't offered.
+		boolean canGo = target.heightKnown()
+			? dev.diorama.waypoint.WaypointEditScreen.canTeleport()
+			: !roofed && dev.diorama.waypoint.WaypointEditScreen.commandAllowed("spreadplayers");
+		if (canGo) {
+			entries.add(new MapMenu.Entry(Component.translatable("diorama.menu.teleport"), BookWidgets.item(BookSprites.stack("ender_pearl")), () -> {
+				LocalPlayer player = this.minecraft.player;
+				if (player != null) {
+					player.connection.sendCommand(target.heightKnown()
+						? "tp @s " + target.x() + " " + target.y() + " " + target.z()
+						: "spreadplayers " + (target.x() + 0.5) + " " + (target.z() + 0.5) + " 0 1 false @s");
+				}
+				this.say(Component.translatable("diorama.menu.teleporting"));
+				this.smoothZoom.reset(this.zoom);
+				this.panTarget = null;
+				this.following = true;
+				this.closeMenu();
+			}));
+		}
+		this.menu = new MapMenu(target, entries, (int) screenX, (int) screenY);
+		this.rebuild();
+	}
+
+	private void closeMenu() {
+		if (this.menu != null) {
+			this.menu = null;
+			this.rebuild();
+		}
+	}
+
+	/** A short note at the top of the map for two seconds. */
+	private void say(Component text) {
+		this.note = text;
+		this.noteUntil = System.currentTimeMillis() + 2000;
+	}
+
+	/** For tests: the right-click menu open now, or null. */
+	public @Nullable MapMenu menu() {
+		return this.menu;
 	}
 
 	/** Plants a new waypoint on the block shown under a screen point, to name in the book. */
@@ -341,7 +465,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 
 	/** A drag; false leaves it to the screen's widgets. */
 	private boolean dragged(double x, double y, int button, double dx, double dy) {
-		if (this.pressOnBook) {
+		if (this.pressOnBook || this.pressClosedMenu) {
 			return false;
 		}
 		if (Math.hypot(x - this.pressX, y - this.pressY) > 3) {
@@ -364,6 +488,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		if (this.book.covers(x, y)) {
 			return true;
 		}
+		this.closeMenu();
 		this.opening.cancel();
         // GUI pixels per map unit at which a map pixel covers one screen pixel: the pixel-perfect steps start there.
         double pixelZoom = Projection.PIXELS_PER_UNIT / this.minecraft.getWindow().getGuiScale();
@@ -374,7 +499,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 
 	/** A key press, and whether it is bound to the waypoint list or the map; false leaves it to the screen. */
 	private boolean keyDown(int key, boolean waypointListKey, boolean mapKey) {
-		// Escape shuts the book first, and the map only once it is shut.
+		// Escape shuts the right-click menu first, then the book, and the map only once both are shut.
+		if (key == InputConstants.KEY_ESCAPE && this.menu != null) {
+			this.closeMenu();
+			return true;
+		}
 		if (key == InputConstants.KEY_ESCAPE && this.book.isOpen()) {
 			this.setFocused(null);
 			this.book.close();
@@ -449,9 +578,14 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		return this.addRenderableWidget(widget);
 	}
 
+	/**
+	 * Builds the widgets again before the next frame. Clicks change what the book shows, and the
+	 * screen goes on handling a click (focusing what was clicked) after its widget has acted, so the
+	 * widgets aren't swapped from under it.
+	 */
 	@Override
 	public void rebuild() {
-		this.rebuildWidgets();
+		this.rebuildSoon = true;
 	}
 
 	@Override

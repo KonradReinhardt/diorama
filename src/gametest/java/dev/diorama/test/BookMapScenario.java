@@ -173,11 +173,46 @@ final class BookMapScenario {
 			});
 			context.takeScreenshot("book-08-renamed");
 
-			// Right-clicking the map plants a new banner to name in the book.
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitTicks(10);
 			if (!context.computeOnClient(mc -> mc.gui.screen() instanceof MapScreen && !book(mc).isOpen())) {
 				throw new AssertionError("Escape didn't shut the book first");
+			}
+
+			// A right-click anywhere on the map offers its spot: copying puts it on the clipboard.
+			double[] spot = context.computeOnClient(mc -> {
+				double scale = mc.getWindow().getGuiScale();
+				MapScreen screen = (MapScreen) mc.gui.screen();
+				return new double[] {(screen.width / 2.0 - 40) * scale, (screen.height / 2.0 + 30) * scale};
+			});
+			context.getInput().setCursorPos(spot[0], spot[1]);
+			context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+			context.waitTicks(3);
+			String expected = context.computeOnClient(mc -> {
+				var menu = ((MapScreen) mc.gui.screen()).menu();
+				if (menu == null) {
+					throw new AssertionError("Right-clicking the map didn't open its menu");
+				}
+				return menu.target().command();
+			});
+			context.takeScreenshot("book-08b-map-menu");
+			clickWidget(context, Component.translatable("diorama.menu.copy").getString(), false);
+			context.runOnClient(mc -> {
+				String copied = mc.keyboardHandler.getClipboard();
+				if (!expected.equals(copied)) {
+					throw new AssertionError("Copy coordinates put " + copied + " on the clipboard, not " + expected);
+				}
+				if (((MapScreen) mc.gui.screen()).menu() != null) {
+					throw new AssertionError("The menu stayed open after copying");
+				}
+			});
+			context.getInput().setCursorPos(spot[0], spot[1]);
+			context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+			context.waitTicks(3);
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitTicks(3);
+			if (!context.computeOnClient(mc -> mc.gui.screen() instanceof MapScreen screen && screen.menu() == null)) {
+				throw new AssertionError("Escape didn't shut the right-click menu before the map");
 			}
 
 			// 1280x720 at GUI scale 3: nothing on the open pages runs off the screen or overlaps.
@@ -259,15 +294,30 @@ final class BookMapScenario {
 		});
 	}
 
-	/** Clicks the page widget whose name or tooltip text is {@code label}. */
+	/** Clicks the page widget whose name is {@code label}. */
 	private static void clickWidget(ClientGameTestContext context, String label) {
+		clickWidget(context, label, true);
+	}
+
+	/** Clicks the widget named {@code label}, on the open pages or anywhere on the screen. */
+	private static void clickWidget(ClientGameTestContext context, String label, boolean onPages) {
 		AbstractWidget widget = context.computeOnClient(mc -> {
-			for (AbstractWidget w : book(mc).pageWidgets()) {
+			List<AbstractWidget> widgets = new ArrayList<>();
+			if (onPages) {
+				widgets.addAll(book(mc).pageWidgets());
+			} else {
+				for (var child : mc.gui.screen().children()) {
+					if (child instanceof AbstractWidget w) {
+						widgets.add(w);
+					}
+				}
+			}
+			for (AbstractWidget w : widgets) {
 				if (w.getMessage().getString().equals(label)) {
 					return w;
 				}
 			}
-			throw new AssertionError("No widget " + label + " on the open pages");
+			throw new AssertionError("No widget " + label);
 		});
 		clickAt(context, widget);
 	}

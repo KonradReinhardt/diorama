@@ -186,5 +186,11 @@
 	"diorama.book.status.chunks": "%s chunks",
 	"diorama.book.status.baking": "desenhando",
 	"diorama.book.help_name": "Controles",
-	"diorama.book.help": "Arraste para mover, role para o zoom\nBotão direito: fincar um estandarte\nC cavernas · Page Up/Down fatia · Espaço recentraliza\nAs fitas à direita abrem o livro"
+	"diorama.book.help": "Arraste para mover, role para o zoom\nBotão direito: fincar estandarte, copiar coordenadas, teleportar\nC cavernas · Page Up/Down fatia · Espaço recentraliza\nAs fitas à direita abrem o livro",
+	"diorama.menu.plant": "Fincar estandarte aqui",
+	"diorama.menu.copy": "Copiar coordenadas",
+	"diorama.menu.teleport": "Teleportar para cá",
+	"diorama.menu.copied": "Copiado: %s",
+	"diorama.menu.teleporting": "Teleportando…",
+	"diorama.menu.unknown_height": "%s, ?, %s"
 }

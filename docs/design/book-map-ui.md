@@ -314,6 +314,22 @@ Todas curtas, por tempo real e interrompíveis:
 - **Teclado**: Esc fecha o livro antes do mapa; com um campo focado, as teclas do mapa (C,
   PgUp/PgDn, tecla do mapa, U) não disparam; Espaço aperta o widget focado em vez de recentralizar.
 - **Traduções**: `pt_br.json` passou a traduzir todas as chaves do mod (antes cobria só parte).
+- **Depois da primeira entrega** (mesmo dia, a pedido):
+  - A fita e a aba de Estandartes desenham o próprio sprite de estandarte do mapa (branco liso,
+    ondulando com a opção "Ondular"), não mais um item.
+  - A fita tem cauda recortada nos dois lados (36×22). Fechada, aparece inteira a 3 px da borda da
+    tela e, ao passar o mouse, desliza 3 px para fora; aberta, só a ponta direita sai da capa.
+  - Farfalhar de tecido (`ARMOR_EQUIP_LEATHER`, volume de interface, tom 0,9–1,25, no máximo um a
+    cada 60 ms) ao apontar um estandarte no mapa ou na grade do livro.
+  - Botão direito em qualquer ponto do mapa abre um cartão (`ui/MapMenu`) com as coordenadas e:
+    fincar estandarte aqui (rascunho no livro), copiar coordenadas (`x y z`, ou `x ~ z` onde a
+    altura não é conhecida) e teleportar (com `/tp`; em terreno que o mapa não viu,
+    `/spreadplayers x z 0 1 false @s`, oferecido só sem teto, e só se o servidor mandar o comando).
+    Fora do terreno conhecido, x e z vêm da projeção inversa na altura do jogador (ou da fatia de
+    caverna), sem ler nada que a névoa esconda. Esc fecha o cartão antes do livro e do mapa.
+  - Ações de clique reconstroem os widgets no quadro seguinte (`MapScreen.rebuild`), não no meio
+    do tratamento do clique; o campo de nome de um estandarte recém-fincado recebe o foco ao ser
+    construído.
 - **Testes**: JUnit de `SettingsCatalog`, `BookLayout`, `OpeningZoom` e `WaypointDraft`; cenário
   `DIORAMA_TESTS=book-map`. O cenário `waypoints` agora espera o rascunho no livro após o botão
   direito e continua as checagens de campos no `WaypointEditScreen` clássico.
