@@ -66,7 +66,7 @@ Saved maps use separate folders per direction. Existing north-facing maps keep t
 Map pixels stay sharp: tiles are magnified with nearest-neighbour sampling whenever a texture
 pixel covers at least one real screen pixel, GUI scale included; only smaller pixels use mipmaps.
 
-Appearance changes such as outlines, depth shading and quality prepare a complete
+Appearance changes such as the render style, depth shading and quality prepare a complete
 revision in the background and replace resident tiles together. Exploration stays
 visible while it prepares, and distant overviews wait for their updated detail tiles.
 In singleplayer on 26.3, tiles whose chunks aren't loaded are redrawn from the chunks
@@ -102,6 +102,21 @@ Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints tog
 `DIORAMA_TESTS=banner-waypoints ./gradlew --configure-on-demand :26.3:runClientGameTest` places banner waypoints around the player and captures them on the fullscreen map (both sizes, gathered, on the edge, in sepia), on the minimap (also in its map-paper frame) and in the banner editor, asserting the layout, sharing through chat and editing with undo. See [the design](docs/design/banner-waypoints.md).
 
 `DIORAMA_TESTS=day-night ./gradlew --configure-on-demand :26.3:runClientGameTest` checks real block-light propagation in all four directions and both quality modes, captures lighting states and asserts zero jobs, writes, snapshots or fog-mask rebuilds during a time-only cycle. See [the design](docs/design/day-night-lighting.md) and [validation report](docs/testing/day-night-lighting.md).
+
+## Painted render style
+
+Settings → Look → Render replaces the old outlines toggle with **Plain**, **Outlined** (the
+default, the previous look) and **Painted**. Painted turns explored terrain into a hand-painted
+fantasy map: block textures and soft shading melt into flat areas of paint, light is cel shaded
+(one sunlit colour, one bluish shadow colour), soft sepia ink lines follow edges and colour
+boundaries, coasts are inked with a line of foam, water steps from pale shallows to deep teal
+in flat washes ringed by light lines, and faint brushwork, an uneven wash and paper grain sit on
+top. It is computed while baking tiles, so it works on every version and loader; switching keeps
+exploration and redraws the map like any other look change. Older configs keep their choice:
+outlines on becomes Outlined, off becomes Plain.
+`DIORAMA_TESTS=painted ./gradlew --configure-on-demand :26.3:runClientGameTest` captures a village
+and a coast in Outlined and Painted at three zooms, plus the minimap and night. See
+[the design](docs/design/painted-style.md).
 
 ## Antique map style (fork 0.4.0)
 

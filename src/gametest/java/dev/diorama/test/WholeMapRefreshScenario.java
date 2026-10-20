@@ -18,7 +18,7 @@ final class WholeMapRefreshScenario {
     private record Probe(TileKey key, MapTile tile, BitSet unknown) {}
 
     static void run(ClientGameTestContext context, TestSingleplayerContext world) {
-        boolean outlines = Settings.get().outlines;
+        var renderStyle = Settings.get().renderStyle;
         world.getServer().runCommand("tick freeze");
         world.getServer().runCommand("save-all flush");
         context.setScreen(MapScreen::new);
@@ -43,7 +43,7 @@ final class WholeMapRefreshScenario {
             });
             long revision = context.computeOnClient(mc -> MapSession.get().map().appearanceVersion());
             long started = System.nanoTime();
-            context.runOnClient(mc -> { Settings.get().outlines = !outlines; Settings.get().save(); });
+            context.runOnClient(mc -> { Settings.get().renderStyle = renderStyle == Settings.RenderStyle.PAINTED ? Settings.RenderStyle.OUTLINED : Settings.RenderStyle.PAINTED; Settings.get().save(); });
             // The new look is published as one revision; only then can the probes vouch for it.
             context.waitFor(mc -> MapSession.get().map().appearanceVersion() > revision
                 && probes.stream().allMatch(p -> MapSession.get().map().showsCurrentLook(p.key())), 3600);
@@ -62,7 +62,7 @@ final class WholeMapRefreshScenario {
             context.takeScreenshot("whole-map-refresh");
         } finally {
             context.runOnClient(mc -> {
-                Settings.get().outlines = outlines;
+                Settings.get().renderStyle = renderStyle;
                 Settings.get().save();
                 MapSession.get().resnapshotLoaded();
             });

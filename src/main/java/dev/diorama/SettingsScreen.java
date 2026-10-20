@@ -89,7 +89,9 @@ public final class SettingsScreen extends Screen {
 
 		y = this.header("diorama.settings.look", right, y + 4);
 		y = this.toggle(right, y, "diorama.settings.depth_shading", () -> s.depthShading, v -> s.depthShading = v);
-		y = this.toggle(right, y, "diorama.settings.outlines", () -> s.outlines, v -> s.outlines = v);
+		y = this.cycle(right, y, "diorama.settings.render_style", () -> s.renderStyle.ordinal(), Settings.RenderStyle.values().length,
+			i -> s.renderStyle = Settings.RenderStyle.values()[i],
+			i -> Component.translatable("diorama.settings.render_style." + Settings.RenderStyle.values()[i].name().toLowerCase(java.util.Locale.ROOT)));
 		y = this.toggle(right, y, "diorama.settings.rounded_fog", () -> s.roundedFog, v -> s.roundedFog = v);
         y = this.cycle(right, y, "diorama.settings.fog_style", () -> s.fogStyle.ordinal(), Settings.FogStyle.values().length,
             i -> s.fogStyle = Settings.FogStyle.values()[i],
@@ -130,7 +132,7 @@ public final class SettingsScreen extends Screen {
 			Settings.get().save();
 			b.setMessage(label(label, name.apply(next)));
 		}).bounds(x, y, this.buttonWidth, this.buttonHeight).build();
-        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.fog_style") || key.equals("diorama.settings.extra_banner_layers"))
+        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.fog_style") || key.equals("diorama.settings.render_style") || key.equals("diorama.settings.extra_banner_layers"))
             button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable(key + ".tooltip")));
 		this.addRenderableWidget(button);
 		return y + this.row;

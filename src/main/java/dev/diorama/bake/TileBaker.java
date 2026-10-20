@@ -126,6 +126,10 @@ public final class TileBaker {
     private float nightR, nightG, nightB;
 	/** Camera depth of the last hit relative to {@link #depthOrigin}; larger is farther. */
 	private float outDepth;
+	/** Vertical depth in blocks of the water the last trace went through, or NaN if it met none. */
+	private float outWater;
+	/** Whether the last trace's surface was in direct sunlight. */
+	private boolean outSun;
 	// The block the last trace stopped on, when it was solid, for the overlays.
 	private boolean hitSolid;
 	private boolean hitTop;
@@ -387,13 +391,18 @@ public final class TileBaker {
 		if (this.startY <= this.limitY) {
 			return;
 		}
-		// Outlines compare each pixel with its neighbours, so bake a one-pixel border around the area.
-		int border = this.style.outline() > 0 ? 1 : 0;
+		// Outlines compare each pixel with its neighbours, so bake a one-pixel border around the area;
+		// the painted finish reads a little further.
+		boolean painted = this.style.painted();
+		int border = painted ? PaintedFinish.BORDER : this.style.outline() > 0 ? 1 : 0;
 		int w = width + 2 * border;
 		int h = height + 2 * border;
 		int[] pixels = border == 0 ? out : new int[w * h];
         int[] nights = nightOut == null ? null : border == 0 ? nightOut : new int[w * h];
 		float[] depth = border == 0 ? null : new float[w * h];
+		float[] wet = painted ? new float[w * h] : null;
+		float[] waterDepth = painted ? new float[w * h] : null;
+		float[] sunlit = painted ? new float[w * h] : null;
 		double minU = this.key.minU();
 		double minV = this.key.minV();
 		double unitsPerPixel = 1.0 / Projection.PIXELS_PER_UNIT;
@@ -406,6 +415,9 @@ public final class TileBaker {
 				float d = 0;
                 float nr = 0, ng = 0, nb = 0;
 				int known = 0;
+				int wetRays = 0;
+				int sunRays = 0;
+				float water = 0;
 				for (int s = 0; s < samples.length; s++) {
 					double u = minU + (px0 + x - border + samples[s][0]) * unitsPerPixel;
 					double v = minV + (py0 + y - border + samples[s][1]) * unitsPerPixel;
@@ -423,18 +435,36 @@ public final class TileBaker {
 						d += this.outDepth;
                         nr += this.nightR; ng += this.nightG; nb += this.nightB;
 						known++;
+						if (!Float.isNaN(this.outWater)) {
+							wetRays++;
+							water += this.outWater;
+						}
+						if (this.outSun) {
+							sunRays++;
+						}
 					}
 				}
 				if (known > 0) {
-					pixels[y * w + x] = this.abgr(r / known, g / known, b / known, known * 255 / samples.length);
+					pixels[y * w + x] = this.abgr(r / known, g / known, b / known, known * 255 / samples.length, this.style.painted());
                     if (nights != null) nights[y * w + x] = this.abgr(nr / known, ng / known, nb / known, known * 255 / samples.length);
 				}
 				if (depth != null) {
 					depth[y * w + x] = known > 0 ? d / known : Float.NaN;
 				}
+				if (painted && known > 0) {
+					wet[y * w + x] = wetRays / (float) known;
+					waterDepth[y * w + x] = wetRays > 0 ? water / wetRays : 0;
+					sunlit[y * w + x] = sunRays / (float) known;
+				}
 			}
 		}
 		if (border == 0) {
+			return;
+		}
+		if (painted) {
+			int gx0 = (int) Math.round(minU * Projection.PIXELS_PER_UNIT) + px0 - border;
+			int gy0 = (int) Math.round(minV * Projection.PIXELS_PER_UNIT) + py0 - border;
+			PaintedFinish.apply(width, height, gx0, gy0, pixels, nights, depth, wet, waterDepth, sunlit, out, nightOut);
 			return;
 		}
 		float keep = 1 - this.style.outline();
@@ -521,6 +551,8 @@ public final class TileBaker {
 
 		boolean skippingRock = this.lit;
 		this.hitSolid = false;
+		this.outWater = Float.NaN;
+		this.outSun = false;
 		// Colour picked up from plants and glass on the way down, applied to the surface below.
 		float overR = 0;
 		float overG = 0;
@@ -604,7 +636,7 @@ public final class TileBaker {
 					}
 				}
 				case BlockLooks.PLANT, BlockLooks.GLASS -> {
-					float w = kind == BlockLooks.PLANT ? 0.4F : 0.25F;
+					float w = kind == BlockLooks.PLANT ? (this.style.painted() ? 0.22F : 0.4F) : 0.25F;
 					this.albedo(id, x, bz, true);
 					overR += through * w * this.albedoR;
 					overG += through * w * this.albedoG;
@@ -715,6 +747,8 @@ public final class TileBaker {
 		float ao = top
 			? this.ambientOcclusionTop(x, by + 1, bz, fx, hitZ - bz)
 			: this.ambientOcclusionSouth(x, by, bz + 1, fx, hitY - by);
+		// The painted look is lit flat: sunlit or in shadow, with no soft falloff in between.
+		float bandedAo = this.style.painted() ? 1 : ao;
 		float emission = this.looks.emission[id] / 15.0F;
 		if (this.looks.kind[id] == BlockLooks.LAVA) {
 			float crust = 1 + 0.3F * blockNoise(x, by, bz);
@@ -725,9 +759,9 @@ public final class TileBaker {
 
 		float warmLocal = (float) Math.pow(this.reader.blockLight(x, frontY, frontZ) / 15.0F, 1.5);
         float skyLocal = this.reader.skyLight(x, frontY, frontZ) / 15.0F;
-        float nr = (0.018F * skyLocal + 0.9F * warmLocal) * ao;
-        float ng = (0.025F * skyLocal + 0.65F * warmLocal) * ao;
-        float nb = (0.047F * skyLocal + 0.35F * warmLocal) * ao;
+        float nr = (0.018F * skyLocal + 0.9F * warmLocal) * bandedAo;
+        float ng = (0.025F * skyLocal + 0.65F * warmLocal) * bandedAo;
+        float nb = (0.047F * skyLocal + 0.35F * warmLocal) * bandedAo;
         float lr;
 		float lg;
 		float lb;
@@ -739,9 +773,9 @@ public final class TileBaker {
 			float cool = (float) Math.pow(sl, 1.5);
 			// Unlit caves stay readable; torches, lava and daylight make them glow.
 			float base = 0.42F;
-			lr = (base * 0.92F + warm * 0.9F + cool * 0.6F) * ao;
-			lg = (base * 0.96F + warm * 0.75F + cool * 0.65F) * ao;
-			lb = (base * 1.08F + warm * 0.5F + cool * 0.75F) * ao;
+			lr = (base * 0.92F + warm * 0.9F + cool * 0.6F) * bandedAo;
+			lg = (base * 0.96F + warm * 0.75F + cool * 0.65F) * bandedAo;
+			lb = (base * 1.08F + warm * 0.5F + cool * 0.75F) * bandedAo;
 			if (this.cave) {
 				// Deeper below the cut reads darker; under a roof the whole view is one level.
 				float depth = (float) (this.startY - hitY);
@@ -751,7 +785,8 @@ public final class TileBaker {
 				lb *= fade;
 			}
 		} else {
-			double[] j = SUN_JITTER[sample];
+			// Painted shadows keep a crisp edge, the way they are laid in with one flat colour.
+			double[] j = this.style.painted() ? NO_JITTER : SUN_JITTER[sample];
 			double sx = this.sunX + j[0];
 			double sy = this.sunY + j[1];
 			double sz = this.sunZ + j[2];
@@ -764,6 +799,7 @@ public final class TileBaker {
 				double oz = top ? hitZ : bz + 1 + 1e-4;
 				direct = this.inShadow(ox, oy, oz, sx, sy, sz) ? 0 : (float) (this.style.sunStrength() * lambert);
 			}
+			this.outSun = direct > 0;
 			// Both endpoints share material, intersections and expensive occlusion samples.
 			float ambient = this.style.ambient() * ao;
 			float occlusion = this.style.skyOcclusion();
@@ -773,12 +809,16 @@ public final class TileBaker {
 				float sky = top ? this.skyTop(x, by + 1, bz, fx, hitZ - bz) : this.skySouth(x, by, bz + 1, fx, hitY - by);
 				ambient *= 1 - occlusion * (1 - (0.15F + 0.85F * sky));
 			}
+			if (this.style.painted()) {
+				// One flat shadow colour: no corner or sky occlusion.
+				ambient = this.style.ambient();
+			}
 			float[] sky = this.style.shadowTint();
 			float[] sun = this.style.sunTint();
 			lr = ambient * sky[0] + direct * sun[0] + warmLocal * 0.08F;
 			lg = ambient * sky[1] + direct * sun[1] + warmLocal * 0.065F;
 			lb = ambient * sky[2] + direct * sun[2] + warmLocal * 0.04F;
-			float heightShade = this.style.heightShade();
+			float heightShade = this.style.painted() ? 0 : this.style.heightShade();
 			if (heightShade != 0) {
 				// High ground a little brighter, low ground darker, so hills and valleys still read
 				// apart when zoomed out too far to see their shadows.
@@ -797,11 +837,13 @@ public final class TileBaker {
 			lb = Math.max(lb, e);
 		}
 		if (!top) {
-			// Faces that aren't up read darker, the way Minecraft shades its own block sides.
-			lr *= 0.82F;
-			lg *= 0.82F;
-			lb *= 0.82F;
-            nr *= 0.82F; ng *= 0.82F; nb *= 0.82F;
+			// Faces that aren't up read darker, the way Minecraft shades its own block sides; painted,
+			// just enough to tell a wall from the ground in front of it.
+			float side = this.style.painted() ? PAINTED_SIDE : 0.82F;
+			lr *= side;
+			lg *= side;
+			lb *= side;
+            nr *= side; ng *= side; nb *= side;
 		}
 		this.outR = this.albedoR * lr;
 		this.outG = this.albedoG * lg;
@@ -829,20 +871,41 @@ public final class TileBaker {
 			boolean shadow = this.inShadow(ox, oy, oz, this.sunX, sy, this.sunZ);
 			// Lit like the ground around it: the style's light, sky occlusion and height shade.
 			float ambient = this.style.ambient();
-			float occlusion = this.style.skyOcclusion();
+			float occlusion = this.style.painted() ? 0 : this.style.skyOcclusion();
 			if (occlusion > 0) {
 				float sky = this.skyTop(x, by + 1, bz, u - x, oz - bz);
 				ambient *= 1 - occlusion * (1 - (0.15F + 0.85F * sky));
 			}
 			light = ambient + (shadow ? 0 : this.style.sunStrength());
-			float heightShade = this.style.heightShade();
+			float heightShade = this.style.painted() ? 0 : this.style.heightShade();
 			if (heightShade != 0) {
 				light *= 1 + heightShade * (float) Math.max(-1, Math.min(1, (by + 1 - 64) / 64.0));
 			}
+			this.outSun = !shadow;
 		}
 		float nightLight = this.lit ? light : 0.035F * this.reader.skyLight(x, by + 1, bz) / 15.0F
             + 0.8F * (float) Math.pow(this.reader.blockLight(x, by + 1, bz) / 15.0F, 1.5);
         double depth = Math.max(0, tHit - tEntry);
+		this.outWater = (float) (depth * this.sin);
+		if (this.style.painted()) {
+			// Flat washes that step from pale shallows to deep water, each a little darker and
+			// hiding more of the bottom.
+			float vertical = this.outWater;
+			float clear = bands(vertical, WATER_CLARITY);
+			float tone = bands(vertical, WATER_TONE);
+			// Toward the teal of a painted sea, keeping some of the biome's own water colour.
+			wr = wr * (1 - PAINTED_SEA_MIX) + PAINTED_SEA[0] * PAINTED_SEA_MIX;
+			wg = wg * (1 - PAINTED_SEA_MIX) + PAINTED_SEA[1] * PAINTED_SEA_MIX;
+			wb = wb * (1 - PAINTED_SEA_MIX) + PAINTED_SEA[2] * PAINTED_SEA_MIX;
+			float sheen = 0.035F;
+			this.outR = this.outR * clear + wr * light * tone * (1 - clear) + sheen * light;
+			this.outG = this.outG * clear + wg * light * tone * (1 - clear) + sheen * light;
+			this.outB = this.outB * clear + wb * light * tone * (1 - clear) + sheen * 1.2F * light;
+			this.nightR = this.nightR * clear + wr * nightLight * tone * (1 - clear) + sheen * nightLight;
+			this.nightG = this.nightG * clear + wg * nightLight * tone * (1 - clear) + sheen * nightLight;
+			this.nightB = this.nightB * clear + wb * nightLight * tone * (1 - clear) + sheen * 1.2F * nightLight;
+			return;
+		}
 		if (this.style.clearWater()) {
 			// Light through water loses the colours the water doesn't have: red goes first, so
 			// shallows over sand turn turquoise and deep water ends up the water's own blue.
@@ -1013,6 +1076,27 @@ public final class TileBaker {
 		return 0.2126F * r + 0.7152F * g + 0.0722F * b;
 	}
 
+	/** No nudge of the sun: the painted look's single, crisp shadow. */
+	private static final double[] NO_JITTER = {0, 0, 0};
+	/** How much darker a painted wall is than the ground in front of it. */
+	private static final float PAINTED_SIDE = 0.86F;
+	/** Per painted water wash ({@link PaintedFinish#WATER_STEPS}): how much of the bottom shows, and how light the water is. */
+	private static final float[] WATER_CLARITY = {0.38F, 0.16F, 0.04F, 0F};
+	private static final float[] WATER_TONE = {1.12F, 0.96F, 0.8F, 0.66F};
+	/** The painted sea, linear, and how far biome water colours are pulled toward it. */
+	private static final float[] PAINTED_SEA = {0.05F, 0.25F, 0.36F};
+	private static final float PAINTED_SEA_MIX = 0.55F;
+
+	/** The water wash's value at this vertical depth, eased over a fifth of a block either side of each step. */
+	private static float bands(float vertical, float[] values) {
+		float value = values[0];
+		float[] steps = PaintedFinish.WATER_STEPS;
+		for (int i = 0; i < steps.length; i++) {
+			value += (values[i + 1] - values[i]) * PaintedFinish.smoothstep(steps[i] - 0.2F, steps[i] + 0.2F, vertical);
+		}
+		return value;
+	}
+
 	/** -1..1, fixed per block position. */
 	private static float blockNoise(int x, int y, int z) {
 		int h = x * 73_856_093 ^ y * 19_349_663 ^ z * 83_492_791;
@@ -1023,16 +1107,41 @@ public final class TileBaker {
 	}
 
 	private int abgr(float r, float g, float b, int alpha) {
+		return this.abgr(r, g, b, alpha, false);
+	}
+
+	/** Darkest a painted colour gets, linear: pigment over paper is never black, and leans violet. */
+	private static final float[] PIGMENT_FLOOR = {0.016F, 0.012F, 0.021F};
+	/** Where painted highlights start to roll off, linear, and how much further they can still climb. */
+	private static final float PIGMENT_KNEE = 0.6F;
+	private static final float PIGMENT_HEADROOM = 0.32F;
+
+	/** {@code pigment}: the painted look's paper and paint, no pure black and no blown-out white. */
+	private int abgr(float r, float g, float b, int alpha, boolean pigment) {
 		float saturation = this.style.saturation();
 		float exposure = this.style.exposure();
 		float l = luminance(r, g, b);
 		r = (l + (r - l) * saturation) * exposure;
 		g = (l + (g - l) * saturation) * exposure;
 		b = (l + (b - l) * saturation) * exposure;
+		if (pigment) {
+			r = pigment(r, PIGMENT_FLOOR[0]);
+			g = pigment(g, PIGMENT_FLOOR[1]);
+			b = pigment(b, PIGMENT_FLOOR[2]);
+		}
 		int ri = LINEAR_TO_SRGB[Math.min(4095, Math.max(0, (int) (r * 4095)))];
 		int gi = LINEAR_TO_SRGB[Math.min(4095, Math.max(0, (int) (g * 4095)))];
 		int bi = LINEAR_TO_SRGB[Math.min(4095, Math.max(0, (int) (b * 4095)))];
 		return (alpha << 24) | (bi << 16) | (gi << 8) | ri;
+	}
+
+	private static float pigment(float x, float floor) {
+		x = floor + Math.max(0, x) * (1 - floor);
+		if (x <= PIGMENT_KNEE) {
+			return x;
+		}
+		float over = x - PIGMENT_KNEE;
+		return PIGMENT_KNEE + over / (1 + over / PIGMENT_HEADROOM);
 	}
 
 	private static byte[] coverage(int[] pixels, int width, int height) {
