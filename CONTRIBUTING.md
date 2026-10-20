@@ -12,6 +12,8 @@
 - `docs/day-night-lighting`: the original day/night rendering design.
 - `feat/day-night-lighting`: paired surface lighting, draw-time environment blending, incremental saved maps and regression fixtures.
 - `sync/upstream-0.2.1`: integration of upstream release `v0.2.1` (`d9f4a28`), including all NeoForge targets and the updated client-test shim.
+- `fix/coherent-map-appearance`: atomic appearance revisions, overview refresh barriers and regression coverage for concurrent cache misses.
+- `docs/antique-fog`: proposed parchment fog and optional coarse biome previews, with explicit performance budgets.
 
 The fork's 0.3.0 builds include upstream 0.2.1. Dynamic surface lighting remains
 limited to Fabric 26.3; the newly added NeoForge targets use the daytime backend.
@@ -41,3 +43,6 @@ can validate topic branches. Publishing the same integration on multiple branch
 names therefore does not start duplicate full matrices.
 
 See [the day/night design](docs/design/day-night-lighting.md) for the feature's scope, compatibility policy and performance gates, and [its validation report](docs/testing/day-night-lighting.md) for measured results.
+
+The next fog style is described in [the antique-map fog plan](docs/design/antique-fog.md).
+It is a design for review; the new fog style and seed previews are not implemented.
