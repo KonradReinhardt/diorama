@@ -84,6 +84,7 @@ final class FogGpuBenchmark {
             if (mean > 2) throw new AssertionError("Deep cloud approximation drifted: " + mean);
             Diorama.LOGGER.info("FOG_GPU 512x512 deep Fancy: reference={} ms, optimized={} ms, ratio={}, mean RGB error={}, max={}",
                 before[1] / 80e6, after[1] / 80e6, after[1] / (double)before[1], mean, maximum);
+            antiqueSymbols(optimized, mask, noise);
         } catch (Exception error) { throw new AssertionError(error); }
         finally {
             GL20.glUseProgram(program);
@@ -140,10 +141,47 @@ final class FogGpuBenchmark {
     }
     private static int[] image(int program) {
         use(program); GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
+        return readImage();
+    }
+    private static int[] readImage() {
         ByteBuffer buffer = MemoryUtil.memAlloc(512 * 512 * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         try {
             GL11.glReadPixels(0, 0, 512, 512, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
             int[] pixels = new int[512 * 512]; buffer.asIntBuffer().get(pixels); return pixels;
         } finally { MemoryUtil.memFree(buffer); }
+    }
+
+    /** Deterministic visual fixture for every pixel-grid symbol, independent of the world's biomes. */
+    private static void antiqueSymbols(int program, int mask, int paper) throws Exception {
+        ByteBuffer data = MemoryUtil.memAlloc(256 * 256 * 4);
+        try {
+            for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++) {
+                int kind = (x / 32 + y / 32) % 7 + 1;
+                data.put((byte)0).put((byte)(kind * 32)).put((byte)0).put((byte)0);
+            }
+            data.flip(); GL13.glActiveTexture(GL13.GL_TEXTURE0); GL11.glBindTexture(GL11.GL_TEXTURE_2D, mask);
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 256, 256, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+            data.clear();
+            try (var input = Minecraft.getInstance().getResourceManager().open(Diorama.id("textures/map/parchment.png"))) {
+                var image = javax.imageio.ImageIO.read(input);
+                for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++) {
+                    int color = image.getRGB(x, y);
+                    data.put((byte)(color >> 16)).put((byte)(color >> 8)).put((byte)color).put((byte)255);
+                }
+            }
+            data.flip(); GL13.glActiveTexture(GL13.GL_TEXTURE1); GL11.glBindTexture(GL11.GL_TEXTURE_2D, paper);
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, 256, 256, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, data);
+            use(program); GL20.glUniform4f(GL20.glGetUniformLocation(program, "TestParams"), 31 / 255f, 31 / 255f, 0, 11 / 255f);
+            GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
+            int[] pixels = readImage();
+            var image = new java.awt.image.BufferedImage(512, 512, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            for (int y = 0; y < 512; y++) for (int x = 0; x < 512; x++) {
+                int color = pixels[y * 512 + x];
+                image.setRGB(x, y, (color & 255) << 16 | (color & 0xff00) | (color >> 16 & 255));
+            }
+            var path = Minecraft.getInstance().gameDirectory.toPath().resolve("screenshots/fog-symbols.png");
+            java.nio.file.Files.createDirectories(path.getParent());
+            javax.imageio.ImageIO.write(image, "png", path.toFile());
+        } finally { MemoryUtil.memFree(data); }
     }
 }
