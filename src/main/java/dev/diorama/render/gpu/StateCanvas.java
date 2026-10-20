@@ -45,7 +45,7 @@ final class StateCanvas implements MapCanvas {
             DioramaPipelines.MAP_LIGHT,
             StateTexture.pair((StateTexture) day, sampling, (StateTexture) (night == null ? day : night), sampling),
             new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, u0, v0, u1, v1,
-            (lighting.params(night != null) & 0x00ffffff) | (dev.diorama.Settings.get().antiqueFog() ? 0x01000000 : 0xff000000), this.graphics.scissorStack.peek()));
+            (lighting.params(night != null) & 0x00ffffff) | (dev.diorama.Settings.get().antiqueTint() ? 0x01000000 : 0xff000000), this.graphics.scissorStack.peek()));
     }
     //?}
 

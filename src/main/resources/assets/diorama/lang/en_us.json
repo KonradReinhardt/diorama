@@ -111,6 +111,8 @@
 	"diorama.settings.fog_style.ancient_map_color": "Antique map (color)",
 	"diorama.settings.seed_preview": "Seed cartography",
 	"diorama.settings.seed_preview.tooltip": "Sketch approximate biomes in the singleplayer Overworld (26.3). When unavailable, unknown areas keep blank parchment.",
+	"diorama.settings.antique_tint": "Antique: tint explored",
+	"diorama.settings.antique_tint.tooltip": "With either antique map, also tint the explored terrain toward the old paper, a little desaturated and warmed. Off keeps the explored map in its own colours; only the unknown is drawn as an old map.",
 	"diorama.settings.fog_style.tooltip": "Antique map draws unexplored land as pixel-art sepia cartography; the color variant tints the biomes. Clouds draws pixel-art clouds.",
 	"diorama.waypoint.banner": "Banner",
 	"diorama.banner.edit": "Edit banner…",

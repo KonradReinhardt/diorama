@@ -254,7 +254,7 @@ public final class MapViewport {
 				}
 				float sx = view.screenX(tu * units);
 				float sy = view.screenY(tv * units);
-                if (Settings.get().antiqueFog() && !dev.diorama.EnvironmentLighting.supported()) {
+                if (Settings.get().antiqueTint() && !dev.diorama.EnvironmentLighting.supported()) {
                     // Reuse the common fog pipeline as a sepia tile pass on older day-only backends.
                     canvas.antiqueTile(tile.texture(), FogTextures.parchment(), sampling, sx, sy, sx + size, sy + size);
                 } else canvas.lit(tile.texture(), tile.nightTexture(), sampling, sx, sy, sx + size, sy + size, lighting);

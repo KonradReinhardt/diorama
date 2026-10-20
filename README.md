@@ -137,7 +137,9 @@ Settings → Look → Fog style offers **Clouds** (the existing default), **Anti
 and **Antique map (color)**. Both styles are pixel art: one GUI pixel per art pixel at every
 zoom, aligned to the screen, or one block per art pixel once a block is larger. Clouds are
 terraced pixel puffs with shaded undersides and a dithered shadow.
-Antique map shows explored terrain in its own colors, lightly desaturated and warmed.
+Antique map shows explored terrain in its own colors, lightly desaturated and warmed;
+**Antique: tint explored** (on by default, for both antique styles) can turn that off, so the
+explored map keeps the render style's colors and only the unknown is drawn as an old map.
 Unknown areas are drawn in sepia ink (or biome colors): parchment, light biome washes,
 pixel coastlines with foam and offshore dashes, and wavelets at sea when a compatible seed
 sampler is available. The explored frontier is a frayed pixel ink line, irregular like a

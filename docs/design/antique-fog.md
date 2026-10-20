@@ -6,8 +6,12 @@ A preferência é compartilhada pelo minimapa, mapa mundial e tela do Mod Menu.
 ## Aparência
 
 `Configurações → Aparência → Estilo do fog → Mapa antigo`. O terreno explorado
-mantém suas próprias cores, levemente desaturadas (66% da saturação) e aquecidas,
-sob um grão de pergaminho de 6% de opacidade. O mapa real conserva blocos,
+mantém suas próprias cores, levemente desaturadas (66% da saturação) e aquecidas.
+A opção `Mapa antigo: tingir explorado` (`Settings.antiqueTintsExplored`, ligada por
+padrão, vale para os dois mapas antigos) desliga esse tom: o explorado fica com as cores do
+estilo de render e só o desconhecido vira mapa antigo. É só composição (`Settings.antiqueTint()`
+escolhe o caminho no desenho), então trocar não refaz bake nem grava tiles; o cenário
+`antique-fog` confere isso e fotografa `antique-explored-own-colours`. O mapa real conserva blocos,
 construções, sombras e, no backend compatível, iluminação noturna. A mesma
 gradação existe em `map_light.fsh` (Fabric 26.3) e no modo tile de `fog.fsh`
 (demais backends). Marcadores mantêm suas cores. A textura

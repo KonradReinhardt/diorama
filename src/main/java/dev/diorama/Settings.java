@@ -94,6 +94,17 @@ public final class Settings {
     }
     public FogStyle fogStyle = FogStyle.CLOUDS;
     public boolean seedPreview = true;
+    /**
+     * Whether either antique map tints the explored terrain too, a little desaturated and warmed
+     * toward its paper. Off, explored ground keeps the colours of the render style and only the
+     * unknown is drawn as an old map. Drawn when the map is composed, so it never redraws tiles.
+     */
+    public boolean antiqueTintsExplored = true;
+
+    /** Whether explored terrain is drawn with the antique map's tint: an antique fog with the tint on. */
+    public boolean antiqueTint() {
+        return this.antiqueFog() && this.antiqueTintsExplored;
+    }
 	/** The look with sky occlusion, deep shadows and a lower camera; off is the flatter look from before. */
 	public boolean depthShading = true;
 	public boolean alwaysFogOfWar = false;

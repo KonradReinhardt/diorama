@@ -20,6 +20,8 @@
 	"diorama.settings.fog_style.ancient_map_color": "Mapa antigo (colorido)",
 	"diorama.settings.seed_preview": "Cartografia da seed",
 	"diorama.settings.seed_preview.tooltip": "Desenha biomas aproximados no Overworld de mundos individuais (26.3). Quando indisponível, áreas desconhecidas mostram apenas pergaminho.",
+	"diorama.settings.antique_tint": "Mapa antigo: tingir explorado",
+	"diorama.settings.antique_tint.tooltip": "Nos dois mapas antigos, tinge também o terreno já explorado na direção do papel velho, um pouco dessaturado e aquecido. Desligado, o mapa explorado mantém as próprias cores; só o desconhecido é desenhado como mapa antigo.",
 	"diorama.settings.fog_style.tooltip": "Mapa antigo desenha o inexplorado como cartografia em pixel art sépia; a variante colorida pinta os biomas. Nuvens desenha nuvens em pixel art.",
 	"diorama.waypoint.banner": "Estandarte",
 	"diorama.banner.edit": "Editar estandarte…",

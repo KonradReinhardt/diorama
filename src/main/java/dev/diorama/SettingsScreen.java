@@ -36,8 +36,8 @@ public final class SettingsScreen extends Screen {
 		Settings s = Settings.get();
 		int gap = 6;
 		this.buttonWidth = Math.min(MAX_BUTTON_WIDTH, (this.width - 2 * gap - 16) / 3);
-		// The tallest columns have two headers and eight rows, which must clear Done.
-        int rows = 12;
+		// The tallest column, Waypoints with Look, has two headers and thirteen rows, which must clear Done.
+        int rows = 13;
 		boolean compact = 30 + 2 * 16 + 4 + rows * 22 > this.height - 30;
 		this.row = compact ? Math.min(19, Math.max(10, (this.height - 22 - 32 - 4 - 30) / rows)) : 22;
 		this.buttonHeight = compact ? this.row - 1 : 20;
@@ -97,6 +97,7 @@ public final class SettingsScreen extends Screen {
             i -> s.fogStyle = Settings.FogStyle.values()[i],
             i -> Component.translatable("diorama.settings.fog_style." + Settings.FogStyle.values()[i].name().toLowerCase(java.util.Locale.ROOT)));
         y = this.toggle(right, y, "diorama.settings.seed_preview", () -> s.seedPreview, v -> s.seedPreview = v);
+        y = this.toggle(right, y, "diorama.settings.antique_tint", () -> s.antiqueTintsExplored, v -> s.antiqueTintsExplored = v);
 		y = this.toggle(right, y, "diorama.settings.fog_of_war", () -> s.alwaysFogOfWar, v -> s.alwaysFogOfWar = v);
 		y = this.cycle(right, y, "diorama.settings.quality", () -> s.quality.ordinal(), Settings.Quality.values().length,
 			i -> s.quality = Settings.Quality.values()[i],
@@ -132,7 +133,7 @@ public final class SettingsScreen extends Screen {
 			Settings.get().save();
 			b.setMessage(label(label, name.apply(next)));
 		}).bounds(x, y, this.buttonWidth, this.buttonHeight).build();
-        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.fog_style") || key.equals("diorama.settings.render_style") || key.equals("diorama.settings.extra_banner_layers"))
+        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.antique_tint") || key.equals("diorama.settings.fog_style") || key.equals("diorama.settings.render_style") || key.equals("diorama.settings.extra_banner_layers"))
             button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable(key + ".tooltip")));
 		this.addRenderableWidget(button);
 		return y + this.row;

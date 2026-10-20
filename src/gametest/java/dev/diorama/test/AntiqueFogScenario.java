@@ -11,6 +11,7 @@ final class AntiqueFogScenario {
     static void run(ClientGameTestContext context, TestSingleplayerContext world) {
         var original = Settings.get().fogStyle;
         boolean seed = Settings.get().seedPreview;
+        boolean tint = Settings.get().antiqueTintsExplored;
         world.getServer().runCommand("tick freeze");
         context.setScreen(MapScreen::new);
         try {
@@ -29,6 +30,14 @@ final class AntiqueFogScenario {
                 if (MapSession.get().map().submittedJobs() != jobs) throw new AssertionError("Fog style rebaked terrain");
             });
             context.takeScreenshot("antique-explored-parchment");
+            // The explored map in its own colours: drawn differently, never baked again.
+            context.runOnClient(mc -> { Settings.get().antiqueTintsExplored = false; Settings.get().save(); });
+            context.waitTicks(10);
+            context.runOnClient(mc -> {
+                if (MapSession.get().map().submittedJobs() != jobs) throw new AssertionError("The antique tint option rebaked terrain");
+            });
+            context.takeScreenshot("antique-explored-own-colours");
+            context.runOnClient(mc -> { Settings.get().antiqueTintsExplored = true; Settings.get().save(); });
 
             // Stay inside one preview region, well outside the explored world, to test prediction alone.
             context.runOnClient(mc -> ((MapScreen)mc.gui.screen()).lookAt(Projection.u(6000, 6000),
@@ -96,7 +105,12 @@ final class AntiqueFogScenario {
             frontier(context, .2);
             context.takeScreenshot("clouds-frontier-far");
         } finally {
-            context.runOnClient(mc -> { Settings.get().fogStyle = original; Settings.get().seedPreview = seed; Settings.get().save(); });
+            context.runOnClient(mc -> {
+                Settings.get().fogStyle = original;
+                Settings.get().seedPreview = seed;
+                Settings.get().antiqueTintsExplored = tint;
+                Settings.get().save();
+            });
             world.getServer().runCommand("tick unfreeze");
         }
     }
