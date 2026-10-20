@@ -22,7 +22,7 @@ final class SettingsRefreshScenario {
             s -> s.compass = !s.compass,
             s -> s.radarPlayers = !s.radarPlayers,
             s -> s.roundedFog = !s.roundedFog,
-            s -> s.outlines = !s.outlines,
+            s -> s.renderStyle = s.renderStyle == Settings.RenderStyle.PAINTED ? Settings.RenderStyle.OUTLINED : Settings.RenderStyle.PAINTED,
             s -> s.quality = s.quality == Settings.Quality.FANCY ? Settings.Quality.FAST : Settings.Quality.FANCY,
             s -> s.depthShading = !s.depthShading,
             s -> s.lighting = s.lighting == EnvironmentLighting.Mode.WORLD ? EnvironmentLighting.Mode.NIGHT : EnvironmentLighting.Mode.WORLD

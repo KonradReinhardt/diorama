@@ -136,16 +136,12 @@ public final class WaypointListScreen extends Screen {
 			Waypoint waypoint = this.rows.get(this.scroll + i);
 			int y = this.listTop + i * ROW;
 			graphics.fill(left - 4, y, left + LIST_WIDTH + 4, y + ROW - 1, i % 2 == 0 ? 0x30FFFFFF : 0x18FFFFFF);
+			// The waypoint's banner, standing in the row.
 			float cx = left + 9;
-			float cy = y + ROW / 2.0F;
-			MapIcons.dot(graphics, cx, cy, 16, 0xFF101418);
-			MapIcons.dot(graphics, cx, cy, 14, waypoint.color);
-			String label = waypoint.kind == Waypoint.Kind.DEATH ? "✝" : waypoint.label();
-			graphics.pose().pushMatrix();
-			graphics.pose().translate(cx, cy - 3);
-			graphics.pose().scale(0.75F);
-			graphics.centeredText(this.font, label, 0, 0, WaypointOverlay.textColour(waypoint.color));
-			graphics.pose().popMatrix();
+			if (!dev.diorama.render.BannerAtlas.shared().draw(graphics, waypoint.design(), dev.diorama.render.BannerCompositor.Size.SMALL,
+				cx, y + ROW - 3, 1, dev.diorama.render.BannerAtlas.frameNow(false), false, -1)) {
+				MapIcons.dot(graphics, cx, y + ROW / 2.0F, 14, waypoint.design().colour());
+			}
 			int nameColor = waypoint.visible ? 0xFFFFFFFF : 0xFF808080;
 			String name = this.fit(waypoint.name, textWidth);
 			graphics.text(this.font, name, left + TEXT_LEFT, y + 4, nameColor, true);

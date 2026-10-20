@@ -119,7 +119,7 @@ public final class MapScreen extends Screen {
 		WaypointOverlay.Pin hoveredPin = WaypointOverlay.under(this.pins, mouseX, mouseY);
 		WaypointOverlay.draw(graphics, view, this.pins, true, hoveredPin);
 		Radar.draw(graphics, view, this.blips, true, true);
-		Markers.player(graphics, view.screenX(playerU), view.screenY(playerV), player.getViewYRot(a), 6);
+		Markers.player(graphics, view.screenX(playerU), view.screenY(playerV), player.getViewYRot(a), 2);
 		this.lastView = view;
 		// The tooltip is for whatever is drawn on top: a player, then a waypoint, then a mob.
 		if (hovered != null && hovered.kind() == Radar.Kind.PLAYER) {

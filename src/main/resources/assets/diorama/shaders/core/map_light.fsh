@@ -25,7 +25,9 @@ void main() {
     vec3 overcast = mix(vec3(1.0), vec3(0.64, 0.69, 0.77), params.g);
     fragColor = vec4(srgb(mix(n, d * overcast, params.r)), day.a);
     if (params.a < 0.5) {
+        // Antique style: explored terrain keeps its own colours, lightly desaturated and warmed.
+        // Keep in step with antiqueGrade in fog.fsh, the same grade for the other backends.
         float value = dot(fragColor.rgb, vec3(0.299, 0.587, 0.114));
-        fragColor.rgb = mix(vec3(0.22, 0.12, 0.055), vec3(0.92, 0.81, 0.59), smoothstep(0.0, 0.95, value));
+        fragColor.rgb = clamp(mix(vec3(value), fragColor.rgb, 0.66) * vec3(1.035, 0.99, 0.9) + vec3(0.018, 0.012, 0.0), 0.0, 1.0);
     }
 }

@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -137,6 +138,57 @@ public final class MapLevel implements ChunkSource {
         return thread;
     });
 
+	/**
+	 * The chunks the game saved, in singleplayer: tiles whose chunks aren't loaded are redrawn from
+	 * them when the map's look changes, instead of keeping old pixels. Null where unavailable.
+	 */
+	private volatile dev.diorama.bake.@Nullable SavedTerrain terrain;
+	/** Which saved tiles already show the current look; see {@link dev.diorama.data.AppearanceStamps}. */
+	private dev.diorama.data.@Nullable AppearanceStamps stamps;
+	/** Saved tiles not drawn with the current look yet, found by a background scan of the store. */
+	private final Set<TileKey> staleSaved = ConcurrentHashMap.newKeySet();
+	/** Bumped when the stale scan must start over: a new look or another store. */
+	private int staleScan;
+	private boolean staleScanned;
+	/** Redraws of stale tiles in flight. */
+	private final Set<TileKey> staleInFlight = new HashSet<>();
+	private final List<Map.Entry<TileKey, Double>> staleOrder = new ArrayList<>();
+	/** Full bakes that drew their whole tile, by key, with the generation they were submitted under. */
+	private final ConcurrentHashMap<TileKey, Integer> completeBakes = new ConcurrentHashMap<>();
+
+	/** Live chunks first, then the game's saved ones; for redrawing tiles with a new look. */
+	private final ChunkSource withSaved = new ChunkSource() {
+		@Override public @Nullable ChunkSnapshot chunk(int chunkX, int chunkZ) {
+			ChunkSnapshot live = MapLevel.this.chunks.get(ChunkSnapshot.key(chunkX, chunkZ));
+			if (live != null) return live;
+			dev.diorama.bake.SavedTerrain saved = MapLevel.this.terrain;
+			return saved == null ? null : saved.load(chunkX, chunkZ);
+		}
+		@Override public int minY() { return MapLevel.this.minY; }
+		@Override public int maxY() { return MapLevel.this.maxY; }
+		// Saved terrain can stand above anything loaded now: rays start at the top of the world.
+		@Override public int topY() { return MapLevel.this.maxY; }
+		@Override public int roof() { return MapLevel.this.roof; }
+		@Override public boolean nightLighting() { return MapLevel.this.nightLighting; }
+		@Override public boolean isSeen(int x, int y, int z) { return MapLevel.this.seen.isSeen(x, y, z); }
+	};
+
+	/** Starts using the game's saved chunks for redrawing; see {@link #terrain}. Render thread. */
+	public void setSavedTerrain(dev.diorama.bake.@Nullable SavedTerrain terrain) {
+		dev.diorama.bake.SavedTerrain previous = this.terrain;
+		this.terrain = terrain;
+		if (previous != null && previous != terrain) previous.close();
+		this.restartStaleScan();
+	}
+
+	/** Saved tiles fresh under the current look, or none known yet. */
+	private void restartStaleScan() {
+		this.staleScan++;
+		this.staleScanned = false;
+		this.staleSaved.clear();
+		this.staleOrder.clear();
+	}
+
 	/** See {@link ChunkSource#roof()}. */
 	private final int roof;
     private final boolean nightLighting;
@@ -245,6 +297,8 @@ public final class MapLevel implements ChunkSource {
 		this.storeName = this.storeName();
 		TileStore opened = new TileStore(this.folder.resolve(this.storeName));
 		opened.onOverviewChanged(this.overviewChanged::add);
+		this.stamps = dev.diorama.data.AppearanceStamps.load(this.stampsFile(), this.bakeContext.appearance());
+		this.restartStaleScan();
 		return opened;
 	}
 
@@ -262,6 +316,10 @@ public final class MapLevel implements ChunkSource {
 		}
 		return (pitch == 60 ? "surface" : "surface-" + pitch) + directionSuffix();
 	}
+
+    private Path stampsFile() {
+        return this.folder.resolve(this.storeName).resolve("appearance.bin");
+    }
 
     private static String directionSuffix() {
         return Projection.direction() == dev.diorama.MapDirection.NORTH ? "" : "-" + Projection.direction().name().toLowerCase(java.util.Locale.ROOT);
@@ -290,8 +348,12 @@ public final class MapLevel implements ChunkSource {
         this.surfaceGeneration++;
         this.caveGeneration++;
         this.appearanceRefresh = null;
+        // Projection changes switch stores below, which bring their own stamps.
+        if (this.stamps != null && !reproject) this.stamps.reset(next.appearance());
+        this.restartStaleScan();
         if (reproject) {
             this.dropTiles(false);
+            this.bakeContext = next;
             this.switchStoreIfNeeded();
         } else {
             // Keep both texture and exploration coverage until their replacements are uploaded.
@@ -550,9 +612,12 @@ public final class MapLevel implements ChunkSource {
 		}
         BakeScheduler.Result result;
         int uploads = 0;
-        while (uploads < 2 && MapUploads.available() && (result = this.scheduler.poll()) != null) {
+        while (uploads < 3 && MapUploads.available() && (result = this.scheduler.poll()) != null) {
             TileKey completedKey = result.key();
             TileFreshness.Version version = this.jobVersions.remove(completedKey);
+            this.staleInFlight.remove(completedKey);
+            Integer completeGeneration = this.completeBakes.remove(completedKey);
+            boolean complete = completeGeneration != null && completeGeneration == result.generation();
             if (result.failure() != null) {
                 this.inFlight.remove(completedKey);
                 boolean wasBackground = this.backgroundBakes.remove(completedKey);
@@ -588,7 +653,9 @@ public final class MapLevel implements ChunkSource {
                 } else if (image.isFull()) {
                     boolean diskOnly = this.appearanceRefresh.diskOnly.contains(image.key());
                     this.appearanceRefresh.stage(image, version, !diskOnly);
-                    if (diskOnly && this.store != null) this.store.baked(image);
+                    if (complete) this.appearanceRefresh.complete.add(image.key());
+                    else this.appearanceRefresh.complete.remove(image.key());
+                    if (diskOnly && this.store != null) { this.store.baked(image); this.persisted(image.key(), complete); }
                 }
                 else this.appearanceRefresh.forget(image.key());
                 continue;
@@ -598,6 +665,7 @@ public final class MapLevel implements ChunkSource {
 				// Baked only to be saved; a map that wants it will bake it again.
 				if (this.store != null) {
 					this.store.baked(image);
+					this.persisted(image.key(), complete && image.isFull());
 				}
 				continue;
 			}
@@ -620,6 +688,7 @@ public final class MapLevel implements ChunkSource {
 			this.coverageVersion++;
 			if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {
 				this.store.baked(image);
+				this.persisted(image.key(), complete && image.isFull());
 			}
 		}
 		if (this.trimStuck && System.currentTimeMillis() - this.lastTrimMs >= TRIM_RETRY_MS) {
@@ -630,7 +699,8 @@ public final class MapLevel implements ChunkSource {
 		BlockLooks looks = BlockLooks.get();
 		if (looks != null && this.topY != Integer.MIN_VALUE) {
 			long now = System.currentTimeMillis();
-			int limit = 6;
+			// Enough queued work to keep every baker busy while uploads drain; disk-only tiles are quick.
+			int limit = Math.max(6, BAKER_COUNT * 3);
             if (this.appearanceRefresh != null) {
                 for (TileKey key : this.appearanceRefresh.pending) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
                 if (this.appearanceRefresh.overviewBarrier != null && this.appearanceRefresh.overviewBarrier.isDone()) {
@@ -671,6 +741,7 @@ public final class MapLevel implements ChunkSource {
 				}
 			}
 			this.bakeUnsaved(looks, now);
+			this.redrawStale(looks);
 		}
 		this.wanted.clear();
 		this.evict();
@@ -748,7 +819,10 @@ public final class MapLevel implements ChunkSource {
             MapTile tile = this.tiles.get(image.key());
             if (tile == null) { tile = new MapTile(); this.tiles.put(image.key(), tile); }
             tile.upload(image);
-            if (this.store != null && !image.key().isCave() && image.key().lod() == 0) this.store.baked(image);
+            if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {
+                this.store.baked(image);
+                this.persisted(image.key(), refresh.complete.contains(image.key()));
+            }
         }
         this.appearanceRefresh = null;
         this.appearanceVersion++;
@@ -759,6 +833,14 @@ public final class MapLevel implements ChunkSource {
 
 	/** Bakes one tile on a baker thread: all of it if {@code blocks} is null, else those blocks. */
 	private void bake(TileKey key, BlockLooks looks, @Nullable BitSet blocks) {
+		this.bake(key, looks, blocks, false);
+	}
+
+	/**
+	 * Same; {@code redraw} also redraws, from the game's saved chunks, pixels that loaded chunks
+	 * can't, so a new look reaches the whole tile. Appearance refreshes always redraw.
+	 */
+	private void bake(TileKey key, BlockLooks looks, @Nullable BitSet blocks, boolean redraw) {
 		this.inFlight.add(key);
         this.jobVersions.put(key, this.freshness.get(key));
         this.submittedJobs++;
@@ -767,14 +849,126 @@ public final class MapLevel implements ChunkSource {
 		Overlays overlays = this.overlays;
 		TileStore store = key.isCave() ? null : this.store;
         dev.diorama.bake.BakeContext context = dev.diorama.bake.BakeContext.capture();
+        ChunkSource fallback = store != null && key.lod() == 0 && this.terrain != null
+            && (redraw || this.appearanceRefresh != null) ? this.withSaved : null;
+        this.completeBakes.remove(key);
         this.scheduler.submit(key, generation, () -> {
             long start = System.nanoTime();
             var saved = store == null ? null : store.readPixels(key);
+            if (blocks == null && fallback == null && !this.chunksReach(key)) {
+                // Nothing loaded can change a pixel: the bake would trace a quarter million empty
+                // rays only to keep every saved pixel. Reopening a map is then just a disk read.
+                if (saved == null) this.completeBakes.put(key, generation);
+                return TileBaker.imagePaired(key, saved == null ? new dev.diorama.bake.TilePixels(new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS], null) : saved);
+            }
+            if (blocks == null) {
+                TileBaker.Baked baked = TileBaker.bakeFull(key, this, looks, fog, saved, overlays, context, fallback);
+                if (baked.complete()) this.completeBakes.put(key, generation);
+                logBakeTime(System.nanoTime() - start, true);
+                return baked.image();
+            }
             TileImage image = TileBaker.bakePaired(key, this, looks, blocks, fog, saved, overlays, context);
             logBakeTime(System.nanoTime() - start, blocks == null);
             return image;
         });
 	}
+
+    /** A tile's new pixels went to the store; {@code complete} ones show the current look throughout. */
+    private void persisted(TileKey key, boolean complete) {
+        if (complete && this.stamps != null && !key.isCave() && key.lod() == 0) {
+            this.stamps.markFresh(key, this.stamps.fingerprint());
+            this.staleSaved.remove(key);
+        }
+    }
+
+    /**
+     * Redraws, in the background and nearest the views first, saved tiles that don't show the
+     * current look yet: shown tiles, and the tiles under the overviews shown when zoomed out. Waits
+     * for an appearance refresh to finish, and leaves bakers free for tiles a view is missing.
+     */
+    private void redrawStale(BlockLooks looks) {
+        TileStore store = this.store;
+        var stamps = this.stamps;
+        if (this.terrain == null || store == null || stamps == null || this.appearanceRefresh != null || this.closed) {
+            return;
+        }
+        if (!this.staleScanned) {
+            this.staleScanned = true;
+            int scan = this.staleScan;
+            SAVER.execute(() -> {
+                Set<TileKey> saved = store.savedTiles();
+                saved.removeIf(stamps::isFresh);
+                Minecraft.getInstance().execute(() -> {
+                    if (scan == this.staleScan && store == this.store) this.staleSaved.addAll(saved);
+                });
+            });
+            return;
+        }
+        if (this.staleSaved.isEmpty()) {
+            return;
+        }
+        if (this.frame % 15 == 0 || this.staleOrder.isEmpty()) {
+            // Rank by the nearest view that shows the tile itself or an overview over it.
+            this.staleOrder.clear();
+            for (TileKey key : this.staleSaved) {
+                double best = Double.MAX_VALUE;
+                TileKey at = key;
+                for (int lod = 0; lod <= TileKey.MAX_LOD; lod++, at = at.parent()) {
+                    Double priority = this.wanted.get(at);
+                    if (priority != null) best = Math.min(best, priority);
+                }
+                if (best < Double.MAX_VALUE) this.staleOrder.add(Map.entry(key, best));
+            }
+            this.staleOrder.sort(Map.Entry.comparingByValue());
+        }
+        boolean missing = false;
+        for (TileKey key : this.wanted.keySet()) {
+            if (key.lod() == 0 && !this.tiles.containsKey(key)) { missing = true; break; }
+        }
+        int limit = missing ? 1 : Math.max(1, BAKER_COUNT - 1);
+        Iterator<Map.Entry<TileKey, Double>> it = this.staleOrder.iterator();
+        while (it.hasNext() && this.staleInFlight.size() < limit && this.inFlight.size() < Math.max(6, BAKER_COUNT * 3)) {
+            TileKey key = it.next().getKey();
+            it.remove();
+            if (this.inFlight.contains(key) || stamps.isFresh(key) || !this.staleSaved.remove(key)) {
+                continue;
+            }
+            this.staleInFlight.add(key);
+            if (!this.tiles.containsKey(key)) this.backgroundBakes.add(key);
+            this.dirty.remove(key);
+            this.bake(key, looks, null, true);
+        }
+    }
+
+    /** Blocks around a tile a bake may read beyond its rays: shadows, sky occlusion, biome blending and outlines. */
+    private static final int BAKE_REACH = 64;
+
+    /**
+     * Whether any loaded chunk could change a pixel of this level-0 tile. Conservative: covers every
+     * height a ray crosses plus {@link #BAKE_REACH}. Safe on bake threads; snapshots are concurrent.
+     */
+    boolean chunksReach(TileKey key) {
+        if (this.chunks.isEmpty()) return false;
+        double sin = Projection.sin(), cos = Projection.cos();
+        double u0 = key.minU() - BAKE_REACH, u1 = key.minU() + Projection.TILE_UNITS + BAKE_REACH;
+        double v0 = key.minV(), v1 = key.minV() + Projection.TILE_UNITS;
+        double d0 = (v0 + this.minY * cos) / sin - BAKE_REACH, d1 = (v1 + this.maxY * cos) / sin + BAKE_REACH;
+        dev.diorama.MapDirection direction = Projection.direction();
+        double x0 = Math.min(direction.worldX(u0, d0), direction.worldX(u1, d1)), x1 = Math.max(direction.worldX(u0, d0), direction.worldX(u1, d1));
+        double z0 = Math.min(direction.worldZ(u0, d0), direction.worldZ(u1, d1)), z1 = Math.max(direction.worldZ(u0, d0), direction.worldZ(u1, d1));
+        int cx0 = (int) Math.floor(x0) >> 4, cx1 = (int) Math.floor(x1) >> 4;
+        int cz0 = (int) Math.floor(z0) >> 4, cz1 = (int) Math.floor(z1) >> 4;
+        if ((long) (cx1 - cx0 + 1) * (cz1 - cz0 + 1) > this.chunks.size()) {
+            for (ChunkSnapshot snapshot : this.chunks.values()) {
+                if (snapshot.chunkX >= cx0 && snapshot.chunkX <= cx1 && snapshot.chunkZ >= cz0 && snapshot.chunkZ <= cz1) return true;
+            }
+            return false;
+        }
+        for (int cx = cx0; cx <= cx1; cx++) for (int cz = cz0; cz <= cz1; cz++) {
+            if (this.chunks.containsKey(ChunkSnapshot.key(cx, cz))) return true;
+        }
+        return false;
+    }
 
 	private void loadOverview(TileKey key, TileStore store) {
 		this.inFlight.add(key);
@@ -855,6 +1049,7 @@ public final class MapLevel implements ChunkSource {
         this.closed = true;
         if (this.store != null) this.retireStore(this.store, true);
         else this.saveSeen();
+        if (this.terrain != null) { this.terrain.close(); this.terrain = null; }
         for (MapTile tile : this.tiles.values()) tile.close();
         this.tiles.clear();
         this.coverageVersion++;
@@ -896,6 +1091,10 @@ public final class MapLevel implements ChunkSource {
                 }
             }
         }, SAVER).thenCompose(ignored -> retiring.closeAsync());
+        // Stamps vouch for pixels on disk, so they're written only once the tiles are.
+        var stamps = this.stamps;
+        Path stampsFile = this.folder == null ? null : this.stampsFile();
+        if (stamps != null && stampsFile != null) save = save.thenRun(() -> stamps.save(stampsFile));
         retiring.finishing(save);
         SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
         SAVES.add(save);
@@ -913,5 +1112,20 @@ public final class MapLevel implements ChunkSource {
 
 	public int bakingCount() {
 		return this.inFlight.size();
+	}
+
+	/** Whether this saved tile was last drawn entirely with the current look. For tests. */
+	public boolean showsCurrentLook(TileKey key) {
+		return this.stamps != null && this.stamps.isFresh(key);
+	}
+
+	/** Saved tiles still waiting to be redrawn with the current look. For tests. */
+	public int staleTiles() {
+		return this.staleSaved.size() + this.staleInFlight.size();
+	}
+
+	/** Forgets every chunk snapshot, as after reopening the world far from here. For tests. */
+	public void forgetSnapshots() {
+		this.chunks.clear();
 	}
 }

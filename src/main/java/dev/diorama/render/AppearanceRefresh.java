@@ -12,6 +12,8 @@ final class AppearanceRefresh {
     final Map<TileKey, TileFreshness.Version> versions = new HashMap<>();
     final Map<TileKey, Integer> generations = new HashMap<>();
     final Set<TileKey> diskOnly = new HashSet<>();
+    /** Staged images that drew their whole tile, so the store can vouch for their look. */
+    final Set<TileKey> complete = new HashSet<>();
     java.util.concurrent.CompletableFuture<Void> overviewBarrier;
 
     AppearanceRefresh(Collection<TileKey> resident) {
@@ -43,6 +45,7 @@ final class AppearanceRefresh {
         versions.remove(key);
         generations.remove(key);
         diskOnly.remove(key);
+        complete.remove(key);
     }
 
     void evicted(TileKey key, java.util.function.Consumer<TileImage> persist) {

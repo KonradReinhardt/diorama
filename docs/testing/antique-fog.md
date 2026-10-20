@@ -96,3 +96,72 @@ As validações locais de quatro alvos não equivalem a rodar toda a matriz de 2
 A textura de pergaminho original está em
 `src/main/resources/assets/diorama/textures/map/parchment.png`, 256×256 RGB,
 criada com imagegen e preparada com amostragem de borda sem transparência.
+
+## Polimento visual, carregamento e refresh de aparência — 20/10/2026
+
+Executado em Minecraft 26.3, Fabric, JDK 25, mesma máquina das medições acima.
+
+- Builds com JUnit: Fabric 26.3, NeoForge 26.3, Fabric 1.21.1 e NeoForge 1.21.1.
+  `FogRevealTest` ganhou um caso com reinícios a cada 16 ms (tiles chegando a cada
+  frame): o teste exige mais de 74% de revelação em 240 ms. Pela mesma conta (não
+  medido em jogo), o smoothstep de 600 ms anterior chegaria a cerca de 3%.
+- Cliente real, execução combinada concluída em 9 min 41 s:
+
+  ```text
+  DIORAMA_TESTS=fog-of-war,settings-refresh,whole-map-refresh,antique-fog,day-night,saved-map
+  ```
+
+  O ciclo só de horário continuou com zero jobs, gravações, snapshots e máscaras.
+- `whole-map-refresh` (novo): salva o mundo, descarta todos os snapshots em memória
+  (como ao reabrir o mundo) e alterna outlines. A revisão foi redesenhada a partir dos
+  chunks salvos e publicada de uma vez: 154 tiles em 5,6 s na primeira execução e 20
+  tiles em 3,4 s na execução final. O tile do jogador passou a ter o look atual e
+  nenhuma célula de cobertura antes desconhecida foi revelada.
+- `antique-fog` ganhou capturas da fronteira (`antique-frontier`,
+  `antique-frontier-close`, `clouds-frontier`) para inspeção visual das bordas, aquarela,
+  costas e símbolos.
+
+Não foi medido FPS do jogo inteiro nem o tempo do passe opaco sob os tiles em GPU.
+O custo do redesenho de tiles antigos a partir do disco depende de quantos chunks
+cada tile atravessa; ele roda em segundo plano, no máximo um job enquanto uma vista
+espera tiles, e não bloqueia a thread de render.
+
+## Pixel art 16x e fronteira conservadora — 20/10/2026
+
+- Builds com JUnit: Fabric 26.3, NeoForge 26.3 e Fabric 1.21.1.
+- Cliente real Fabric 26.3, concluído em 5 min 10 s:
+  `DIORAMA_TESTS=fog-of-war,settings-refresh,antique-fog,day-night`.
+- Capturas `antique-frontier`, `antique-frontier-close` (zoom 2,5) e
+  `antique-frontier-far` (zoom 0,2) mostram sprites do mesmo tamanho na tela nos três
+  zooms e a linha de tinta sobre a borda real do terreno. Uma versão intermediária
+  deixava terreno parcial visível além da linha no zoom 2,5; a flag "nada explorado"
+  passou a usar a cobertura bruta e a captura final não mostra mais a faixa.
+- O flicker no zoom não foi medido automaticamente; a causa identificada (troca de
+  nível de detalhe da máscara tratada como descoberta animada) foi removida.
+
+## Sépia, sprites densos, pixel do tamanho do bloco e nuvens em pixel art — 20/10/2026
+
+- Builds com JUnit: Fabric 26.3, NeoForge 26.3, Fabric 1.21.1 e NeoForge 1.21.1.
+- `antique-fog` no cliente real, com capturas do mapa antigo em sépia e colorido e das
+  nuvens nos zooms 0,2, 0,6 e 2,5. No zoom 2,5 o pixel do fog tem o tamanho de um bloco;
+  nos outros, um pixel da GUI.
+- Regressão no cliente real, concluída em 9 min 15 s:
+  `DIORAMA_TESTS=fog-of-war,settings-refresh,whole-map-refresh,day-night,saved-map`.
+  O ciclo só de horário continuou sem jobs, gravações, snapshots ou máscaras novas.
+- `fog-gpu-bench` foi removido: media o shader volumétrico substituído. Não foi feita
+  medição de tempo de GPU das novas nuvens nem de FPS.
+
+## Borda desfiada, terra sem ícones e marcador vanilla — 20/10/2026
+
+Verificação reduzida a pedido: build Fabric 26.3 com JUnit, compilação Fabric 1.21.1 e
+uma execução `DIORAMA_TESTS=antique-fog` no cliente real, com inspeção das capturas.
+Os demais cenários de regressão não foram repetidos nesta rodada.
+
+## Borda estável no zoom, oceano, marcador do minimapa e tags — 20/10/2026
+
+Build Fabric 26.3 com JUnit, compilação NeoForge 26.3 e Fabric 1.21.1, e uma execução
+`DIORAMA_TESTS=antique-fog` com inspeção das capturas. As faixas no oceano não foram
+reproduzidas no mundo de teste: a correção (invalidar até o fundo da água ao carregar
+um chunk vizinho, ignorar chunks salvos sem luz pronta e redesenhar os tiles salvos uma
+vez) foi feita pela análise do código e precisa de confirmação no mundo do usuário.
+A classificação por tags não foi testada com datapacks ou mods reais.

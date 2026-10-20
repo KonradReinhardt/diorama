@@ -13,10 +13,12 @@ import net.minecraft.resources.Identifier;
 public interface MapCanvas {
 	static MapCanvas of(GuiGraphicsExtractor graphics) {
 		//? if >=1.21.6 {
-		return new StateCanvas(graphics);
+		MapCanvas canvas = new StateCanvas(graphics);
 		//?} else {
-		/*return new ImmediateCanvas(graphics);
+		/*MapCanvas canvas = new ImmediateCanvas(graphics);
 		*///?}
+		// Inside ClippedCanvas.within, everything drawn is cut to a shape.
+		return ClippedCanvas.wrap(canvas);
 	}
 
 	/**
@@ -42,7 +44,13 @@ public interface MapCanvas {
     /** Surface endpoints share coverage; older backends retain their daytime rendering. */
     default void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
         float x0, float y0, float x1, float y1, dev.diorama.EnvironmentLighting lighting) {
-        this.rect(day, sampling, x0, y0, x1, y1, 0, 0, 1, 1, -1);
+        this.lit(day, night, sampling, x0, y0, x1, y1, 0, 0, 1, 1, lighting);
+    }
+
+    /** As above, for part of the tile: (u0, v0) to (u1, v1) of its textures. */
+    default void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
+        float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, dev.diorama.EnvironmentLighting lighting) {
+        this.rect(day, sampling, x0, y0, x1, y1, u0, v0, u1, v1, -1);
     }
 
 	/** An untextured quad in one colour, corners counter-clockwise (the other winding is culled). */
@@ -63,6 +71,11 @@ public interface MapCanvas {
 	 */
 	void fog(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params);
 
-    /** Sepia terrain using the fog shader's tile mode, also available to legacy renderers. */
-    void antiqueTile(MapTexture terrain, MapTexture paper, float x0, float y0, float x1, float y1);
+    /** Antique-style terrain (lightly desaturated) through the fog shader's tile mode, also on legacy renderers. */
+    default void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1) {
+        this.antiqueTile(terrain, paper, sampling, x0, y0, x1, y1, 0, 0, 1, 1);
+    }
+
+    /** As above, for part of the tile: (u0, v0) to (u1, v1) of its texture. */
+    void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1);
 }

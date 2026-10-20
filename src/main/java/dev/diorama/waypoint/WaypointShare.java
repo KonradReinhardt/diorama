@@ -23,6 +23,10 @@ import org.jspecify.annotations.Nullable;
  * can pick up each other's waypoints: {@code xaero-waypoint:Name:N:x:y:z:colour:false:0:Internal-overworld-waypoints}.
  * A chat line carrying one gets an "[Add]" link on the end that opens the waypoint editor filled
  * in. Chat can carry anything, so everything read from it is checked.
+ *
+ * <p>A waypoint whose banner isn't just its colour adds {@code diorama-banner:<design>} after a
+ * space, the design in {@link BannerDesign#encode}'s compact text. Xaero's Minimap and older
+ * versions of this mod ignore it and get the waypoint in its colour.
  */
 public final class WaypointShare {
 	private static final Pattern SHARED = Pattern.compile(
@@ -36,10 +40,13 @@ public final class WaypointShare {
 	/** The waypoint editor's limits. */
 	private static final int MAX_NAME = 32;
 	private static final int MAX_INITIALS = 2;
+	private static final Pattern BANNER = Pattern.compile("diorama-banner:([A-Za-z0-9_-]{1,200})");
+	/** A name is cut no shorter than this to make room for the banner; past that the banner goes. */
+	private static final int NAME_KEPT_FOR_BANNER = 12;
 	private static final Pattern DIMENSION_ID = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_./-]+");
 
 	/** A waypoint someone shared. {@code y} is null when the sender didn't know the height. */
-	public record Shared(String name, String initials, int x, Integer y, int z, int colorIndex, String dimension) {
+	public record Shared(String name, String initials, int x, Integer y, int z, int colorIndex, String dimension, @Nullable BannerDesign banner) {
 	}
 
 	private WaypointShare() {
@@ -51,21 +58,34 @@ public final class WaypointShare {
 	 * refuses (formatting codes, control characters) is dropped.
 	 */
 	public static Optional<String> format(Waypoint waypoint) {
+		BannerDesign design = waypoint.design();
+		boolean plain = design.equals(BannerDesign.forColour(waypoint.color));
+		if (!plain) {
+			String banner = " diorama-banner:" + design.encode();
+			Optional<String> line = format(waypoint, design.colour(), MAX_CHAT - banner.length(), NAME_KEPT_FOR_BANNER);
+			if (line.isPresent()) {
+				return Optional.of(line.get() + banner);
+			}
+		}
+		return format(waypoint, plain ? waypoint.color : design.colour(), MAX_CHAT, 1);
+	}
+
+	private static Optional<String> format(Waypoint waypoint, int colour, int max, int shortestName) {
 		String initials = encode(chatSafe(waypoint.label()));
 		String tail = ":" + initials + ":" + waypoint.x + ":" + waypoint.y + ":" + waypoint.z + ":"
-			+ colorIndex(waypoint.color) + ":false:0:Internal-" + xaeroDimension(waypoint.dimension) + "-waypoints";
+			+ colorIndex(colour) + ":false:0:Internal-" + xaeroDimension(waypoint.dimension) + "-waypoints";
 		String name = chatSafe(waypoint.name).trim();
 		if (name.isEmpty()) {
 			name = "Waypoint";
 		}
 		// Cut the name, not an escape, until the line fits.
 		String encoded = encode(name);
-		while ("xaero-waypoint:".length() + encoded.length() + tail.length() > MAX_CHAT && name.length() > 1) {
+		while ("xaero-waypoint:".length() + encoded.length() + tail.length() > max && name.length() > shortestName) {
 			name = cut(name, name.length() - 1);
 			encoded = encode(name);
 		}
 		String line = "xaero-waypoint:" + encoded + tail;
-		return line.length() > MAX_CHAT ? Optional.empty() : Optional.of(line);
+		return line.length() > max ? Optional.empty() : Optional.of(line);
 	}
 
 	/** Xaero's escapes for characters that mean something in the share line. */
@@ -102,7 +122,9 @@ public final class WaypointShare {
 			|| color > 15 || dimension == null) {
 			return Optional.empty();
 		}
-		return Optional.of(new Shared(name, initials.toString().toUpperCase(Locale.ROOT), x, y, z, color, dimension));
+		Matcher banner = BANNER.matcher(text);
+		BannerDesign design = banner.find(m.end()) ? BannerDesign.decode(banner.group(1)) : null;
+		return Optional.of(new Shared(name, initials.toString().toUpperCase(Locale.ROOT), x, y, z, color, dimension, design));
 	}
 
 	/** At most {@code max} characters of {@code text}, never splitting a character in two. */
@@ -130,8 +152,9 @@ public final class WaypointShare {
 
 	/** The command the "Add" link runs for a shared waypoint. */
 	public static String addCommand(Shared shared, int y) {
-		return "/diorama waypoint add " + shared.x() + " " + y + " " + shared.z() + " " + shared.colorIndex()
-			+ " \"" + shared.dimension() + "\" \"" + shared.initials() + "\" " + shared.name();
+		String banner = shared.banner() == null ? "" : " \"" + shared.banner().encode() + "\"";
+		return "/diorama waypoint " + (banner.isEmpty() ? "add " : "add-banner ") + shared.x() + " " + y + " " + shared.z() + " " + shared.colorIndex()
+			+ banner + " \"" + shared.dimension() + "\" \"" + shared.initials() + "\" " + shared.name();
 	}
 
 	private static Component addLink(Shared shared, int y) {
@@ -144,7 +167,8 @@ public final class WaypointShare {
 
 	/**
 	 * {@code /diorama waypoint add <x> <y> <z> <colour> "<dimension>" "<initials>" <name>}, which the
-	 * "Add" link runs. Built with Brigadier alone, so it goes in either loader's client commands.
+	 * "Add" link runs, and {@code add-banner}, the same with the banner's compact text after the
+	 * colour. Built with Brigadier alone, so it goes in either loader's client commands.
 	 */
 	public static <S> void register(CommandDispatcher<S> dispatcher) {
 		dispatcher.register(LiteralArgumentBuilder.<S>literal("diorama")
@@ -157,7 +181,17 @@ public final class WaypointShare {
 									.then(RequiredArgumentBuilder.<S, String>argument("dimension", StringArgumentType.string())
 										.then(RequiredArgumentBuilder.<S, String>argument("initials", StringArgumentType.string())
 											.then(RequiredArgumentBuilder.<S, String>argument("name", StringArgumentType.greedyString())
-												.executes(WaypointShare::add)))))))))));
+												.executes(WaypointShare::add)))))))))
+				.then(LiteralArgumentBuilder.<S>literal("add-banner")
+					.then(RequiredArgumentBuilder.<S, Integer>argument("x", IntegerArgumentType.integer())
+						.then(RequiredArgumentBuilder.<S, Integer>argument("y", IntegerArgumentType.integer())
+							.then(RequiredArgumentBuilder.<S, Integer>argument("z", IntegerArgumentType.integer())
+								.then(RequiredArgumentBuilder.<S, Integer>argument("colour", IntegerArgumentType.integer(0, 15))
+									.then(RequiredArgumentBuilder.<S, String>argument("banner", StringArgumentType.string())
+										.then(RequiredArgumentBuilder.<S, String>argument("dimension", StringArgumentType.string())
+											.then(RequiredArgumentBuilder.<S, String>argument("initials", StringArgumentType.string())
+												.then(RequiredArgumentBuilder.<S, String>argument("name", StringArgumentType.greedyString())
+													.executes(WaypointShare::add))))))))))));
 	}
 
 	private static <S> int add(CommandContext<S> context) {
@@ -170,6 +204,9 @@ public final class WaypointShare {
 			StringArgumentType.getString(context, "dimension"),
 			paletteColor(IntegerArgumentType.getInteger(context, "colour"))
 		);
+		if (context.getNodes().stream().anyMatch(node -> node.getNode().getName().equals("banner"))) {
+			waypoint.banner = BannerDesign.decode(StringArgumentType.getString(context, "banner"));
+		}
 		String initials = StringArgumentType.getString(context, "initials");
 		if (!initials.isEmpty()) {
 			waypoint.initials = cut(initials, MAX_INITIALS);

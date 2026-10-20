@@ -71,10 +71,6 @@ public class DioramaClientTest implements FabricClientGameTest {
 		context.runOnClient(mc -> mc.options.renderDistance().set(12));
 		String seed = System.getProperty("diorama.seed", "diorama");
 		Set<String> tests = selectedTests();
-        if (tests.equals(Set.of("fog-gpu-bench"))) {
-            context.runOnClient(mc -> FogGpuBenchmark.run());
-            return;
-        }
 		if (tests.contains("showcase") && tests.size() > 1) {
 			// The showcase leaves the player in the Nether, spectating, on peaceful, with radar off.
 			throw new AssertionError("Run the showcase on its own: DIORAMA_TESTS=showcase");
@@ -102,7 +98,8 @@ public class DioramaClientTest implements FabricClientGameTest {
 			spawnCell = tests.contains("saved-map") ? knownSpawnCell(context) : null;
 			if (tests.contains("atomic-appearance")) AtomicAppearanceScenario.run(context, world);
             if (tests.contains("antique-fog")) AntiqueFogScenario.run(context, world);
-            if (tests.contains("fog-gpu-bench")) context.runOnClient(mc -> FogGpuBenchmark.run());
+            if (tests.contains("painted")) PaintedStyleScenario.run(context, world);
+            if (tests.contains("banner-waypoints")) BannerWaypointsScenario.run(context, world);
             if (tests.contains("day-night")) DayNightScenario.run(context, world);
             if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
 			if (tests.contains("styles")) {
@@ -136,6 +133,9 @@ public class DioramaClientTest implements FabricClientGameTest {
             if (tests.contains("modmenu")) dev.diorama.test.fabric.ModMenuScenario.run(context);
             //?}
             if (tests.contains("settings-refresh")) SettingsRefreshScenario.run(context);
+            //? if >=26.3 {
+            if (tests.contains("whole-map-refresh")) WholeMapRefreshScenario.run(context, world);
+            //?}
 			if (tests.contains("settings")) {
 				settings(context, world);
 			}

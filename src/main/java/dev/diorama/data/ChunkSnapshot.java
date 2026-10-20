@@ -121,17 +121,103 @@ public final class ChunkSnapshot {
 				int surface = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
 				int solid = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
 				top = Math.max(top, surface);
-				floor = Math.min(floor, solid);
+				floor = Math.min(floor, this.belowFluid(x, solid - 1, z, chunk.getMinY()));
 				this.surface[(z << 4) | x] = surface;
 			}
 		}
 		this.maxY = top <= chunk.getMinY() ? Integer.MIN_VALUE : top;
-		// Water and shallow overhangs can hide blocks below the motion-blocking height.
+		// Rays reach the floor under water, which the motion-blocking height stops above; shallow
+		// overhangs can hide a little more.
 		this.floorY = floor == Integer.MAX_VALUE ? chunk.getMinY() : floor - 24;
+	}
+
+	/**
+	 * The first y at or below {@code y} in this column that isn't fluid: the bottom of a sea or
+	 * lake. Map rays slant through water down to it, so a chunk arriving next to a deep ocean must
+	 * refresh the pixels that see that far down, or they stay half drawn.
+	 */
+	private int belowFluid(int x, int y, int z, int minY) {
+		while (y > minY) {
+			int index = (y >> 4) - this.minSectionY;
+			if (index < 0 || index >= this.states.length) break;
+			BlockState state = this.uniform[index] != null ? this.uniform[index]
+				: this.states[index] != null ? this.states[index].get(x, y & 15, z) : null;
+			if (state == null || state.getFluidState().isEmpty()) break;
+			y--;
+		}
+		return y;
 	}
 
 	public static ChunkSnapshot take(LevelChunk chunk, ClientLevel level) {
 		return new ChunkSnapshot(chunk, level);
+	}
+
+	/**
+	 * A chunk as the game saved it, for redrawing tiles whose chunks aren't loaded. The sections
+	 * and light layers must be private to the caller, since they're kept without copying.
+	 * {@code biomes} holds the biome sections of this chunk and its neighbours, indexed like
+	 * {@link #noiseBiome}'s, with null where a neighbour isn't saved.
+	 */
+	@SuppressWarnings("unchecked")
+	public static ChunkSnapshot saved(int chunkX, int chunkZ, int minSectionY, int minY, @Nullable LevelChunkSection[] sections,
+		@Nullable DataLayer[] blockLight, @Nullable DataLayer[] skyLight, boolean hasSkyLight,
+		@Nullable PalettedContainerRO<Holder<Biome>>[] @Nullable [] biomes, long biomeZoomSeed, int blendRadius, Holder<Biome> fallbackBiome) {
+		return new ChunkSnapshot(chunkX, chunkZ, minSectionY, minY, sections, blockLight, skyLight, hasSkyLight, biomes, biomeZoomSeed, blendRadius, fallbackBiome);
+	}
+
+	@SuppressWarnings("unchecked")
+	private ChunkSnapshot(int chunkX, int chunkZ, int minSectionY, int minY, @Nullable LevelChunkSection[] sections,
+		@Nullable DataLayer[] blockLight, @Nullable DataLayer[] skyLight, boolean hasSkyLight,
+		@Nullable PalettedContainerRO<Holder<Biome>>[] @Nullable [] biomes, long biomeZoomSeed, int blendRadius, Holder<Biome> fallbackBiome) {
+		this.chunkX = chunkX;
+		this.chunkZ = chunkZ;
+		this.minSectionY = minSectionY;
+		this.states = new PalettedContainer[sections.length];
+		this.uniform = new BlockState[sections.length];
+		this.biomes = biomes;
+		this.biomeZoomSeed = biomeZoomSeed;
+		this.blendRadius = blendRadius;
+		this.fallbackBiome = fallbackBiome;
+		this.hasSkyLight = hasSkyLight;
+		this.blockLight = blockLight;
+		this.skyLight = skyLight;
+		for (int i = 0; i < sections.length; i++) {
+			LevelChunkSection section = sections[i];
+			if (section == null) {
+				continue;
+			}
+			BlockState single = Sections.singleValue(section.getStates());
+			if (single != null) {
+				if (!single.isAir()) this.uniform[i] = single;
+			} else {
+				this.states[i] = section.getStates();
+			}
+		}
+		// No heightmaps to trust: find each column's top block from the sections, top down.
+		int top = Integer.MIN_VALUE;
+		int floor = Integer.MAX_VALUE;
+		for (int z = 0; z < 16; z++) {
+			for (int x = 0; x < 16; x++) {
+				int surface = minY;
+				for (int i = sections.length - 1; i >= 0 && surface == minY; i--) {
+					if (this.uniform[i] != null) {
+						surface = (minSectionY + i << 4) + 16;
+					} else if (this.states[i] != null) {
+						for (int y = 15; y >= 0; y--) {
+							if (!this.states[i].get(x, y, z).isAir()) {
+								surface = (minSectionY + i << 4) + y + 1;
+								break;
+							}
+						}
+					}
+				}
+				top = Math.max(top, surface);
+				floor = Math.min(floor, surface);
+				this.surface[(z << 4) | x] = surface;
+			}
+		}
+		this.maxY = top <= minY ? Integer.MIN_VALUE : top;
+		this.floorY = floor == Integer.MAX_VALUE ? minY : floor - 24;
 	}
 
     /** Ignore repeated light notifications whose captured values have not actually changed. */

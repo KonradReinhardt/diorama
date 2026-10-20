@@ -3,13 +3,9 @@
 #extension GL_ARB_separate_shader_objects : require
 //?}
 
-// Volumetric-looking fog over the parts of the map with no data.
-//
-// The fog is a height field: deep in unknown territory it stands fogHeight blocks tall, and it
-// thins out toward known ground, with noise breaking up the edge. We look at it through the same
-// tilted camera as the map, so we march a few height layers from the top down. A layer at height h
-// sits above the ground point h * cos(pitch) further south, which is what makes the banks look
-// like they rise off the terrain.
+// The fog over the parts of the map with no data, in one of two pixel-art styles: clouds, or an
+// antique map with the seed's predicted biomes. Also draws antique-style terrain on backends
+// without the lighting pipeline (the tile mode in main).
 
 //? if >=26.3 {
 layout(std140) uniform Globals {
@@ -93,13 +89,13 @@ layout(location = 0) out vec4 fragColor;
 out vec4 fragColor;
 *///?}
 
-const float MASK_TEXELS = 256.0;
 const float NOISE_PERIOD = 512.0;
-// The default camera angle (50 degrees). At other angles the banks sit slightly too far north or south.
-const float COS_PITCH = 0.643;
-const int LAYERS = 8;
-// Fast quality, for slower graphics cards: fewer layers, one blur, and no sun shading.
-const int FAST_LAYERS = 2;
+
+// Both styles are pixel art. Every colour is worked out once per art pixel: one GUI pixel square
+// on a grid aligned to the framebuffer, or, zoomed in past that, one block on the map's own grid,
+// so the fog's pixels match the terrain's blocks. MapViewport passes the GUI pixel's size and the
+// grid's phase (where the world's origin lands), so the screen grid moves with the map in whole
+// pixels and never slides under it.
 
 // Surface fog banks are tall and soft. Cave fog hugs the ground with a tight edge, so a
 // three-block tunnel you walked down stays readable instead of blurring into the fog.
@@ -107,36 +103,97 @@ float fogHeight;
 float blurUnits;
 float unitsPerUv;
 vec2 noiseOrigin;
-// The noise pattern grows by this when zoomed far out, so it keeps its size on screen instead of
-// repeating every few pixels. The banks keep their size in blocks, so they stay a thin fringe
-// around explored land and never bury it.
+// The noise pattern grows by this when zoomed far out, so it keeps its size on screen.
 float fogScale;
 float scaleSteps;
 float scaleFraction;
 float seconds;
-bool fast;
-// Every mask texel this pixel can read is fully known. Then every thickness is 0 whatever the
-// noise, so the texture reads are skipped. The rest still runs: the lowest layers leave a faint
-// veil even over known ground.
-bool clear;
-// Every mask texel this pixel can read is fully unknown: every known share is exactly 0, so the
-// mask reads are skipped. The noise still shapes the fog there, so its reads stay.
-bool deep;
 float revealProgress;
+float daylight;
+// Texels across the mask: 256 for clouds, 512 for the antique map's finer frontier.
+float maskTexels;
+// The mask coordinate this pixel reads; see UNDERLAY_SHIFT.
+vec2 uv0;
+// The opaque pass drawn under the tiles, rather than the translucent one over them.
+bool underlay;
+// Map units repeat the noise origin every this many units, so anything world-anchored must tile with it.
+float anchorPeriod;
+// The antique map in colour rather than sepia.
+bool colourful;
+
+// MapViewport shifts the u coordinates of the pass under the tiles by this much. The mask is
+// clamped, so the shifted pass decodes it back here without another vertex attribute.
+const float UNDERLAY_SHIFT = 16.0;
+
+// ---------------------------------------------------------------------------------------------
+// The art pixel grid
+
+float artPixels;
+vec2 artPhase;
+// Map units per framebuffer pixel, and per art pixel.
+float unitsPerPixel;
+float art;
+// Zoomed in far enough that a block is bigger than a GUI pixel: the grid is the map's blocks.
+bool blockGrid;
+// The fragment in framebuffer pixels with y turned to grow down the map, like v, and its map units.
+vec2 fragMap;
+vec2 fragUnits;
+
+vec2 unitsAt(vec2 uv) {
+    return noiseOrigin * anchorPeriod + uv * unitsPerUv;
+}
+
+vec2 uvAt(vec2 units) {
+    return (units - noiseOrigin * anchorPeriod) / unitsPerUv;
+}
+
+// The art pixel holding a point given in map units.
+vec2 artIndex(vec2 units) {
+    if (blockGrid) return floor(units);
+    return floor((fragMap + (units - fragUnits) / unitsPerPixel + artPhase) / artPixels);
+}
+
+// The centre of an art pixel, in map units.
+vec2 artCentre(vec2 index) {
+    if (blockGrid) return index + 0.5;
+    return fragUnits + ((index + 0.5) * artPixels - artPhase - fragMap) * unitsPerPixel;
+}
+
+// Sets up the grid for this fragment. Uses derivatives: call while every pixel of the quad runs.
+vec2 setUpGrid() {
+    fragUnits = unitsAt(uv0);
+    vec2 dx = dFdx(fragUnits), dy = dFdy(fragUnits);
+    unitsPerPixel = abs(dx.x);
+    fragMap = vec2(gl_FragCoord.x, (dy.y >= 0.0 ? 1.0 : -1.0) * gl_FragCoord.y);
+    blockGrid = artPixels * unitsPerPixel <= 1.0;
+    art = blockGrid ? 1.0 : artPixels * unitsPerPixel;
+    return artIndex(fragUnits);
+}
+
+// A hash of a world grid index that repeats with the anchor, so the pattern never jumps while panning.
+float gridHash(vec2 p, float cell, uint salt) {
+    uvec2 q = uvec2(mod(p, vec2(max(1.0, anchorPeriod / cell))));
+    uint h = q.x * 1597334677u ^ q.y * 3812015801u ^ salt * 2654435761u;
+    h ^= h >> 15u;
+    h *= 2246822519u;
+    h ^= h >> 13u;
+    return float(h & 0xFFFFu) / 65535.0;
+}
+
+// The mask's green byte at the texel holding uv.
+int maskCode(vec2 uv) {
+    ivec2 t = clamp(ivec2(floor(uv * maskTexels)), ivec2(0), ivec2(int(maskTexels) - 1));
+    return int(texelFetch(Sampler0, t, 0).g * 255.0 + 0.5);
+}
 
 float sampleKnown(vec2 uv) {
-    vec4 mask = texture(Sampler0, uv);
+    vec4 mask = textureLod(Sampler0, uv, 0.0);
     return mix(mask.a, mask.r, revealProgress);
 }
 
-// The known share at uv, without the read where the answer is already known.
-float knownAt(vec2 uv) {
-    return deep ? 0.0 : sampleKnown(uv);
-}
-
-// Known share blurred over a radius in map units, so chunk-shaped edges melt away.
+// Two blurred taps of known share, so chunk-shaped edges melt into rounded banks.
 float knownBlur(vec2 uv, float units) {
-    float r = max(units / unitsPerUv, 1.0 / MASK_TEXELS);
+    float r = max(units / unitsPerUv, 1.0 / maskTexels);
     float k = sampleKnown(uv) * 0.2;
     k += sampleKnown(uv + vec2(r, 0.0)) * 0.1;
     k += sampleKnown(uv - vec2(r, 0.0)) * 0.1;
@@ -150,26 +207,11 @@ float knownBlur(vec2 uv, float units) {
     return k;
 }
 
-// Surface fog blends a near and a wide blur, so banks reach well over the edge of known land
-// and the noise has room to billow. Cave fog stays tight to the explored tunnels.
-float knownSoft(vec2 uv) {
-    if (clear) {
-        return 1.0;
-    }
-    if (deep) {
-        return 0.0;
-    }
-    if (blurUnits < 5.0 || fast) {
-        return knownBlur(uv, blurUnits);
-    }
-    return 0.5 * knownBlur(uv, blurUnits) + 0.5 * knownBlur(uv, blurUnits * 2.4);
-}
-
 float noiseLayer(vec2 n) {
     // Speeds are whole periods per 1200 s, so the loop of GameTime wraps without a jump.
-    float a = texture(Sampler1, n + vec2(5.0, 2.0) * seconds / 1200.0).r;
-    float b = texture(Sampler1, n + vec2(-8.0, 3.0) * seconds / 1200.0).g;
-    float c = texture(Sampler1, n + vec2(13.0, -9.0) * seconds / 1200.0).b;
+    float a = textureLod(Sampler1, n + vec2(5.0, 2.0) * seconds / 1200.0, 0.0).r;
+    float b = textureLod(Sampler1, n + vec2(-8.0, 3.0) * seconds / 1200.0, 0.0).g;
+    float c = textureLod(Sampler1, n + vec2(13.0, -9.0) * seconds / 1200.0, 0.0).b;
     return a * 0.55 + b * 0.3 + c * 0.15;
 }
 
@@ -177,13 +219,8 @@ float noiseLayer(vec2 n) {
 float noiseAt(vec2 uv) {
     float coarsePeriod = NOISE_PERIOD * exp2(scaleSteps + 1.0);
     vec2 coarse = noiseOrigin + uv * unitsPerUv / coarsePeriod;
-    // The fine noise has half the period, so it runs twice as far from the same origin.
     float fine = noiseLayer(coarse * 2.0);
-    // At the detailed zoom and closer there is only the one scale: mix() would return fine anyway.
-    if (scaleFraction == 0.0) {
-        return fine;
-    }
-    return mix(fine, noiseLayer(coarse), scaleFraction);
+    return scaleFraction == 0.0 ? fine : mix(fine, noiseLayer(coarse), scaleFraction);
 }
 
 float thicknessFrom(float known, float n) {
@@ -191,86 +228,298 @@ float thicknessFrom(float known, float n) {
     // Noise only shapes the edge; where everything is known there is no fog at all.
     float edge = smoothstep(0.0, 0.35, unknown);
     float amount = smoothstep(0.12, 0.75, unknown + (n - 0.5) * 1.5 * edge);
-    return fogHeight * amount * (0.45 + 0.75 * n);
+    return amount * (0.45 + 0.75 * n);
 }
 
-// From this known share up there is no fog whatever the noise: unknown + 0.75 * edge stays below
-// the 0.12 where the amount starts, so the noise needn't be read.
-const float NO_FOG_KNOWN = 0.95;
+// ---------------------------------------------------------------------------------------------
+// Clouds, in pixel art
+//
+// Sampler0: known share (r, a), green 255 where every texel within reach is known, blue 255
+// where none is. Sampler1: tileable noise. The bank's height at each art pixel comes from the
+// noise and the known share; it is drawn as terraced puffs in flat tones, with shaded undersides
+// and lit tops, and the clouds cast a dithered shadow on the map below them.
 
-float thicknessAt(vec2 uv, float known) {
-    return known >= NO_FOG_KNOWN ? 0.0 : thicknessFrom(known, noiseAt(uv));
+const float CLOUD = 0.2;
+
+// Cloud height at a point, about 0..1.2; 0 where there is none.
+float cloudAt(vec2 c) {
+    vec2 uv = uvAt(c);
+    ivec2 t = clamp(ivec2(floor(uv * maskTexels)), ivec2(0), ivec2(int(maskTexels) - 1));
+    vec4 flags = texelFetch(Sampler0, t, 0);
+    if (flags.g > 0.5) return 0.0;
+    float n = noiseAt(uv);
+    bool deep = flags.b > 0.5;
+    float known = deep ? 0.0 : knownBlur(uv, blurUnits);
+    float height = known >= 0.95 ? 0.0 : thicknessFrom(known, n);
+    // Where there's no map at all, nothing shows through: the bank closes over the data's edge.
+    // Deep in it, the noise is stretched so the puffs climb through all three steps.
+    if (deep || sampleKnown(uv) < 0.45) height = max(height, 0.3 + 0.75 * smoothstep(0.32, 0.68, n));
+    return height;
 }
 
-float thickness(vec2 uv) {
-    return thicknessAt(uv, knownSoft(uv));
+// The height step of a puff: -1 outside the clouds, then 0 to 2.
+int puff(float height) {
+    return height <= CLOUD ? -1 : height < 0.55 ? 0 : height < 0.8 ? 1 : 2;
 }
 
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-float biomeAt(ivec2 p) {
-    return floor(texelFetch(Sampler0, clamp(p, ivec2(0), ivec2(255)), 0).g * 255.0 / 32.0 + 0.5);
-}
-
-// Deliberately square, world-anchored ink pixels. Easing changes opacity, never this grid.
-void antiqueMap(ivec2 texel, vec4 mask) {
-    vec2 mapUnits = noiseOrigin * (NOISE_PERIOD * exp2(scaleSteps + 1.0)) + maskUv * unitsPerUv;
-    vec2 pixel = floor(mapUnits / 2.0);
-    vec2 q = mod(pixel, 32.0);
-    vec2 paperUv = mapUnits / 256.0;
-    vec3 paper = texture(Sampler1, paperUv).rgb;
-    paper = mix(vec3(0.92, 0.82, 0.62), paper, 0.45);
-    float known = mix(mask.a, mask.r, revealProgress);
-    if (known >= 1.0) {
-        fragColor = vec4(paper, .13) * ColorModulator;
+void pixelClouds(vec2 index, bool cave) {
+    vec2 c = artCentre(index);
+    vec3 lit = cave ? vec3(0.27, 0.29, 0.36) : mix(vec3(0.15, 0.17, 0.25), vec3(0.98, 0.98, 1.0), daylight);
+    vec3 shade = cave ? vec3(0.05, 0.055, 0.075) : mix(vec3(0.04, 0.05, 0.09), vec3(0.50, 0.56, 0.68), daylight);
+    float here = cloudAt(c);
+    if (underlay) {
+        // Under the tiles: holes in the terrain show the bank's middle tone.
+        if (here <= 0.0 && cloudAt(c + vec2(art, art)) <= 0.0) discard;
+        fragColor = vec4(mix(shade, lit, 0.7), 1.0) * ColorModulator;
         return;
     }
-    float kind = biomeAt(texel);
-    float water = kind == 1.0 ? 1.0 : 0.0;
-    float coast = 0.0;
-    vec2 local = fract(maskUv * MASK_TEXELS);
-    float stroke = min(.5, 1.0 / (unitsPerUv / MASK_TEXELS));
-    if (kind > 0.0) {
-        float west = biomeAt(texel + ivec2(-1, 0)), east = biomeAt(texel + ivec2(1, 0));
-        float north = biomeAt(texel + ivec2(0, -1)), south = biomeAt(texel + ivec2(0, 1));
-        // Unknown cache boundaries are blank paper, never fabricated shorelines.
-        coast = ((local.x < stroke && west > 0.0 && (west == 1.0) != (kind == 1.0))
-            || (local.x > 1.0 - stroke && east > 0.0 && (east == 1.0) != (kind == 1.0))
-            || (local.y < stroke && north > 0.0 && (north == 1.0) != (kind == 1.0))
-            || (local.y > 1.0 - stroke && south > 0.0 && (south == 1.0) != (kind == 1.0))) ? 1.0 : 0.0;
+    if (here <= CLOUD) {
+        // The banks' shadow, a little south-east of them, every other pixel like a dithered sprite.
+        if (mod(index.x + index.y, 2.0) == 0.0 && (cloudAt(c + art * vec2(-1.0, -2.0)) > CLOUD || cloudAt(c + art * vec2(-2.0, -3.0)) > CLOUD)) {
+            fragColor = vec4(shade * 0.6, 0.38) * ColorModulator;
+            return;
+        }
+        discard;
     }
-    float ink = coast * 0.58;
-    // Offset repeated symbols deterministically by a few grid pixels, like a hand-sketched atlas.
-    vec2 cell = floor(pixel / 32.0);
-    q += floor(vec2(hash(cell), hash(cell.yx + 7.0)) * 3.0) - 1.0;
-    if (kind == 1.0) {
-        float wave = mod(q.x + floor(q.y / 3.0), 13.0);
-        if ((q.y == 9.0 || q.y == 21.0) && wave < 7.0) ink = max(ink, .25);
-        paper *= vec3(.93, .92, .87);
-    } else if (kind == 3.0) {
-        float dx = abs(q.x - 16.0);
-        float width = floor((q.y - 6.0) / 3.0) * 2.0 + 2.0;
-        bool crown = q.y >= 6.0 && q.y <= 20.0 && dx <= width && (dx >= width - 1.0 || mod(q.y - 5.0, 3.0) == 0.0);
-        bool trunk = q.x == 16.0 && q.y >= 20.0 && q.y <= 25.0;
-        if (crown || trunk) ink = max(ink, .45);
-    } else if (kind == 4.0) {
-        float stair = floor((q.y - 6.0) / 2.0);
-        float dx = abs(q.x - 16.0);
-        if (q.y >= 6.0 && q.y <= 26.0 && (dx == stair || (q.x > 16.0 && dx < stair && mod(q.x + q.y, 4.0) == 0.0))) ink = max(ink, .48);
-    } else if (kind == 5.0) {
-        if (mod(q.y, 13.0) == 0.0 && mod(q.x, 11.0) < 3.0) ink = max(ink, .22);
-    } else if (kind == 6.0) {
-        if ((q.x == 16.0 && q.y >= 12.0 && q.y <= 20.0) || (q.y == 16.0 && q.x >= 12.0 && q.x <= 20.0)) ink = max(ink, .24);
-    } else if (kind > 0.0) {
-        if ((q.x == 14.0 || q.x == 18.0) && q.y >= 18.0 && q.y <= 20.0) ink = max(ink, .2);
+    // Puffs in three heights, each a flat tone. A step down to the south is the shaded underside
+    // of the puff above it; a step down to the north catches the light.
+    float below = cloudAt(c + vec2(0.0, art));
+    float above = cloudAt(c - vec2(0.0, art));
+    int level = puff(here), south = puff(below), north = puff(above);
+    vec3 color = level == 2 ? mix(shade, lit, 0.98) : level == 1 ? mix(shade, lit, 0.83) : mix(shade, lit, 0.66);
+    if (south < 0) color = mix(shade, lit, 0.36);
+    else if (south < level) color = mix(shade, lit, level == 2 ? 0.7 : 0.52);
+    else if (north < level) color = mix(color, lit * 1.04, 0.6);
+    fragColor = vec4(color, 1.0) * ColorModulator;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Antique map, in pixel art
+//
+// Sampler0: r/a the known endpoints, 0 or 1 per texel and only where terrain is complete;
+// g bits 5-7 the predicted biome class, bit 3 set where every texel nearby is explored, bit 4
+// where no terrain is; b the water share. Sampler1, the parchment, gives the paper its blotches.
+// Colours are drawn in a sepia ink by default, so unknown ground stands apart from the terrain.
+
+const vec3 PAPER = vec3(0.905, 0.815, 0.625);
+const vec3 INK = vec3(0.235, 0.145, 0.075);
+const vec3 BURNT = vec3(0.72, 0.565, 0.36);
+const vec3 COAST = vec3(0.255, 0.27, 0.215);
+const vec3 SHALLOW = vec3(0.585, 0.71, 0.70);
+const vec3 DEEP = vec3(0.45, 0.59, 0.625);
+const vec3 RIPPLE = vec3(0.54, 0.675, 0.69);
+const vec3 FOAM = vec3(0.80, 0.875, 0.85);
+// Known share at an art pixel's centre from which it counts as explored. Above one half, so the
+// line stays inside explored texels and never uncovers ground the terrain doesn't cover.
+const float EXPLORED = 0.75;
+
+// A 16x16 sprite, two bits a pixel (0 none, 1 outline, 2 body, 3 highlight), a uint per row with
+// the leftmost pixel in the lowest bits: two wavelets for open water. Drawn in
+// docs/design/antique-sprites.py, which prints this array. It stands on its centre column at
+// row 13. Land carries no sprites: its biomes read as washes.
+const uint SPRITES[16] = uint[16](
+    0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000014u, 0x0000107Du, 0x00000500u,
+    0x00000000u, 0x00050000u, 0x041F4000u, 0x01400000u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000000u
+);
+
+// Tileable noise, 0..1, from the parchment's alpha with features about `units` map units across.
+// Anchored to the map and blended smoothly between power-of-two scales, so the frayed edge keeps
+// its shape while panning and changes gradually, never in jumps, while zooming.
+float frayNoise(vec2 c, float units, float salt) {
+    float level = log2(units * 10.0);
+    float l0 = floor(level);
+    float a = textureLod(Sampler1, c / min(exp2(l0), anchorPeriod) + salt, 0.0).a;
+    float b = textureLod(Sampler1, c / min(exp2(l0 + 1.0), anchorPeriod) + salt, 0.0).a;
+    return smoothstep(0.3, 0.7, mix(a, b, fract(level)));
+}
+
+// Known share around a point at radius r (map units), from four diagonal taps.
+float knownAround(vec2 uv, float r) {
+    float d = r / unitsPerUv;
+    return (sampleKnown(uv + vec2(d, d)) + sampleKnown(uv + vec2(-d, d)) + sampleKnown(uv + vec2(d, -d))
+        + sampleKnown(uv - vec2(d, d))) * 0.25;
+}
+
+// Whether an art pixel shows explored terrain. The frontier frays like the edge of a hand-coloured
+// map: near it, the share of known ground at two radii is weighed against noise at two scales,
+// so the edge bites in by irregular amounts, wide lobes and small notches, and leaves the odd
+// pocket of fog. Radii and noise are in blocks (growing only once art pixels outgrow them), so
+// zooming keeps the same frayed edge. It only ever moves inward, inside ground the terrain
+// covers. MapViewport's antique reach covers the widest radius.
+bool explored(vec2 c) {
+    vec2 uv = uvAt(c);
+    if (sampleKnown(uv) < EXPLORED) return false;
+    float fine = max(6.0, 2.0 * art), wide = max(22.0, 7.0 * art);
+    if (knownAround(uv, fine) < 0.3 + 0.69 * frayNoise(c, fine * 1.6, 0.0)) return false;
+    return knownAround(uv, wide) >= 0.35 + 0.6 * frayNoise(c, wide * 1.6, 0.37);
+}
+
+float wetAt(vec2 c) {
+    return textureLod(Sampler0, uvAt(c), 0.0).b;
+}
+
+// The land class at a point: the class with the most weight among the four nearest texels, so
+// borders between classes run as smooth curves rather than along texel edges. Water texels don't
+// vote; 0 means no prediction.
+int landClass(vec2 c) {
+    vec2 t = uvAt(c) * maskTexels - 0.5;
+    vec2 b = floor(t);
+    vec2 f = t - b;
+    int k[4] = int[4](maskCode((b + vec2(0.5, 0.5)) / maskTexels) >> 5, maskCode((b + vec2(1.5, 0.5)) / maskTexels) >> 5,
+        maskCode((b + vec2(0.5, 1.5)) / maskTexels) >> 5, maskCode((b + vec2(1.5, 1.5)) / maskTexels) >> 5);
+    float w[4] = float[4]((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    int best = 0;
+    float bestWeight = -1.0;
+    for (int i = 0; i < 4; i++) {
+        if (k[i] == 1) continue;
+        float s = 0.0;
+        for (int j = 0; j < 4; j++) if (k[j] == k[i]) s += w[j];
+        if (s > bestWeight) { bestWeight = s; best = k[i]; }
     }
-    vec3 cartography = mix(paper, vec3(.30, .17, .075), ink);
-    // A narrow square-pixel frontier fades to the detailed map; the paper grain remains everywhere.
-    float unknown = 1.0 - smoothstep(.05, .98, known);
-    float alpha = mix(.13, 1.0, unknown);
-    fragColor = vec4(mix(paper, cartography, unknown), alpha) * ColorModulator;
+    return best;
+}
+
+vec3 classColor(int k) {
+    if (k == 3) return vec3(0.56, 0.635, 0.395);   // forest
+    if (k == 4) return vec3(0.645, 0.615, 0.555);  // mountains
+    if (k == 5) return vec3(0.905, 0.785, 0.55);   // desert
+    if (k == 6) return vec3(0.93, 0.935, 0.92);    // snow
+    if (k == 7) return vec3(0.49, 0.545, 0.385);   // swamp
+    return vec3(0.80, 0.78, 0.55);                 // plains, and land beside water
+}
+
+// Outline, body and highlight colours of the wave sprite.
+vec3 spriteColor(uint v) {
+    return v == 1u ? vec3(0.30, 0.44, 0.49) : v == 2u ? vec3(0.40, 0.55, 0.60) : vec3(0.84, 0.91, 0.90);
+}
+
+// Sepia ink: lightness on a ramp from dark umber to pale parchment. Fills keep to the light end,
+// like washes on paper, so the inked strokes of coasts and sprites carry the drawing. Water is
+// taken a little darker, so seas still read apart from land.
+vec3 sepia(float l) {
+    l = clamp(l, 0.0, 1.0);
+    return l < 0.5 ? mix(vec3(0.20, 0.12, 0.06), vec3(0.58, 0.42, 0.25), l * 2.0)
+        : mix(vec3(0.58, 0.42, 0.25), vec3(0.95, 0.875, 0.71), (l - 0.5) * 2.0);
+}
+
+vec3 inkFill(vec3 c, bool water) {
+    if (colourful) return c;
+    return sepia(0.5 + 0.5 * dot(c, vec3(0.299, 0.587, 0.114)) * (water ? 0.78 : 1.0));
+}
+
+vec3 inkLine(vec3 c) {
+    return colourful ? c : sepia(dot(c, vec3(0.299, 0.587, 0.114)) * 0.85);
+}
+
+// The wave over art pixel `index`, if any, on deep water. Anchors sit on world points spaced a
+// power of two of map units apart, at least 20 art pixels, so they keep their place while panning
+// and their size while zooming out; zooming out an octave drops every other row and column.
+vec4 waveAt(vec2 index) {
+    float spacing = min(exp2(ceil(log2(20.0 * art))), anchorPeriod);
+    vec2 home = floor(artCentre(index) / spacing);
+    for (int y = 1; y >= 0; y--) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 cell = home + vec2(float(x), float(y));
+            if (gridHash(cell, spacing, 53u) >= 0.35) continue;
+            float h1 = gridHash(cell, spacing, 11u), h2 = gridHash(cell, spacing, 23u);
+            vec2 point = (cell + 0.5 + (vec2(h1, h2) - 0.5) * 0.5) * spacing;
+            vec2 local = index - artIndex(point) + vec2(8.0, 13.0);
+            if (any(lessThan(local, vec2(0.0))) || any(greaterThan(local, vec2(15.0)))) continue;
+            uint v = (SPRITES[int(local.y)] >> (2u * uint(local.x))) & 3u;
+            if (v == 0u || wetAt(point) <= 0.88) continue;
+            return vec4(spriteColor(v), 1.0);
+        }
+    }
+    return vec4(0.0);
+}
+
+// The paper: the parchment's large blotches in three flat tones, read at a scale where the
+// blotches stay a few dozen art pixels across.
+float paperTone(vec2 c) {
+    float sheet = min(exp2(ceil(log2(art * 0.25))), max(1.0, anchorPeriod / 1024.0));
+    float l = dot(textureLod(Sampler1, c / (1024.0 * sheet), 0.0).rgb, vec3(1.0 / 3.0));
+    return l < 0.752 ? 0.955 : l > 0.784 ? 1.03 : 1.0;
+}
+
+// Unknown ground at an art pixel: paper, or the predicted biomes, coasts and waves.
+vec3 cartography(vec2 index) {
+    vec2 c = artCentre(index);
+    float tone = paperTone(c);
+    float wet = wetAt(c);
+    bool water = wet >= 0.5;
+    int k = water ? 1 : landClass(c);
+    vec3 color;
+    if (water) {
+        color = wet < 0.62 ? SHALLOW : DEEP;
+        // A dashed line offshore, as engraved charts draw shallows.
+        if (wet >= 0.78 && wet < 0.815 && mod(index.x + 2.0 * index.y, 6.0) < 3.0) color = RIPPLE;
+        for (int i = 0; i < 4; i++) {
+            vec2 n = c + art * (i == 0 ? vec2(1.0, 0.0) : i == 1 ? vec2(-1.0, 0.0) : i == 2 ? vec2(0.0, 1.0) : vec2(0.0, -1.0));
+            if (wetAt(n) < 0.5 && landClass(n) != 0) { color = FOAM; break; }
+        }
+    } else if (k == 0) {
+        return inkFill(PAPER * tone, false);
+    } else {
+        color = classColor(k);
+        bool coast = wetAt(c + vec2(art, 0.0)) >= 0.5 || wetAt(c - vec2(art, 0.0)) >= 0.5
+            || wetAt(c + vec2(0.0, art)) >= 0.5 || wetAt(c - vec2(0.0, art)) >= 0.5;
+        if (coast) {
+            return inkLine(COAST);
+        }
+        // A one-pixel shade along borders between classes, on the east and south side of each.
+        int west = landClass(c - vec2(art, 0.0));
+        int north = landClass(c - vec2(0.0, art));
+        if ((west != k && west != 0) || (north != k && north != 0)) color *= 0.86;
+    }
+    vec4 sprite = water ? waveAt(index) : vec4(0.0);
+    return sprite.a > 0.0 ? inkLine(sprite.rgb) : inkFill(color * tone, water);
+}
+
+void antiqueMap(vec2 index) {
+    vec2 c = artCentre(index);
+    int flags = maskCode(uvAt(c));
+    bool allExplored = (flags & 8) != 0, noneExplored = (flags & 16) != 0;
+    if (underlay) {
+        // Under the tiles: wherever terrain has holes, unknown ground shows, never a flat colour.
+        if (allExplored) discard;
+        fragColor = vec4(cartography(index), 1.0) * ColorModulator;
+        return;
+    }
+    // Away from the frontier the pass underneath already shows all there is.
+    if (allExplored || noneExplored) discard;
+    if (explored(c)) {
+        // A pixel of ink shadow just inside the frontier.
+        if (explored(c + vec2(art, 0.0)) && explored(c - vec2(art, 0.0)) && explored(c + vec2(0.0, art)) && explored(c - vec2(0.0, art))) discard;
+        fragColor = vec4(INK, 0.3) * ColorModulator;
+        return;
+    }
+    // Rings around explored ground: an ink line, then two bands of scorched paper.
+    int ring = 4;
+    for (int i = 0; i < 8 && ring > 1; i++) {
+        vec2 d = vec2(float(i % 3) - 1.0, float(i / 3) - 1.0);
+        if (i >= 4) d = vec2(float((i + 1) % 3) - 1.0, float((i + 1) / 3) - 1.0);
+        if (explored(c + art * d)) ring = 1;
+    }
+    for (int i = 0; i < 8 && ring > 2; i++) {
+        vec2 d = i < 4 ? vec2(i == 0 ? 2.0 : i == 1 ? -2.0 : 0.0, i == 2 ? 2.0 : i == 3 ? -2.0 : 0.0)
+            : vec2(i == 4 || i == 6 ? 2.0 : -2.0, i < 6 ? 1.0 : -1.0);
+        if (explored(c + art * d)) ring = 2;
+    }
+    for (int i = 0; i < 4 && ring > 3; i++) {
+        vec2 d = vec2(i == 0 ? 3.0 : i == 1 ? -3.0 : 0.0, i == 2 ? 3.0 : i == 3 ? -3.0 : 0.0);
+        if (explored(c + art * d)) ring = 3;
+    }
+    vec3 color = cartography(index);
+    if (ring == 1) color = INK;
+    else if (ring == 2) color = mix(color, BURNT, 0.6);
+    else if (ring == 3) color = mix(color, BURNT, 0.3);
+    fragColor = vec4(color, 1.0) * ColorModulator;
+}
+
+// Explored terrain in the antique style: its own colours, lightly desaturated and warmed.
+vec3 antiqueGrade(vec3 c) {
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    return clamp(mix(vec3(l), c, 0.66) * vec3(1.035, 0.99, 0.9) + vec3(0.018, 0.012, 0.0), 0.0, 1.0);
 }
 
 void main() {
@@ -278,106 +527,44 @@ void main() {
     if (params.a == 0.0 && params.b > .99 && params.r > .99 && params.g > .99) {
         vec4 terrain = texture(Sampler0, maskUv);
         if (terrain.a <= 0.0) discard;
-        float value = dot(terrain.rgb, vec3(.299, .587, .114));
-        fragColor = vec4(mix(vec3(.22, .12, .055), vec3(.92, .81, .59), smoothstep(0.0, .95, value)), terrain.a) * ColorModulator;
+        fragColor = vec4(antiqueGrade(terrain.rgb), terrain.a) * ColorModulator;
         return;
     }
+    underlay = maskUv.x > UNDERLAY_SHIFT * 0.5;
+    uv0 = underlay ? maskUv - vec2(UNDERLAY_SHIFT, 0.0) : maskUv;
     seconds = GameTime * 1200.0;
+    // Alpha: mask scale (bits 4-7), antique (8), antique in colour (4), reveal progress high bits.
+    // Red and green: noise offset (bits 5-7); green bits 1-4 reveal progress; red bits 0-4 and
+    // green bit 0 the art pixel (size - 1 in bits 0-1, phase x in 2-3, phase y in 4-5).
+    // Blue: cave (128), noise scale steps (bits 4-6), daylight in sixteenths (bits 0-3).
     noiseOrigin = floor((params.rg * 255.0 + 0.001) / 32.0) / 8.0;
     float alphaCode = floor(params.a * 255.0 + 0.5);
-    unitsPerUv = MASK_TEXELS * 2.0 * exp2(floor(alphaCode / 16.0));
-    fast = mod(floor(alphaCode / 4.0), 2.0) >= 1.0;
+    maskTexels = float(textureSize(Sampler0, 0).x);
+    unitsPerUv = maskTexels * 2.0 * exp2(floor(alphaCode / 16.0));
+    bool antique = mod(floor(alphaCode / 8.0), 2.0) >= 1.0;
+    colourful = mod(floor(alphaCode / 4.0), 2.0) >= 1.0;
     float greenCode = floor(params.g * 255.0 + 0.5);
     revealProgress = (mod(floor(greenCode / 2.0), 16.0) + 16.0 * mod(alphaCode, 4.0)) / 63.0;
+    float pixel = mod(floor(params.r * 255.0 + 0.5), 32.0) + 32.0 * mod(greenCode, 2.0);
+    artPixels = mod(pixel, 4.0) + 1.0;
+    artPhase = vec2(mod(floor(pixel / 4.0), 4.0), floor(pixel / 16.0));
     float fogCode = floor(params.b * 255.0 + 0.5);
     bool cave = fogCode >= 128.0;
     fogCode = mod(fogCode, 128.0);
     scaleSteps = floor(fogCode / 16.0);
-    scaleFraction = mod(fogCode, 16.0) / 16.0;
-    fogScale = exp2(scaleSteps + scaleFraction);
-    // MapViewport.fogReach repeats how far the reads below can reach (these sizes, the blur taps,
-    // the layer shift and the sun probe), to know where the clear and deep flags are safe. Change both together.
+    daylight = mod(fogCode, 16.0) / 15.0;
+    anchorPeriod = NOISE_PERIOD * exp2(scaleSteps + 1.0);
     fogHeight = cave ? 4.0 : 10.0;
     blurUnits = cave ? 2.5 : 7.0;
-    ivec2 texel = clamp(ivec2(floor(maskUv * MASK_TEXELS)), ivec2(0), ivec2(int(MASK_TEXELS) - 1));
-    vec4 flags = texelFetch(Sampler0, texel, 0);
-    if (mod(floor(alphaCode / 8.0), 2.0) >= 1.0) {
-        antiqueMap(texel, flags);
-        return;
+    vec2 index = setUpGrid();
+    // The noise grows with the view past the detailed zoom (0.5 GUI pixels a block), blending the
+    // two whole steps around it; the GUI pixel is close enough to the GUI scale for that.
+    float scaleLog = log2(max(1.0, 0.5 * unitsPerPixel * artPixels));
+    scaleFraction = clamp(scaleLog - scaleSteps, 0.0, 0.9375);
+    fogScale = exp2(scaleSteps + scaleFraction);
+    if (antique) {
+        antiqueMap(index);
+    } else {
+        pixelClouds(index, cave);
     }
-    clear = flags.g > 0.5;
-    deep = flags.b > 0.5;
-
-    // A fully revealed neighborhood contributes exactly zero: avoid the layer march and noise.
-    if (clear) discard;
-
-    float daylight = (mod(floor(params.r * 255.0 + 0.5), 32.0) + 32.0 * mod(greenCode, 2.0)) / 63.0;
-    vec3 lit = cave ? vec3(0.24, 0.26, 0.33) : mix(vec3(0.11, 0.13, 0.20), vec3(0.97, 0.97, 0.99), daylight);
-    vec3 shade = cave ? vec3(0.035, 0.04, 0.055) : mix(vec3(0.025, 0.035, 0.065), vec3(0.48, 0.55, 0.67), daylight);
-    vec2 toSun = vec2(-1.0, -0.4) * (9.0 * fogScale / unitsPerUv);
-
-    // Deep fog has no coverage edges. Its vertical noise travel is only ~6 map units out of
-    // a >=512-unit period: interpolate endpoints instead of re-reading six noises per layer.
-    // Keep the original sampling at the explored frontier, where exact mask reads matter.
-    bool cacheDeep = deep && !fast;
-    vec2 topShift = vec2(0.0, fogHeight * COS_PITCH / unitsPerUv);
-    vec4 deepNoise = vec4(0.0);
-    if (cacheDeep) deepNoise = vec4(noiseAt(maskUv), noiseAt(maskUv + topShift),
-        noiseAt(maskUv + toSun), noiseAt(maskUv + topShift + toSun));
-
-    vec3 color = vec3(0.0);
-    float alpha = 0.0;
-    float jitter = hash(gl_FragCoord.xy) - 0.5;
-    int layers = fast ? FAST_LAYERS : LAYERS;
-    for (int i = 0; i < layers; i++) {
-        float h = fogHeight * (1.0 - (float(i) + 0.5 + jitter * 0.6) / float(layers));
-        vec2 ground = maskUv + vec2(0.0, h * COS_PITCH / unitsPerUv);
-        float th = cacheDeep ? thicknessFrom(0.0, mix(deepNoise.x, deepNoise.y, h / fogHeight)) : thickness(ground);
-        float a = smoothstep(h - 1.4, h + 1.4, th);
-        if (a <= 0.002) {
-            continue;
-        }
-        // More fog between this point and the sun means it sits in shadow.
-        float occlusion = 0.0;
-        if (!fast) {
-            vec2 probe = ground + toSun;
-            float toward = cacheDeep ? thicknessFrom(0.0, mix(deepNoise.z, deepNoise.w, h / fogHeight))
-                : thicknessAt(probe, clear ? 1.0 : knownAt(probe));
-            occlusion = clamp((toward - th) / fogHeight * 2.2, 0.0, 1.0);
-        }
-        float light = clamp(0.2 + 0.7 * (h / fogHeight) + 0.3 - occlusion * 0.7, 0.0, 1.0);
-        vec3 layerColor = mix(shade, lit, light);
-        // Fewer layers each carry more, so the bank stays as thick.
-        float layerAlpha = a * (fast ? 0.85 : 0.45);
-        color += (1.0 - alpha) * layerAlpha * layerColor;
-        alpha += (1.0 - alpha) * layerAlpha;
-        if (alpha > 0.985) {
-            break;
-        }
-    }
-
-    // The ground under a thick bank is never visible.
-    float soft = knownSoft(maskUv);
-    float floorFog = smoothstep(0.5, 2.5, cacheDeep ? thicknessFrom(0.0, deepNoise.x) : thicknessAt(maskUv, soft));
-    color += (1.0 - alpha) * floorFog * shade;
-    alpha += (1.0 - alpha) * floorFog;
-
-    // Ground that is known right here stays visible; fog only rolls over its edges. Caves use the
-    // sharp mask so narrow tunnels stay clear; the surface uses the blurred one so banks stay soft.
-    float here = cave ? knownAt(maskUv) : soft;
-    alpha *= 1.0 - 0.85 * smoothstep(0.45, 0.95, here);
-
-    // Where there is no map at all, nothing should show through, or the edge of the data would
-    // read as a hard line inside the bank.
-    // The cover takes the colour the layers already have here, so it doesn't show as a band.
-    float empty = 1.0 - smoothstep(0.3, 0.85, knownAt(maskUv));
-    vec3 coverColor = alpha > 0.02 ? color / alpha : mix(shade, lit, 0.7);
-    color += (1.0 - alpha) * empty * coverColor;
-    alpha += (1.0 - alpha) * empty;
-
-    if (alpha <= 0.002) {
-        discard;
-    }
-    color += (hash(gl_FragCoord.yx) - 0.5) / 255.0;
-    fragColor = vec4(color / alpha, alpha) * ColorModulator;
 }

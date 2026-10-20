@@ -11,7 +11,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContex
 final class AtomicAppearanceScenario {
     record Probe(TileKey key, MapTile tile, long uploads) {}
     static void run(ClientGameTestContext context, TestSingleplayerContext world) {
-        boolean outlines = Settings.get().outlines, shading = Settings.get().depthShading, grid = Settings.get().chunkGrid;
+        var renderStyle = Settings.get().renderStyle;
+        boolean shading = Settings.get().depthShading, grid = Settings.get().chunkGrid;
         world.getServer().runCommand("tick freeze");
         context.setScreen(MapScreen::new);
         try {
@@ -47,7 +48,7 @@ final class AtomicAppearanceScenario {
                 context.runOnClient(mc -> {
                     if (change == 1) Settings.get().depthShading = !Settings.get().depthShading;
                     else if (change == 2) Settings.get().chunkGrid = !Settings.get().chunkGrid;
-                    else Settings.get().outlines = !Settings.get().outlines;
+                    else Settings.get().renderStyle = Settings.get().renderStyle == Settings.RenderStyle.OUTLINED ? Settings.RenderStyle.PLAIN : Settings.RenderStyle.OUTLINED;
                     Settings.get().save();
                 });
                 context.waitTicks(1);
@@ -73,7 +74,7 @@ final class AtomicAppearanceScenario {
             context.takeScreenshot("atomic-appearance-outline-and-shading");
         } finally {
             context.runOnClient(mc -> {
-                Settings.get().outlines = outlines;
+                Settings.get().renderStyle = renderStyle;
                 Settings.get().depthShading = shading;
                 Settings.get().chunkGrid = grid;
                 Settings.get().save();

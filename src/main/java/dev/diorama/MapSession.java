@@ -70,6 +70,9 @@ public final class MapSession {
 		int roof = level.dimensionType().hasCeiling() ? level.getMinY() + level.dimensionType().logicalHeight() : MapLevel.NO_ROOF;
 		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key),
             EnvironmentLighting.cycles(false, level.dimensionType().hasCeiling(), level.dimensionType().hasSkyLight(), level.dimensionType().hasFixedTime()));
+        // In singleplayer, tiles away from loaded chunks are redrawn from the world's saved chunks
+        // when the map's look changes, so no part of the map keeps an old look.
+        if (key != null) this.map.setSavedTerrain(dev.diorama.data.SavedChunks.open(level));
 	}
 
 	/** {@code .minecraft/diorama/<world>/<dimension>}, or null outside a world. */
@@ -126,6 +129,9 @@ public final class MapSession {
 			}
 		} else if (BlockLooks.isStale()) {
             dev.diorama.render.FogTextures.reload();
+            dev.diorama.render.Markers.reload();
+            dev.diorama.render.BannerAtlas.reload();
+            dev.diorama.render.PaperFrame.reload();
 			BlockLooks.build();
 			session.map.colorsChanged();
 			// Snapshots hold biome tints from the old colormaps. Retake every loaded chunk;
@@ -321,7 +327,8 @@ public final class MapSession {
 		}
 	}
 
-	private void resnapshotLoaded() {
+	/** Snapshots every loaded chunk again. Public for tests. */
+	public void resnapshotLoaded() {
 		LocalPlayer player = mc().player;
 		if (player == null) {
 			return;
@@ -343,7 +350,7 @@ public final class MapSession {
 	}
 
 	private void tickSession(Minecraft mc) {
-        if (this.seedPreview != null && (Settings.get().fogStyle != Settings.FogStyle.ANCIENT_MAP || !Settings.get().seedPreview
+        if (this.seedPreview != null && (!Settings.get().antiqueFog() || !Settings.get().seedPreview
             || (!Settings.get().minimap && !(mc.gui.screen() instanceof MapScreen))))
             this.seedPreview.request(null);
 		LocalPlayer player = mc.player;

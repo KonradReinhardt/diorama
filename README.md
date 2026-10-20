@@ -10,10 +10,10 @@ Places the map has no data for sit under animated fog. Underground, the map swit
 
 ## What it does
 
-- **Minimap** in a corner of your choice, with a compass, coordinates and biome. `=` and `-` zoom it.
+- **Minimap** in a corner of your choice, with a compass, coordinates and biome. `=` and `-` zoom it. Its frame can be a thin border or the paper of a vanilla map held in hand (Settings → Minimap → Frame), with the compass inked on the margin and the map's edge torn into the paper.
 - **Fullscreen map** with smooth, cursor-anchored wheel zoom, from close-up blocks out to about 10,000 blocks across.
 - **Radar** for other players and mobs, each shown as its own face, framed red, yellow or green for hostile, neutral or passive, with markers for whether they're above or below you.
-- **Waypoints** on the map and as labels in the world, plus a marker wherever you die. Share one in chat from its edit screen; shared waypoints, including Xaero's, get an [Add] link in chat. Teleport to one if you're allowed to use `/tp`. Coming from Xaero's Minimap? The waypoint list offers to import its waypoints for the world you're in.
+- **Waypoints** on the map and as labels in the world, plus a marker wherever you die. Each waypoint is a pixel-art banner standing on its block, designed like at the loom: base dye, up to six pattern layers (sixteen if you lift the limit in the settings), every pattern the game has registered, including datapacks' and mods', undo and redo, and a button that copies the banner you're holding. Share one in chat from its edit screen; shared waypoints, including Xaero's, get an [Add] link in chat. Teleport to one if you're allowed to use `/tp`. Coming from Xaero's Minimap? The waypoint list offers to import its waypoints for the world you're in.
 - **Saved map.** Everything your client loads is saved per world and dimension, so the map is still there next time, and you can zoom out over everywhere you've been.
 - **The Nether** from above: the sky view starts under the bedrock roof and shows everything below it, lit by block light.
 - **Overlays** on the fullscreen map: chunk grid, slime chunks (singleplayer) and the spots where monsters can spawn.
@@ -63,11 +63,26 @@ The GitHub Actions workflow builds every supported version and runs selected cli
 Map direction is configured in Settings under Look. North is the default; East, South and West preserve the angled camera.
 Saved maps use separate folders per direction. Existing north-facing maps keep their original paths.
 
-Appearance changes such as outlines, depth shading and quality prepare a complete
+Map pixels stay sharp: tiles are magnified with nearest-neighbour sampling whenever a texture
+pixel covers at least one real screen pixel, GUI scale included; only smaller pixels use mipmaps.
+
+Appearance changes such as the render style, depth shading and quality prepare a complete
 revision in the background and replace resident tiles together. Exploration stays
 visible while it prepares, and distant overviews wait for their updated detail tiles.
-Historical pixels whose terrain is no longer available retain their saved appearance
-until revisited; their original geometry and lighting cannot be recovered from RGB alone.
+In singleplayer on 26.3, tiles whose chunks aren't loaded are redrawn from the chunks
+the world saved, nearest the open views first, including tiles under zoomed-out overviews.
+Only pixels already explored are redrawn; nothing unexplored appears. Each saved tile
+records whether it shows the current look (`appearance.bin`), so a look changed before
+leaving the world is applied the next time those tiles are shown. Elsewhere (multiplayer,
+older versions) historical pixels whose terrain is no longer available retain their saved
+appearance until revisited; their original geometry and lighting cannot be recovered from RGB alone.
+
+`DIORAMA_TESTS=whole-map-refresh` forgets the loaded snapshots, changes the look and checks the
+redraw from saved chunks reveals nothing new.
+
+Reopening a map is fast: tiles no loaded chunk can change are shown straight from disk
+without tracing, up to three tile uploads per GUI frame, and new discoveries ease in
+with a 420 ms ease-out that keeps receding while tiles stream in.
 
 The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> MapTile/TileStore`.
 `BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.
@@ -82,20 +97,46 @@ Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lig
 
 Caves, roofed dimensions and the End retain their existing lighting. Decorative shadows keep a fixed direction; colored-light mods are not modeled. Earlier Fabric versions and NeoForge retain daytime surface rendering until their GPU backends are ported.
 
-Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share a 256 MiB budget, with up to two tile uploads per GUI frame on 26.3.
+Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share a 256 MiB budget, with up to three tile uploads per GUI frame on 26.3.
+
+`DIORAMA_TESTS=banner-waypoints ./gradlew --configure-on-demand :26.3:runClientGameTest` places banner waypoints around the player and captures them on the fullscreen map (both sizes, gathered, on the edge, in sepia), on the minimap (also in its map-paper frame) and in the banner editor, asserting the layout, sharing through chat and editing with undo. See [the design](docs/design/banner-waypoints.md).
 
 `DIORAMA_TESTS=day-night ./gradlew --configure-on-demand :26.3:runClientGameTest` checks real block-light propagation in all four directions and both quality modes, captures lighting states and asserts zero jobs, writes, snapshots or fog-mask rebuilds during a time-only cycle. See [the design](docs/design/day-night-lighting.md) and [validation report](docs/testing/day-night-lighting.md).
 
+## Painted render style
+
+Settings → Look → Render replaces the old outlines toggle with **Plain**, **Outlined** (the
+default, the previous look) and **Painted**. Painted turns explored terrain into a hand-painted
+fantasy map: block textures and soft shading melt into flat areas of paint, light is cel shaded
+(one sunlit colour, one bluish shadow colour), soft sepia ink lines follow edges and colour
+boundaries, coasts are inked with a line of foam, water steps from pale shallows to deep teal
+in flat washes ringed by light lines, and faint brushwork, an uneven wash and paper grain sit on
+top. It is computed while baking tiles, so it works on every version and loader; switching keeps
+exploration and redraws the map like any other look change. Older configs keep their choice:
+outlines on becomes Outlined, off becomes Plain.
+`DIORAMA_TESTS=painted ./gradlew --configure-on-demand :26.3:runClientGameTest` captures a village
+and a coast in Outlined and Painted at three zooms, plus the minimap and night. See
+[the design](docs/design/painted-style.md).
+
 ## Antique map style (fork 0.4.0)
 
-Settings → Look → Fog style offers **Clouds** (the existing default) and **Antique map**.
-Antique map keeps parchment grain and sepia colors everywhere. Explored areas show
-the detailed real terrain; unknown areas show square-pixel ink cartography when a
-compatible seed sampler is available. Both styles ease new discoveries over 600 ms.
-Switching styles does not reset exploration or rebake terrain.
+Settings → Look → Fog style offers **Clouds** (the existing default), **Antique map** (sepia)
+and **Antique map (color)**. Both styles are pixel art: one GUI pixel per art pixel at every
+zoom, aligned to the screen, or one block per art pixel once a block is larger. Clouds are
+terraced pixel puffs with shaded undersides and a dithered shadow.
+Antique map shows explored terrain in its own colors, lightly desaturated and warmed.
+Unknown areas are drawn in sepia ink (or biome colors): parchment, light biome washes,
+pixel coastlines with foam and offshore dashes, and wavelets at sea when a compatible seed
+sampler is available. The explored frontier is a frayed pixel ink line, irregular like a
+hand-colored map, that stays inside the explored terrain. In both styles, terrain holes at the explored
+edge show the unknown style instead of a flat background. Both styles ease new discoveries in
+over 420 ms. Switching styles does not reset exploration or rebake terrain.
 
 Seed cartography initially supports the singleplayer Overworld on **26.3** with
-compatible noise generation, on Fabric and NeoForge. It samples only biomes, never
+compatible noise generation, on Fabric and NeoForge. Biome datapacks (custom biomes,
+noise and parameter lists) are read from the world's own registries; biomes are classed
+by their `minecraft:`/`c:` tags, else by name. Mods with their own chunk generator or
+biome source fall back to plain parchment. It samples only biomes, never
 generates chunks, and does not predict structures or exact height/coastlines.
 Other contexts keep the parchment without prediction. Seed cartography can be
 switched off independently. Older versions retain the paper style and eased zoom.

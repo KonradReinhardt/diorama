@@ -40,12 +40,12 @@ final class StateCanvas implements MapCanvas {
     //? if >=26.3 && fabric {
     @Override
     public void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
-        float x0, float y0, float x1, float y1, dev.diorama.EnvironmentLighting lighting) {
+        float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, dev.diorama.EnvironmentLighting lighting) {
         this.graphics.guiRenderState.addGuiElement(QuadElement.rect(
             DioramaPipelines.MAP_LIGHT,
             StateTexture.pair((StateTexture) day, sampling, (StateTexture) (night == null ? day : night), sampling),
-            new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, 0, 0, 1, 1,
-            (lighting.params(night != null) & 0x00ffffff) | (dev.diorama.Settings.get().fogStyle == dev.diorama.Settings.FogStyle.ANCIENT_MAP ? 0x01000000 : 0xff000000), this.graphics.scissorStack.peek()));
+            new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, u0, v0, u1, v1,
+            (lighting.params(night != null) & 0x00ffffff) | (dev.diorama.Settings.get().antiqueFog() ? 0x01000000 : 0xff000000), this.graphics.scissorStack.peek()));
     }
     //?}
 
@@ -90,10 +90,10 @@ final class StateCanvas implements MapCanvas {
 	}
 
     @Override
-    public void antiqueTile(MapTexture terrain, MapTexture paper, float x0, float y0, float x1, float y1) {
+    public void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1) {
         this.graphics.guiRenderState.addGuiElement(QuadElement.rect(DioramaPipelines.FOG,
-            StateTexture.pair((StateTexture)terrain, Sampling.TILE_CRISP, (StateTexture)paper, Sampling.REPEAT_LINEAR),
-            new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, 0, 0, 1, 1, 0x00ffffff,
+            StateTexture.pair((StateTexture)terrain, sampling, (StateTexture)paper, Sampling.REPEAT_LINEAR),
+            new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, u0, v0, u1, v1, 0x00ffffff,
             this.graphics.scissorStack.peek()));
     }
 }

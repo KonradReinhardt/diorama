@@ -53,6 +53,18 @@ final class AntiqueFogScenario {
             context.takeScreenshot("antique-unexplored-paper-fallback");
             *///?}
 
+            // The explored frontier with a prediction beyond it: the edge, washes and symbols together.
+            frontier(context, .6);
+            context.takeScreenshot("antique-frontier");
+            frontier(context, 2.5);
+            context.takeScreenshot("antique-frontier-close");
+            frontier(context, .2);
+            context.takeScreenshot("antique-frontier-far");
+            context.runOnClient(mc -> { Settings.get().fogStyle = Settings.FogStyle.ANCIENT_MAP_COLOR; Settings.get().save(); });
+            frontier(context, .6);
+            context.takeScreenshot("antique-color-frontier");
+            context.runOnClient(mc -> { Settings.get().fogStyle = Settings.FogStyle.ANCIENT_MAP; Settings.get().save(); });
+
             // Move back to the player and exercise wheel easing through the actual screen frame path.
             context.runOnClient(mc -> {
                 var p = mc.player;
@@ -75,9 +87,27 @@ final class AntiqueFogScenario {
             context.runOnClient(mc -> { Settings.get().fogStyle = Settings.FogStyle.CLOUDS; Settings.get().save(); });
             context.waitTicks(25);
             context.takeScreenshot("clouds-retained-style");
+            frontier(context, .6);
+            context.takeScreenshot("clouds-frontier");
+            frontier(context, 2.5);
+            context.takeScreenshot("clouds-frontier-close");
+            frontier(context, .2);
+            context.takeScreenshot("clouds-frontier-far");
         } finally {
             context.runOnClient(mc -> { Settings.get().fogStyle = original; Settings.get().seedPreview = seed; Settings.get().save(); });
             world.getServer().runCommand("tick unfreeze");
         }
+    }
+
+    /** Centres the map just past the edge of the explored area east of the player, at this zoom. */
+    private static void frontier(ClientGameTestContext context, double zoom) {
+        context.runOnClient(mc -> {
+            var p = mc.player;
+            double x = p.getX() + mc.options.renderDistance().get() * 16 * .8;
+            ((MapScreen)mc.gui.screen()).lookAt(Projection.u(x, p.getZ()), Projection.worldV(x, 64, p.getZ()), zoom, TileKey.SURFACE);
+        });
+        context.waitTicks(20);
+        context.waitFor(mc -> MapSession.get().map().bakingCount() == 0, 1200);
+        context.waitTicks(40);
     }
 }
