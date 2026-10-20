@@ -140,5 +140,6 @@
 	"diorama.settings.minimap_frame": "Frame",
 	"diorama.settings.minimap_frame.plain": "Plain",
 	"diorama.settings.minimap_frame.map": "Map paper",
-	"diorama.settings.minimap_frame.map_cutout": "Map sheet"
+	"diorama.settings.minimap_frame.map_cutout": "Map sheet",
+	"diorama.settings.title_minimap": "Minimap settings"
 }
