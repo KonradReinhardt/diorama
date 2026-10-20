@@ -23,6 +23,8 @@ neoForge {
 	version = property("neoforge_version") as String
 	addModdingDependenciesTo(gameshim)
 	addModdingDependenciesTo(gametest)
+    // CPU regression tests inspect copied light arrays, without launching a modded client.
+    addModdingDependenciesTo(sourceSets.test.get())
 
 	mods {
 		register("diorama") { sourceSet(main) }
