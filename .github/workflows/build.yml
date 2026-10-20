@@ -1,7 +1,9 @@
 name: Build and test
 on:
   push:
+    branches: [development]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

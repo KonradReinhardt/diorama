@@ -36,4 +36,8 @@ The Mod Menu dependency is compile-only by default. The `dioramaModMenuTest` pro
 
 GitHub Actions declares a build matrix for all 21 supported version/loader targets and three client-test jobs (map regressions, lighting and optional Mod Menu). Fork workflows may need to be enabled in GitHub before they run. A declared matrix is not evidence that every version has passed; inspect each run before preparing a release.
 
+Automatic push builds run on `development`; pull requests and manual workflow runs
+can validate topic branches. Publishing the same integration on multiple branch
+names therefore does not start duplicate full matrices.
+
 See [the day/night design](docs/design/day-night-lighting.md) for the feature's scope, compatibility policy and performance gates, and [its validation report](docs/testing/day-night-lighting.md) for measured results.
