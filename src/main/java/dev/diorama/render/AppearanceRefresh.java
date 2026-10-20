@@ -22,6 +22,7 @@ final class AppearanceRefresh {
     }
 
     boolean ready(TileKey key) { return versions.containsKey(key) && !pending.contains(key); }
+    boolean tracks(TileKey key) { return pending.contains(key) || versions.containsKey(key) || diskOnly.contains(key); }
 
     void stage(TileImage image, TileFreshness.Version version) {
         stage(image, version, true);

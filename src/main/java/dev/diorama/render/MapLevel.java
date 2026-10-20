@@ -428,7 +428,7 @@ public final class MapLevel implements ChunkSource {
 				if (layer == TileKey.SURFACE && this.store != null && terrain) {
 					this.unsaved.put(key, now);
 				}
-                boolean refreshSource = this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.contains(key);
+                boolean refreshSource = this.appearanceRefresh != null && this.appearanceRefresh.tracks(key);
                 if (refreshSource) this.appearanceRefresh.pending.add(key);
 				if (!this.tiles.containsKey(key) && !this.inFlight.contains(key) && !refreshSource) {
 					continue;

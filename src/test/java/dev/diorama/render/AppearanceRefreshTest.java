@@ -12,8 +12,11 @@ class AppearanceRefreshTest {
         assertFalse(refresh.ready(key));
         refresh.stage(TileImage.full(key, new int[][]{new int[]{-1}}, new byte[]{-1}), new TileFreshness.Version(0, 0));
         for (int frame = 0; frame < 1000; frame++) assertTrue(refresh.ready(key));
+        assertTrue(refresh.tracks(key), "A staged cache miss must still receive terrain invalidations");
         refresh.pending.add(key);
         assertFalse(refresh.ready(key));
+        refresh.forget(key);
+        assertFalse(refresh.tracks(key));
     }
     @Test void evictingDetailCannotLetItsOldParentCommitBeforeTheNewChild() {
         TileKey key = new TileKey(TileKey.SURFACE, -1, -1);
