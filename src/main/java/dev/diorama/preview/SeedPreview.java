@@ -94,7 +94,8 @@ public final class SeedPreview implements AutoCloseable {
             Bounds published = null;
             while (!closed) {
                 Bounds view = wanted;
-                if (view == null || System.nanoTime() - movedAt < 250_000_000L) { pause(50_000_000L); continue; }
+                if (view == null) { LockSupport.park(); continue; }
+                if (System.nanoTime() - movedAt < 250_000_000L) { pause(50_000_000L); continue; }
                 List<Key> keys = regions(view);
                 if (published != view) {
                     for (Key key : keys) {
@@ -124,7 +125,7 @@ public final class SeedPreview implements AutoCloseable {
                         }
                     }
                 }
-                if (!didWork) pause(100_000_000L);
+                if (!didWork && wanted == view) LockSupport.park();
             }
         } catch (Exception error) {
             unavailable = error.getClass().getSimpleName() + ": " + error.getMessage();

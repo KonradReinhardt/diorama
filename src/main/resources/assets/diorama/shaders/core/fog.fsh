@@ -312,6 +312,15 @@ void main() {
     vec3 shade = cave ? vec3(0.035, 0.04, 0.055) : mix(vec3(0.025, 0.035, 0.065), vec3(0.48, 0.55, 0.67), daylight);
     vec2 toSun = vec2(-1.0, -0.4) * (9.0 * fogScale / unitsPerUv);
 
+    // Deep fog has no coverage edges. Its vertical noise travel is only ~6 map units out of
+    // a >=512-unit period: interpolate endpoints instead of re-reading six noises per layer.
+    // Keep the original sampling at the explored frontier, where exact mask reads matter.
+    bool cacheDeep = deep && !fast;
+    vec2 topShift = vec2(0.0, fogHeight * COS_PITCH / unitsPerUv);
+    vec4 deepNoise = vec4(0.0);
+    if (cacheDeep) deepNoise = vec4(noiseAt(maskUv), noiseAt(maskUv + topShift),
+        noiseAt(maskUv + toSun), noiseAt(maskUv + topShift + toSun));
+
     vec3 color = vec3(0.0);
     float alpha = 0.0;
     float jitter = hash(gl_FragCoord.xy) - 0.5;
@@ -319,7 +328,7 @@ void main() {
     for (int i = 0; i < layers; i++) {
         float h = fogHeight * (1.0 - (float(i) + 0.5 + jitter * 0.6) / float(layers));
         vec2 ground = maskUv + vec2(0.0, h * COS_PITCH / unitsPerUv);
-        float th = thickness(ground);
+        float th = cacheDeep ? thicknessFrom(0.0, mix(deepNoise.x, deepNoise.y, h / fogHeight)) : thickness(ground);
         float a = smoothstep(h - 1.4, h + 1.4, th);
         if (a <= 0.002) {
             continue;
@@ -328,7 +337,8 @@ void main() {
         float occlusion = 0.0;
         if (!fast) {
             vec2 probe = ground + toSun;
-            float toward = thicknessAt(probe, clear ? 1.0 : knownAt(probe));
+            float toward = cacheDeep ? thicknessFrom(0.0, mix(deepNoise.z, deepNoise.w, h / fogHeight))
+                : thicknessAt(probe, clear ? 1.0 : knownAt(probe));
             occlusion = clamp((toward - th) / fogHeight * 2.2, 0.0, 1.0);
         }
         float light = clamp(0.2 + 0.7 * (h / fogHeight) + 0.3 - occlusion * 0.7, 0.0, 1.0);
@@ -344,7 +354,7 @@ void main() {
 
     // The ground under a thick bank is never visible.
     float soft = knownSoft(maskUv);
-    float floorFog = smoothstep(0.5, 2.5, thicknessAt(maskUv, soft));
+    float floorFog = smoothstep(0.5, 2.5, cacheDeep ? thicknessFrom(0.0, deepNoise.x) : thicknessAt(maskUv, soft));
     color += (1.0 - alpha) * floorFog * shade;
     alpha += (1.0 - alpha) * floorFog;
 
