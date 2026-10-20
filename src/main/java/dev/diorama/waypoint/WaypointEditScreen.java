@@ -205,22 +205,27 @@ public final class WaypointEditScreen extends Screen {
 	/** Sends the waypoint to chat for others to add. */
 	private void share() {
 		Waypoint shown = this.shown();
-		if (shown == null) {
-			return;
+		if (shown != null && shareInChat(shown)) {
+			this.onClose();
 		}
-		java.util.Optional<String> text = WaypointShare.format(shown);
+	}
+
+	/** Sends a waypoint to chat for others to add; false, with a note in chat, if it can't be. */
+	public static boolean shareInChat(Waypoint waypoint) {
+		net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+		java.util.Optional<String> text = WaypointShare.format(waypoint);
 		if (text.isEmpty()) {
 			//? if >=26.1 {
-			this.minecraft.gui.hud.getChat().addClientSystemMessage(Component.translatable("diorama.share.too_long"));
+			mc.gui.hud.getChat().addClientSystemMessage(Component.translatable("diorama.share.too_long"));
 			//?} else {
-			/*this.minecraft.gui.getChat().addMessage(Component.translatable("diorama.share.too_long"));
+			/*mc.gui.getChat().addMessage(Component.translatable("diorama.share.too_long"));
 			*///?}
-			return;
+			return false;
 		}
-		if (this.minecraft.player != null) {
-			this.minecraft.player.connection.sendChat(text.get());
+		if (mc.player != null) {
+			mc.player.connection.sendChat(text.get());
 		}
-		this.onClose();
+		return true;
 	}
 
 	private void teleport() {
@@ -235,7 +240,7 @@ public final class WaypointEditScreen extends Screen {
 	}
 
 	/** The server only sends the commands a player may use, so {@code tp} being there means it's allowed. */
-	static boolean canTeleport() {
+	public static boolean canTeleport() {
 		var connection = net.minecraft.client.Minecraft.getInstance().getConnection();
 		return connection != null && connection.getCommands().getRoot().getChild("tp") != null;
 	}

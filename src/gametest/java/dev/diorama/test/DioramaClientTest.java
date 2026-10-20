@@ -108,6 +108,7 @@ public class DioramaClientTest implements FabricClientGameTest {
             if (tests.contains("antique-fog")) AntiqueFogScenario.run(context, world);
             if (tests.contains("painted")) PaintedStyleScenario.run(context, world);
             if (tests.contains("banner-waypoints")) BannerWaypointsScenario.run(context, world);
+            if (tests.contains("book-map")) BookMapScenario.run(context, world);
             if (tests.contains("day-night")) DayNightScenario.run(context, world);
             if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
 			if (tests.contains("styles")) {
@@ -1351,16 +1352,16 @@ public class DioramaClientTest implements FabricClientGameTest {
 		context.getInput().moveCursor(80, 40);
 		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
 		context.waitTicks(3);
-		boolean dragOpenedEditor = context.computeOnClient(mc -> mc.gui.screen() instanceof WaypointEditScreen);
+		boolean dragOpenedEditor = context.computeOnClient(mc -> !(mc.gui.screen() instanceof MapScreen map) || map.book().isOpen());
 		if (dragOpenedEditor) {
-			throw new AssertionError("Dragging from a waypoint opened its editor");
+			throw new AssertionError("Dragging from a waypoint opened its page in the book");
 		}
 		lookAtPlayer(context, 4.0, TileKey.SURFACE);
 		context.waitTicks(3);
 
-		// Right-click a spot left of the player: the editor opens on the block shown there, which
-		// is the first solid block on the camera ray through that point (a canopy can hide the
-		// ground behind it).
+		// Right-click a spot left of the player: a new banner waits in the map's book on the block
+		// shown there, which is the first solid block on the camera ray through that point (a canopy
+		// can hide the ground behind it). The classic editor then checks the fields on it.
 		double[] click = context.computeOnClient(mc -> {
 			MapScreen screen = (MapScreen) mc.gui.screen();
 			MapViewport.View view = screen.view();
@@ -1372,17 +1373,23 @@ public class DioramaClientTest implements FabricClientGameTest {
 		context.getInput().setCursorPos(click[2], click[3]);
 		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
 		context.waitTicks(3);
+		Waypoint planted = context.computeOnClient(mc -> mc.gui.screen() instanceof MapScreen map && map.book().drafting() ? map.book().picked() : null);
+		if (planted == null) {
+			throw new AssertionError("Right-clicking the map didn't plant a new banner in the book");
+		}
+		context.takeScreenshot("waypoints-04a-planted-in-book");
+		context.setScreen(() -> new WaypointEditScreen(null, planted, true));
 		boolean editorOpen = context.computeOnClient(mc -> mc.gui.screen() instanceof WaypointEditScreen);
 		if (!editorOpen) {
-			throw new AssertionError("Right-clicking the map didn't open the waypoint editor");
+			throw new AssertionError("The waypoint editor didn't open");
 		}
 		context.waitTicks(5);
 		context.takeScreenshot("waypoints-04-editor");
 
 		// A coordinate that isn't a number turns red and Save stays off, instead of saving the old
 		// coordinate. What's typed survives a GUI scale change, which rebuilds the screen.
-		String pickedX = context.computeOnClient(mc -> editBoxes(mc.gui.screen()).get(2).getValue());
-		typeInto(context, 2, "abc");
+		String pickedX = context.computeOnClient(mc -> editBoxes(mc.gui.screen()).get(1).getValue());
+		typeInto(context, 1, "abc");
 		clickButton(context, "diorama.waypoint.save");
 		boolean savedBadX = context.computeOnClient(mc -> !(mc.gui.screen() instanceof WaypointEditScreen) || WaypointStore.get().all().size() != 2);
 		if (savedBadX) {
@@ -1391,12 +1398,12 @@ public class DioramaClientTest implements FabricClientGameTest {
 		int guiScale = context.computeOnClient(mc -> mc.options.guiScale().get());
 		setGuiScale(context, 4);
 		context.takeScreenshot("waypoints-04b-editor-bad-x");
-		String keptX = context.computeOnClient(mc -> editBoxes(mc.gui.screen()).get(2).getValue());
+		String keptX = context.computeOnClient(mc -> editBoxes(mc.gui.screen()).get(1).getValue());
 		setGuiScale(context, guiScale);
 		if (!keptX.equals("abc")) {
 			throw new AssertionError("Changing GUI scale replaced the typed X with " + keptX);
 		}
-		typeInto(context, 2, pickedX);
+		typeInto(context, 1, pickedX);
 		clickButton(context, "diorama.waypoint.save");
 		context.waitTicks(5);
 		int count = context.computeOnClient(mc -> WaypointStore.get().all().size());
@@ -1582,14 +1589,14 @@ public class DioramaClientTest implements FabricClientGameTest {
 		context.waitFor(mc -> mc.gui.screen() instanceof WaypointEditScreen, 100);
 		context.waitTicks(2);
 		context.runOnClient(mc -> {
-			// What the editor shows: name, initials, x, y, z.
+			// What the editor shows: name, x, y, z (banners replaced the initials field).
 			java.util.List<String> shown = new java.util.ArrayList<>();
 			for (var child : mc.gui.screen().children()) {
 				if (child instanceof net.minecraft.client.gui.components.EditBox box) {
 					shown.add(box.getValue());
 				}
 			}
-			if (!shown.equals(java.util.List.of("Old Mine", "O", "120", "40", "-80"))) {
+			if (!shown.equals(java.util.List.of("Old Mine", "120", "40", "-80"))) {
 				throw new AssertionError("The editor shows " + shown);
 			}
 		});
@@ -1610,8 +1617,8 @@ public class DioramaClientTest implements FabricClientGameTest {
 					boxes.add(box);
 				}
 			}
-			// Name, initials, x, y, z.
-			boxes.get(2).setValue(Integer.toString(editedX));
+			// Name, x, y, z.
+			boxes.get(1).setValue(Integer.toString(editedX));
 			net.minecraft.client.gui.components.Button teleport = buttonLabelled(mc.gui.screen(), "Teleport");
 			if (!teleport.active) {
 				throw new AssertionError("Teleport is off in a world where the player may use /tp");

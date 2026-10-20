@@ -41,6 +41,15 @@ public interface TestInput {
 	/** Presses and releases the key or mouse button bound to the mapping, then waits a tick. */
 	void pressKey(KeyMapping keyMapping);
 
+	/** Presses and releases a keyboard key by its GLFW code, then waits a tick. */
+	void pressKey(int keyCode);
+
+	/** Holds a keyboard key down by its GLFW code until {@link #releaseKey}. */
+	void holdKey(int keyCode);
+
+	/** Releases a keyboard key held with {@link #holdKey}. */
+	void releaseKey(int keyCode);
+
 	/** Types the characters, as the keyboard would send them to the focused text field. */
 	void typeChars(String chars);
 

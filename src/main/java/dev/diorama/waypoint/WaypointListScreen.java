@@ -3,7 +3,6 @@ package dev.diorama.waypoint;
 import dev.diorama.DioramaClient;
 import dev.diorama.render.MapIcons;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -58,10 +57,7 @@ public final class WaypointListScreen extends Screen {
 		this.rows.clear();
 		WaypointStore store = WaypointStore.get();
 		LocalPlayer player = this.minecraft.player;
-		if (store != null && player != null && this.minecraft.level != null) {
-			this.rows.addAll(store.in(this.minecraft.level.dimension().identifier().toString()));
-			this.rows.sort(Comparator.comparingDouble(w -> w.distanceTo(player.getX(), player.getY(), player.getZ())));
-		}
+		this.rows.addAll(WaypointListModel.rows());
 		if (!this.xaeroRead) {
 			this.xaeroRead = true;
 			this.xaero = XaeroImport.find();
@@ -199,19 +195,10 @@ public final class WaypointListScreen extends Screen {
 
 	/** Imports one of Xaero's worlds and says how it went. */
 	void importFrom(XaeroImport.World world) {
-		WaypointStore store = WaypointStore.get();
-		if (store == null || this.minecraft.level == null) {
-			return;
+		Component imported = WaypointListModel.importFrom(world);
+		if (imported != null) {
+			this.imported = imported;
 		}
-		List<Waypoint> added = XaeroImport.importInto(world, store);
-		String here = this.minecraft.level.dimension().identifier().toString();
-		long elsewhere = added.stream().filter(w -> !w.dimension.equals(here)).count();
-		Component count = added.size() == 1
-			? Component.translatable("diorama.xaero.count_one")
-			: Component.translatable("diorama.xaero.count", added.size());
-		this.imported = elsewhere == 0
-			? Component.translatable("diorama.xaero.imported", count)
-			: Component.translatable("diorama.xaero.imported_elsewhere", count, elsewhere);
 	}
 
 	/** The text, cut to the width with an ellipsis the way vanilla clips a label, if it's wider. */

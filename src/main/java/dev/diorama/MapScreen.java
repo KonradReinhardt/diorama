@@ -7,16 +7,23 @@ import dev.diorama.bake.TileKey;
 import dev.diorama.render.MapViewport;
 import dev.diorama.render.Markers;
 import dev.diorama.render.Radar;
+import dev.diorama.ui.BookSprites;
+import dev.diorama.ui.BookWidgets;
+import dev.diorama.ui.MapBook;
+import dev.diorama.ui.OpeningZoom;
 import dev.diorama.waypoint.Waypoint;
-import dev.diorama.waypoint.WaypointEditScreen;
-import dev.diorama.waypoint.WaypointListScreen;
 import dev.diorama.waypoint.WaypointOverlay;
 import dev.diorama.waypoint.WaypointStore;
 import dev.diorama.waypoint.Waypoints;
 import net.minecraft.core.BlockPos;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Renderable;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 //? if >=1.21.9 {
 import net.minecraft.client.input.KeyEvent;
@@ -30,9 +37,10 @@ import com.mojang.blaze3d.platform.InputConstants;
 
 /**
  * The fullscreen map: drag to pan, scroll to zoom, C for caves, PgUp/PgDn to move the slice,
- * right-click to add a waypoint, click a waypoint to edit it.
+ * right-click to plant a waypoint, click a waypoint to pick it. Its menus are a {@link MapBook}
+ * over the map, opened by the ribbons at its right edge. It opens with a short zoom in.
  */
-public final class MapScreen extends Screen {
+public final class MapScreen extends Screen implements MapBook.Host {
 	/** How far out the saved surface map zooms; overview tiles make it cheap. */
 	private static final double MIN_ZOOM = 0.04;
 
@@ -54,6 +62,17 @@ public final class MapScreen extends Screen {
 	private double pressX;
 	private double pressY;
 	private boolean dragged;
+	/** The press started on the book, so it neither pans nor clicks the map. */
+	private boolean pressOnBook;
+	private final MapBook book = new MapBook(this);
+	private final OpeningZoom opening = new OpeningZoom();
+	/** init() has run once: later runs (a resize, coming back from a screen) don't zoom in again. */
+	private boolean opened;
+	/** Where "Center" on a waypoint is gliding the view to, or null. */
+	private double @Nullable [] panTarget;
+	private BookWidgets.@Nullable Mark help;
+	/** Until when the controls show by themselves: the first seconds the map is open in a session. */
+	private static long helpUntil;
 
 	public MapScreen() {
 		super(Component.translatable("diorama.screen.title"));
@@ -65,8 +84,27 @@ public final class MapScreen extends Screen {
 	@Override
 	protected void init() {
         this.lastZoomFrame = System.nanoTime();
-		this.addRenderableWidget(Button.builder(Component.translatable("diorama.settings.button"), b ->
-			this.minecraft.gui.setScreen(new SettingsScreen(this))).bounds(this.width - 64, 0, 64, 14).build());
+		if (!this.opened) {
+			this.opened = true;
+			// Start on a whole pixel step, where the view rests, so the zoom in ends without a snap.
+			this.zoom = this.wholeStep(this.zoom);
+			this.smoothZoom.reset(this.zoom);
+			this.opening.start(this.lastZoomFrame);
+			if (helpUntil == 0) {
+				helpUntil = System.currentTimeMillis() + 6000;
+			}
+		}
+		this.book.build(this.width, this.height);
+		this.help = this.addRenderableWidget(new BookWidgets.Mark(6, this.height - 18, BookSprites.HELP, BookSprites.HELP_HOVER,
+			Component.translatable("diorama.book.help_name"), null));
+		this.help.setTooltip(Tooltip.create(Component.translatable("diorama.book.help")));
+	}
+
+	/** The zoom drawn pixel perfect nearest {@code zoom}, as {@link MapViewport.View#pixelPerfect} snaps it. */
+	private double wholeStep(double zoom) {
+		double gui = this.minecraft.getWindow().getGuiScale();
+		double perMapPixel = zoom * gui / Projection.PIXELS_PER_UNIT;
+		return perMapPixel < 1 ? zoom : Math.round(perMapPixel) * Projection.PIXELS_PER_UNIT / gui;
 	}
 
 	@Override
@@ -92,10 +130,21 @@ public final class MapScreen extends Screen {
         }
 		long zoomNow = System.nanoTime();
         var zoomStep = this.smoothZoom.advance((zoomNow - this.lastZoomFrame) / 1e9, this.centerU, this.centerV, this.minZoom());
+        double seconds = (zoomNow - this.lastZoomFrame) / 1e9;
         this.lastZoomFrame = zoomNow;
         this.zoom = zoomStep.zoom();
         this.centerU = zoomStep.centerU();
         this.centerV = zoomStep.centerV();
+		if (this.panTarget != null) {
+			double t = 1 - Math.exp(-Math.max(0, Math.min(0.1, seconds)) / 0.08);
+			this.centerU += (this.panTarget[0] - this.centerU) * t;
+			this.centerV += (this.panTarget[1] - this.centerV) * t;
+			if (Math.abs(this.panTarget[0] - this.centerU) * this.zoom < 0.25 && Math.abs(this.panTarget[1] - this.centerV) * this.zoom < 0.25) {
+				this.centerU = this.panTarget[0];
+				this.centerV = this.panTarget[1];
+				this.panTarget = null;
+			}
+		}
 		Vec3 pos = player.getPosition(a);
 		double playerU = Projection.u(pos.x, pos.z);
 		double playerV = Projection.worldV(pos.x, pos.y, pos.z);
@@ -105,21 +154,25 @@ public final class MapScreen extends Screen {
 		}
 		// Switching to a cave slice while zoomed far out comes back to the closest zoom it can show.
 		this.zoom = Math.max(this.minZoom(), this.zoom);
-		// Drawn pixel perfect once the zoom comes to rest; while it eases it is drawn as it is, so it
-		// glides instead of stepping. The smooth zoom and pan keep their own exact values.
-		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, this.zoom, this.layer);
-		if (!this.smoothZoom.moving()) view = view.pixelPerfect();
+		// Drawn pixel perfect once the zoom comes to rest; while it eases (the wheel, or the zoom in as
+		// the map opens) it is drawn as it is, so it glides instead of stepping. The smooth zoom and pan
+		// keep their own exact values, and the opening only scales the zoom drawn.
+		double drawnZoom = Math.max(this.minZoom(), this.zoom * this.opening.factor(zoomNow));
+		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, drawnZoom, this.layer);
+		if (!this.smoothZoom.moving() && !this.opening.running(zoomNow) && this.panTarget == null) view = view.pixelPerfect();
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		Radar.Blip hovered = null;
 		this.blips = List.of();
+		// Nothing on the map under the book or a ribbon is pointed at.
+		boolean onMap = !this.book.covers(mouseX, mouseY) && !this.book.onRibbon(mouseX, mouseY);
 		if (ServerRules.radarAllowed()) {
 			this.blips = Radar.collect(view, a, true);
 			Radar.draw(graphics, view, this.blips, true, false);
-			hovered = Radar.under(this.blips, mouseX, mouseY);
+			hovered = onMap ? Radar.under(this.blips, mouseX, mouseY) : null;
 		}
 		WaypointStore store = WaypointStore.get();
 		this.pins = store == null || !Settings.get().waypointsOnMap ? List.of() : WaypointOverlay.layout(view, store.in(this.minecraft.level.dimension().identifier().toString()), true);
-		WaypointOverlay.Pin hoveredPin = WaypointOverlay.under(this.pins, mouseX, mouseY);
+		WaypointOverlay.Pin hoveredPin = onMap ? WaypointOverlay.under(this.pins, mouseX, mouseY) : null;
 		WaypointOverlay.draw(graphics, view, this.pins, true, hoveredPin);
 		Radar.draw(graphics, view, this.blips, true, true);
 		Markers.player(graphics, view.screenX(playerU), view.screenY(playerV), player.getViewYRot(a), 2);
@@ -133,27 +186,51 @@ public final class MapScreen extends Screen {
 			graphics.setTooltipForNextFrame(this.font, Radar.describe(hovered, player), mouseX, mouseY);
 		}
 
-		String mode = this.layer != TileKey.SURFACE
-			? "Cave slice at y=" + this.layer
-			: session.map().roofless() ? "Under the roof" : "Surface";
-		String status = String.format(
-			"%s   ·   %d, %d, %d   ·   %d chunks%s",
-			mode, player.getBlockX(), player.getBlockY(), player.getBlockZ(), session.map().chunkCount(),
-			session.map().bakingCount() > 0 || session.map().refreshingAppearance() ? "   ·   baking" : ""
-		);
-		graphics.fill(0, 0, this.width, 14, 0x90000000);
-		graphics.text(this.font, status, 6, 3, 0xFFFFFFFF, false);
-		String help = "Drag pan · Scroll zoom · Right-click add waypoint · U waypoints · C caves · PgUp/PgDn slice · Space recenter";
-		graphics.fill(0, this.height - 14, this.width, this.height, 0x90000000);
-		// Shrink the help line rather than cut it off on narrow screens.
-		float helpScale = Math.min(1, (this.width - 12) / (float) this.font.width(help));
-		graphics.pose().pushMatrix();
-		graphics.pose().translate(6, this.height - 7 - 4 * helpScale);
-		graphics.pose().scale(helpScale);
-		graphics.text(this.font, help, 0, 0, 0xFFC8D0DA, false);
-		graphics.pose().popMatrix();
-		// Widgets (the settings button) draw over the map.
+		if (!this.book.isOpen()) {
+			this.status(graphics, session, player);
+			if (System.currentTimeMillis() < helpUntil) {
+				this.helpCard(graphics);
+			}
+		}
+		if (this.help != null) {
+			this.help.visible = !this.book.isOpen();
+		}
+		this.book.frame(zoomNow);
+		// The book and its widgets draw over the map and its labels.
+		BookSprites.above(graphics);
+		this.book.drawBehind(graphics);
 		super.extractRenderState(graphics, mouseX, mouseY, a);
+	}
+
+	/** Where the player is and what the map shows, on a slip of parchment in the top left corner. */
+	private void status(GuiGraphicsExtractor graphics, MapSession session, LocalPlayer player) {
+		Component mode = this.layer != TileKey.SURFACE
+			? Component.translatable("diorama.book.status.cave", this.layer)
+			: Component.translatable(session.map().roofless() ? "diorama.book.status.roofless" : "diorama.book.status.surface");
+		net.minecraft.network.chat.MutableComponent status = Component.empty().append(mode)
+			.append("  ·  " + player.getBlockX() + ", " + player.getBlockY() + ", " + player.getBlockZ() + "  ·  ")
+			.append(Component.translatable("diorama.book.status.chunks", session.map().chunkCount()));
+		if (session.map().bakingCount() > 0 || session.map().refreshingAppearance()) {
+			status.append("  ·  ").append(Component.translatable("diorama.book.status.baking"));
+		}
+		Component shown = BookWidgets.fit(status, this.width - 60);
+		BookSprites.nine(graphics, BookSprites.LABEL, 4, 4, this.font.width(shown) + 12, 16, -1, true);
+		graphics.text(this.font, shown, 10, 8, BookSprites.INK, false);
+	}
+
+	/** The controls, beside the help seal, for the first seconds the map is open. */
+	private void helpCard(GuiGraphicsExtractor graphics) {
+		List<net.minecraft.util.FormattedCharSequence> lines = this.font.split(Component.translatable("diorama.book.help"), 220);
+		int w = 0;
+		for (var line : lines) {
+			w = Math.max(w, this.font.width(line));
+		}
+		int h = lines.size() * 10 + 8;
+		int x = 22, y = this.height - 6 - h;
+		BookSprites.nine(graphics, BookSprites.LABEL, x, y, w + 12, h, -1, true);
+		for (int i = 0; i < lines.size(); i++) {
+			graphics.text(this.font, lines.get(i), x + 6, y + 5 + i * 10, BookSprites.INK, false);
+		}
 	}
 
 	// Mouse and key events came as separate numbers before 1.21.9. Each override hands them to a
@@ -208,6 +285,11 @@ public final class MapScreen extends Screen {
 			this.dragged = true;
 			return true;
 		}
+		this.pressOnBook = this.book.covers(x, y);
+		if (!this.pressOnBook) {
+			// A click on the map leaves the book's fields.
+			this.setFocused(null);
+		}
 		this.pressX = x;
 		this.pressY = y;
 		this.dragged = false;
@@ -216,13 +298,17 @@ public final class MapScreen extends Screen {
 
 	/** A release; false leaves it to the screen's widgets. */
 	private boolean released(double x, double y, int button) {
+		if (this.pressOnBook) {
+			this.pressOnBook = false;
+			return false;
+		}
 		if (this.dragged || Math.hypot(x - this.pressX, y - this.pressY) > 3) {
 			return true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT) {
 			WaypointOverlay.Pin pin = WaypointOverlay.under(this.pins, x, y);
 			if (pin != null) {
-				this.minecraft.gui.setScreen(new WaypointEditScreen(this, pin.waypoint(), false));
+				this.book.showWaypoint(pin.waypoint());
 			}
 			return true;
 		}
@@ -233,7 +319,7 @@ public final class MapScreen extends Screen {
 		return false;
 	}
 
-	/** Opens a new waypoint on the block shown under a screen point. */
+	/** Plants a new waypoint on the block shown under a screen point, to name in the book. */
 	public void addWaypointAt(double screenX, double screenY) {
 		MapSession session = MapSession.get();
 		BlockLooks looks = BlockLooks.get();
@@ -249,17 +335,22 @@ public final class MapScreen extends Screen {
 		}
 		Waypoint waypoint = Waypoints.at(spot);
 		if (waypoint != null) {
-			this.minecraft.gui.setScreen(new WaypointEditScreen(this, waypoint, true));
+			this.book.newWaypoint(waypoint);
 		}
 	}
 
 	/** A drag; false leaves it to the screen's widgets. */
 	private boolean dragged(double x, double y, int button, double dx, double dy) {
+		if (this.pressOnBook) {
+			return false;
+		}
 		if (Math.hypot(x - this.pressX, y - this.pressY) > 3) {
 			this.dragged = true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT && this.dragged) {
             this.smoothZoom.reset(this.zoom);
+			this.opening.cancel();
+			this.panTarget = null;
 			this.centerU -= dx / this.zoom;
 			this.centerV -= dy / this.zoom;
 			this.following = false;
@@ -270,6 +361,10 @@ public final class MapScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+		if (this.book.covers(x, y)) {
+			return true;
+		}
+		this.opening.cancel();
         // GUI pixels per map unit at which a map pixel covers one screen pixel: the pixel-perfect steps start there.
         double pixelZoom = Projection.PIXELS_PER_UNIT / this.minecraft.getWindow().getGuiScale();
         this.smoothZoom.scroll(scrollY, x - this.width / 2.0, y - this.height / 2.0, this.minZoom(), MAX_ZOOM, pixelZoom);
@@ -279,9 +374,19 @@ public final class MapScreen extends Screen {
 
 	/** A key press, and whether it is bound to the waypoint list or the map; false leaves it to the screen. */
 	private boolean keyDown(int key, boolean waypointListKey, boolean mapKey) {
+		// Escape shuts the book first, and the map only once it is shut.
+		if (key == InputConstants.KEY_ESCAPE && this.book.isOpen()) {
+			this.setFocused(null);
+			this.book.close();
+			return true;
+		}
+		// While a name or a coordinate is being typed, letters are letters.
+		if (this.getFocused() instanceof EditBox box && box.isFocused()) {
+			return false;
+		}
 		// The player's own bindings come before the map's fixed keys, so Open map rebound to C still closes it.
 		if (waypointListKey) {
-			this.minecraft.gui.setScreen(new WaypointListScreen(this));
+			this.book.show(MapBook.Section.BANNERS, 0);
 			return true;
 		}
 		if (mapKey) {
@@ -291,7 +396,7 @@ public final class MapScreen extends Screen {
 		LocalPlayer player = this.minecraft.player;
 		switch (key) {
 			case InputConstants.KEY_C -> {
-				this.layer = this.layer == TileKey.SURFACE && player != null ? MapSession.caveLayerFor(player.getY()) : TileKey.SURFACE;
+				this.toggleCaves();
 				return true;
 			}
 			case InputConstants.KEY_PAGEUP -> {
@@ -303,7 +408,12 @@ public final class MapScreen extends Screen {
 				return true;
 			}
 			case InputConstants.KEY_SPACE -> {
+				// Space presses a focused button of the book instead.
+				if (this.getFocused() instanceof AbstractWidget widget && widget.isFocused()) {
+					return false;
+				}
                 this.smoothZoom.reset(this.zoom);
+				this.panTarget = null;
 				this.following = true;
 				return true;
 			}
@@ -330,7 +440,70 @@ public final class MapScreen extends Screen {
 
 	@Override
 	public void removed() {
+		this.book.removed();
 		this.viewport.close();
+	}
+
+	@Override
+	public <T extends GuiEventListener & Renderable & NarratableEntry> T add(T widget) {
+		return this.addRenderableWidget(widget);
+	}
+
+	@Override
+	public void rebuild() {
+		this.rebuildWidgets();
+	}
+
+	@Override
+	public Screen screen() {
+		return this;
+	}
+
+	@Override
+	public void focus(GuiEventListener widget) {
+		this.setFocused(widget);
+	}
+
+	@Override
+	public boolean caves() {
+		return this.layer != TileKey.SURFACE;
+	}
+
+	@Override
+	public int layer() {
+		return this.layer;
+	}
+
+	@Override
+	public void toggleCaves() {
+		LocalPlayer player = this.minecraft.player;
+		this.layer = this.layer == TileKey.SURFACE && player != null ? MapSession.caveLayerFor(player.getY()) : TileKey.SURFACE;
+	}
+
+	@Override
+	public void shiftSlice(int delta) {
+		this.shiftSlice(delta, this.minecraft.player);
+	}
+
+	/** Glides the view to a waypoint and stops following the player. */
+	@Override
+	public void centerOn(Waypoint waypoint) {
+		this.following = false;
+		this.smoothZoom.reset(this.zoom);
+		this.panTarget = new double[] {
+			Projection.u(waypoint.x + 0.5, waypoint.z + 0.5),
+			Projection.worldV(waypoint.x + 0.5, waypoint.y, waypoint.z + 0.5)
+		};
+	}
+
+	/** For tests: the book over the map. */
+	public MapBook book() {
+		return this.book;
+	}
+
+	/** For tests: whether the zoom in of opening is still running. */
+	public boolean opening() {
+		return this.opening.running(System.nanoTime());
 	}
 
 	/** For tests: the view drawn last frame. */
@@ -386,6 +559,8 @@ public final class MapScreen extends Screen {
 
 	/** For tests: put the view at a spot without following the player. */
 	public void lookAt(double u, double v, double zoom, int layer) {
+		this.opening.cancel();
+		this.panTarget = null;
 		this.centerU = u;
 		this.centerV = v;
 		this.zoom = zoom;

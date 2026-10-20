@@ -88,43 +88,64 @@ public final class XaeroImport {
 
 	/** Xaero's waypoints for the world the client is in, or null if Xaero's has none. Reads files: call when the player asks. */
 	public static @Nullable Found find() {
+		Request request = request();
+		return request == null ? null : find(request);
+	}
+
+	/**
+	 * What {@link #find(Request)} needs to know about the world the client is in, read on the client
+	 * thread so the files can be read on another; null where Xaero's can't be matched (no world, a Realm).
+	 */
+	public record Request(Path base, @Nullable String saveFolder, @Nullable String address, @Nullable Path clientConfig, String spawnId, int height) {
+	}
+
+	public static @Nullable Request request() {
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.level == null) {
 			return null;
 		}
 		Path base = mc.gameDirectory.toPath().resolve("xaero").resolve("minimap");
-		if (!Files.isDirectory(base)) {
-			// Before 2021 or so Xaero's kept the same folders here; it moves them on its next start.
-			base = mc.gameDirectory.toPath().resolve("XaeroWaypoints");
-		}
+		Path older = mc.gameDirectory.toPath().resolve("XaeroWaypoints");
 		IntegratedServer server = mc.getSingleplayerServer();
 		ServerData data = mc.getCurrentServer();
-		try {
-			List<String> roots;
-			if (server != null) {
-				roots = singleplayerFolders(server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName().toString());
-			} else if (data != null && !data.isRealm()) {
-				//? if fabric {
-				Path config = FabricLoader.getInstance().getConfigDir();
-				//?} else {
-				/*Path config = FMLPaths.CONFIGDIR.get();
-				*///?}
-				roots = serverFolders(data.ip, byAddress(config.resolve("xaero").resolve("minimap").resolve("client.cfg")));
-			} else {
-				// Xaero's names a Realm by its owner and id, which only the Realms screen knows.
-				return null;
-			}
-			//? if >=1.21.9 {
-			BlockPos spawn = mc.level.getRespawnData().pos();
+		String saveFolder = null;
+		String address = null;
+		Path clientConfig = null;
+		if (server != null) {
+			saveFolder = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName().toString();
+		} else if (data != null && !data.isRealm()) {
+			//? if fabric {
+			Path config = FabricLoader.getInstance().getConfigDir();
 			//?} else {
-			/*// The spawn had a getter of its own.
-			BlockPos spawn = mc.level.getSharedSpawnPos();
+			/*Path config = FMLPaths.CONFIGDIR.get();
 			*///?}
-			String spawnId = "mw" + (spawn.getX() >> 6) + "," + (spawn.getY() >> 6) + "," + (spawn.getZ() >> 6);
-			int height = mc.player != null ? mc.player.getBlockY() : 64;
-			return find(base, roots, server != null, spawnId, height);
+			address = data.ip;
+			clientConfig = config.resolve("xaero").resolve("minimap").resolve("client.cfg");
+		} else {
+			// Xaero's names a Realm by its owner and id, which only the Realms screen knows.
+			return null;
+		}
+		//? if >=1.21.9 {
+		BlockPos spawn = mc.level.getRespawnData().pos();
+		//?} else {
+		/*// The spawn had a getter of its own.
+		BlockPos spawn = mc.level.getSharedSpawnPos();
+		*///?}
+		String spawnId = "mw" + (spawn.getX() >> 6) + "," + (spawn.getY() >> 6) + "," + (spawn.getZ() >> 6);
+		int height = mc.player != null ? mc.player.getBlockY() : 64;
+		// Before 2021 or so Xaero's kept the same folders elsewhere; it moves them on its next start.
+		return new Request(Files.isDirectory(base) ? base : older, saveFolder, address, clientConfig, spawnId, height);
+	}
+
+	/** Reads Xaero's files for a {@link Request}; safe off the client thread. */
+	public static @Nullable Found find(Request request) {
+		try {
+			List<String> roots = request.saveFolder() != null
+				? singleplayerFolders(request.saveFolder())
+				: serverFolders(request.address(), byAddress(request.clientConfig()));
+			return find(request.base(), roots, request.saveFolder() != null, request.spawnId(), request.height());
 		} catch (IOException | RuntimeException e) {
-			Diorama.LOGGER.warn("Couldn't read Xaero's Minimap waypoints from {}", base, e);
+			Diorama.LOGGER.warn("Couldn't read Xaero's Minimap waypoints from {}", request.base(), e);
 			return null;
 		}
 	}
