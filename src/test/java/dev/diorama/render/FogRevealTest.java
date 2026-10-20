@@ -4,6 +4,16 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FogRevealTest {
+    @Test void seedRefinementDoesNotRestartTheDiscoveryClock() {
+        var reveal = new FogReveal(2);
+        reveal.update(new int[4], 0, 0, 2, false, 0);
+        reveal.update(new int[]{255, 0, 0, 0}, 0, 0, 2, false, 1);
+        int[] metadata = {255, 0, 0, 0};
+        reveal.update(metadata, 0, 0, 2, false, 300_000_001);
+        assertEquals(0, metadata[0] >>> 24);
+        assertEquals(1, reveal.progress(600_000_001));
+    }
+
     @Test void revealsSmoothlyWithoutRevealingUnknownOrDelayingConcealment() {
         var reveal = new FogReveal(2);
         reveal.update(new int[]{255, 0, 0, 0}, 0, 0, 2, false, 0);

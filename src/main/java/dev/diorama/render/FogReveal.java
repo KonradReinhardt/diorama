@@ -27,6 +27,15 @@ public final class FogReveal {
         byte[] next = scratch;
         boolean animate = false;
         boolean aligned = originU == u && originV == v && step == texel;
+        if (initialized && !reset && aligned) {
+            boolean same = true;
+            for (int i = 0; i < to.length && same; i++) same = (pixels[i] & 255) == (to[i] & 255);
+            if (same) {
+                if (t == 1) { System.arraycopy(to, 0, from, 0, to.length); changing = false; }
+                for (int i = 0; i < to.length; i++) pixels[i] = (from[i] & 255) << 24 | (to[i] & 255);
+                return; // Metadata/seed refinement must not restart an ongoing discovery.
+            }
+        }
         for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) {
             int i = y * size + x;
             int target = pixels[i] & 255;
