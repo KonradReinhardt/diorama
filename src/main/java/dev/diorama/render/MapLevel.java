@@ -90,6 +90,13 @@ public final class MapLevel implements ChunkSource {
     public long gpuBytes() { return this.tiles.values().stream().mapToLong(MapTile::gpuBytes).sum(); }
     public long tileWrites() { return this.store == null ? 0 : this.store.writes(); }
     public long writtenBytes() { return this.store == null ? 0 : this.store.writtenBytes(); }
+    public int queuedTiles() {
+        Set<TileKey> pending = new HashSet<>(this.dirty.keySet());
+        pending.addAll(this.unsaved.keySet());
+        for (TileKey key : this.wanted.keySet()) if (!this.tiles.containsKey(key)) pending.add(key);
+        pending.removeAll(this.inFlight);
+        return pending.size();
+    }
     private final RetryBackoff retries = new RetryBackoff();
 	/** Overview tiles the writer rebuilt; reloaded when next wanted. */
 	private final ConcurrentLinkedQueue<TileKey> overviewChanged = new ConcurrentLinkedQueue<>();

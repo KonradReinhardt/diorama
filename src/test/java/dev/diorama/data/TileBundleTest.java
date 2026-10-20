@@ -26,6 +26,10 @@ class TileBundleTest {
         TileBundle.write(path, key, pair);
         assertTrue(pair.samePixels(TileBundle.read(path, key)));
         assertThrows(IOException.class, () -> TileBundle.read(path, key.parent()));
+        Path other = folder.resolve("different-camera").resolve("tile.omt2");
+        Files.createDirectories(other.getParent());
+        Files.copy(path, other);
+        assertThrows(IOException.class, () -> TileBundle.read(other, key));
         byte[] bytes = Files.readAllBytes(path);
         Files.write(path, Arrays.copyOf(bytes, bytes.length - 4));
         assertThrows(IOException.class, () -> TileBundle.read(path, key));

@@ -1,6 +1,7 @@
 package dev.diorama.test;
 
 import dev.diorama.DioramaClient;
+import dev.diorama.EnvironmentLighting;
 import dev.diorama.MapScreen;
 import dev.diorama.MapSession;
 import dev.diorama.MapStyle;
@@ -85,6 +86,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 			.create()) {
 			world.getServer().runCommand("time set noon");
 			world.getServer().runCommand("weather clear");
+            if (tests.contains("day-night") || tests.contains("lighting-baseline")) world.getServer().runCommand("gamerule random_tick_speed 0");
 			String tp = System.getProperty("diorama.tp");
 			if (tp != null) {
 				world.getServer().runCommand("tp @a " + tp);
@@ -94,7 +96,8 @@ public class DioramaClientTest implements FabricClientGameTest {
 			settle(context, 100);
 			save = world.getWorldSave();
 			spawnCell = tests.contains("saved-map") ? knownSpawnCell(context) : null;
-			if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
+			if (tests.contains("day-night")) DayNightScenario.run(context, world);
+            if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
 			if (tests.contains("styles")) {
 				styleTour(context, world);
 			}
@@ -522,6 +525,17 @@ public class DioramaClientTest implements FabricClientGameTest {
 		if (known < 0.9F) {
 			throw new AssertionError("The spawn tile didn't come back from disk (known share " + known + ")");
 		}
+
+        if (EnvironmentLighting.supported()) {
+            world.getServer().runCommand("time set midnight");
+            context.waitTicks(10);
+            context.runOnClient(mc -> {
+                var tile = MapSession.get().map().peek(new TileKey(TileKey.SURFACE, spawnCell[0], spawnCell[1]));
+                if (tile == null || tile.nightTexture() == null) throw new AssertionError("Saved night lighting disappeared with unloaded chunks");
+            });
+            context.takeScreenshot("saved-map-night-unloaded");
+            world.getServer().runCommand("time set noon");
+        }
 
 		// Zoom far out: overview tiles shrunk from the saved ones show both spawn and here.
 		// Travel back toward spawn, so there's a trail of explored land to zoom out over. The

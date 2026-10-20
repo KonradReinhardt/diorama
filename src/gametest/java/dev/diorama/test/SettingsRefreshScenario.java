@@ -24,7 +24,8 @@ final class SettingsRefreshScenario {
             s -> s.roundedFog = !s.roundedFog,
             s -> s.outlines = !s.outlines,
             s -> s.quality = s.quality == Settings.Quality.FANCY ? Settings.Quality.FAST : Settings.Quality.FANCY,
-            s -> s.depthShading = !s.depthShading
+            s -> s.depthShading = !s.depthShading,
+            s -> s.lighting = s.lighting == EnvironmentLighting.Mode.WORLD ? EnvironmentLighting.Mode.NIGHT : EnvironmentLighting.Mode.WORLD
         );
         for (var change : changes) {
             var probe = context.computeOnClient(mc -> {
