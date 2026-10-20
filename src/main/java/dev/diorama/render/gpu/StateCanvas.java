@@ -45,7 +45,7 @@ final class StateCanvas implements MapCanvas {
             DioramaPipelines.MAP_LIGHT,
             StateTexture.pair((StateTexture) day, sampling, (StateTexture) (night == null ? day : night), sampling),
             new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, 0, 0, 1, 1,
-            lighting.params(night != null), this.graphics.scissorStack.peek()));
+            (lighting.params(night != null) & 0x00ffffff) | (dev.diorama.Settings.get().fogStyle == dev.diorama.Settings.FogStyle.ANCIENT_MAP ? 0x01000000 : 0xff000000), this.graphics.scissorStack.peek()));
     }
     //?}
 
@@ -88,5 +88,13 @@ final class StateCanvas implements MapCanvas {
 			new ScreenRectangle(x, y, width, height)
 		));
 	}
+
+    @Override
+    public void antiqueTile(MapTexture terrain, MapTexture paper, float x0, float y0, float x1, float y1) {
+        this.graphics.guiRenderState.addGuiElement(QuadElement.rect(DioramaPipelines.FOG,
+            StateTexture.pair((StateTexture)terrain, Sampling.TILE_CRISP, (StateTexture)paper, Sampling.REPEAT_LINEAR),
+            new Matrix3x2f(this.graphics.pose()), x0, y0, x1, y1, 0, 0, 1, 1, 0x00ffffff,
+            this.graphics.scissorStack.peek()));
+    }
 }
 //?}

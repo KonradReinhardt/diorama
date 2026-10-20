@@ -65,6 +65,9 @@ public final class Settings {
 
 	public boolean outlines = true;
 	public boolean roundedFog = true;
+    public enum FogStyle { CLOUDS, ANCIENT_MAP }
+    public FogStyle fogStyle = FogStyle.CLOUDS;
+    public boolean seedPreview = true;
 	/** The look with sky occlusion, deep shadows and a lower camera; off is the flatter look from before. */
 	public boolean depthShading = true;
 	public boolean alwaysFogOfWar = false;
@@ -158,6 +161,7 @@ public final class Settings {
 			settings = new Settings();
 		}
 		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.WORLD;
+        if (settings.fogStyle == null) settings.fogStyle = FogStyle.CLOUDS;
         if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;

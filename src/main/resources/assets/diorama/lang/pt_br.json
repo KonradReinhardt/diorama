@@ -7,5 +7,11 @@
 	"diorama.settings.lighting": "Iluminação",
 	"diorama.settings.lighting.world": "Horário do mundo",
 	"diorama.settings.lighting.day": "Sempre dia",
-	"diorama.settings.lighting.night": "Sempre noite"
+	"diorama.settings.lighting.night": "Sempre noite",
+	"diorama.settings.fog_style": "Estilo do fog",
+	"diorama.settings.fog_style.clouds": "Nuvens",
+	"diorama.settings.fog_style.ancient_map": "Mapa antigo",
+	"diorama.settings.seed_preview": "Cartografia da seed",
+	"diorama.settings.seed_preview.tooltip": "Desenha biomas aproximados no Overworld de mundos individuais (26.3). Quando indisponível, áreas desconhecidas mostram apenas pergaminho.",
+	"diorama.settings.fog_style.tooltip": "Mapa antigo mantém pergaminho e sépia no mapa inteiro. Nuvens conserva o estilo original."
 }

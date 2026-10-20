@@ -11,7 +11,7 @@ Places the map has no data for sit under animated fog. Underground, the map swit
 ## What it does
 
 - **Minimap** in a corner of your choice, with a compass, coordinates and biome. `=` and `-` zoom it.
-- **Fullscreen map** you can pan and zoom, from close-up blocks out to about 10,000 blocks across.
+- **Fullscreen map** with smooth, cursor-anchored wheel zoom, from close-up blocks out to about 10,000 blocks across.
 - **Radar** for other players and mobs, each shown as its own face, framed red, yellow or green for hostile, neutral or passive, with markers for whether they're above or below you.
 - **Waypoints** on the map and as labels in the world, plus a marker wherever you die. Share one in chat from its edit screen; shared waypoints, including Xaero's, get an [Add] link in chat. Teleport to one if you're allowed to use `/tp`. Coming from Xaero's Minimap? The waypoint list offers to import its waypoints for the world you're in.
 - **Saved map.** Everything your client loads is saved per world and dimension, so the map is still there next time, and you can zoom out over everywhere you've been.
@@ -85,3 +85,19 @@ Caves, roofed dimensions and the End retain their existing lighting. Decorative 
 Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share a 256 MiB budget, with up to two tile uploads per GUI frame on 26.3.
 
 `DIORAMA_TESTS=day-night ./gradlew --configure-on-demand :26.3:runClientGameTest` checks real block-light propagation in all four directions and both quality modes, captures lighting states and asserts zero jobs, writes, snapshots or fog-mask rebuilds during a time-only cycle. See [the design](docs/design/day-night-lighting.md) and [validation report](docs/testing/day-night-lighting.md).
+
+## Antique map style (fork 0.4.0)
+
+Settings → Look → Fog style offers **Clouds** (the existing default) and **Antique map**.
+Antique map keeps parchment grain and sepia colors everywhere. Explored areas show
+the detailed real terrain; unknown areas show square-pixel ink cartography when a
+compatible seed sampler is available. Both styles ease new discoveries over 600 ms.
+Switching styles does not reset exploration or rebake terrain.
+
+Seed cartography initially supports the singleplayer Overworld on **26.3** with
+compatible noise generation, on Fabric and NeoForge. It samples only biomes, never
+generates chunks, and does not predict structures or exact height/coastlines.
+Other contexts keep the parchment without prediction. Seed cartography can be
+switched off independently. Older versions retain the paper style and eased zoom.
+See the [implementation](docs/design/antique-fog.md) and
+[validation results](docs/testing/antique-fog.md).

@@ -99,5 +99,11 @@
 	"diorama.settings.lighting": "Lighting",
 	"diorama.settings.lighting.world": "World time",
 	"diorama.settings.lighting.day": "Always day",
-	"diorama.settings.lighting.night": "Always night"
+	"diorama.settings.lighting.night": "Always night",
+	"diorama.settings.fog_style": "Fog style",
+	"diorama.settings.fog_style.clouds": "Clouds",
+	"diorama.settings.fog_style.ancient_map": "Antique map",
+	"diorama.settings.seed_preview": "Seed cartography",
+	"diorama.settings.seed_preview.tooltip": "Sketch approximate biomes in the singleplayer Overworld (26.3). When unavailable, unknown areas keep blank parchment.",
+	"diorama.settings.fog_style.tooltip": "Antique map keeps parchment and sepia colors across the entire map. Clouds retains the original style."
 }

@@ -34,7 +34,7 @@ jobs:
       matrix:
         include:
           - name: map-regressions
-            scenarios: directions,atomic-appearance,settings-refresh,settings,saved-map,radar,waypoints
+            scenarios: directions,atomic-appearance,antique-fog,settings-refresh,settings,saved-map,radar,waypoints
             modmenu: 'false'
           - name: lighting
             scenarios: day-night

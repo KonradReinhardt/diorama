@@ -24,4 +24,8 @@ void main() {
     vec3 n = mix(fallback, linearColor(night.rgb), available);
     vec3 overcast = mix(vec3(1.0), vec3(0.64, 0.69, 0.77), params.g);
     fragColor = vec4(srgb(mix(n, d * overcast, params.r)), day.a);
+    if (params.a < 0.5) {
+        float value = dot(fragColor.rgb, vec3(0.299, 0.587, 0.114));
+        fragColor.rgb = mix(vec3(0.22, 0.12, 0.055), vec3(0.92, 0.81, 0.59), smoothstep(0.0, 0.95, value));
+    }
 }

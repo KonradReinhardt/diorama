@@ -2,6 +2,9 @@ package dev.diorama.render;
 
 import dev.diorama.MapStyle;
 import dev.diorama.Projection;
+import dev.diorama.Settings;
+import dev.diorama.MapSession;
+import dev.diorama.preview.SeedPreview;
 import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileKey;
 import dev.diorama.render.gpu.MapCanvas;
@@ -28,12 +31,17 @@ public final class MapViewport {
 
 	private @Nullable MapTexture maskTexture;
 	private final int[] maskPixels = new int[MASK * MASK];
+    private final FogReveal reveal = new FogReveal(MASK);
+    private final int[] columnTiles = new int[MASK], columnCells = new int[MASK];
+    private boolean settleFlags;
+    private static long maskNanos;
+    public static long maskNanos() { return maskNanos; }
 	/** What the mask texture was last built from; it only needs building again when this changes. */
 	private @Nullable MaskInputs maskInputs;
 	/** The map the mask was built from. Weak, so a minimap left over after leaving a world doesn't keep its map. */
 	private WeakReference<MapLevel> maskLevel = new WeakReference<>(null);
 
-	private record MaskInputs(long coverageVersion, int layer, int lod, double originU, double originV, double texel, boolean rounded, int scaleSteps, boolean fast) {
+	private record MaskInputs(long coverageVersion, int layer, int lod, double originU, double originV, double texel, boolean rounded, int scaleSteps, boolean fast, boolean antique, long previewRevision, dev.diorama.MapDirection direction) {
 	}
 
 	/** Where and how big a map is drawn, and what part of the map it shows. */
@@ -66,7 +74,7 @@ public final class MapViewport {
 	public void draw(GuiGraphicsExtractor graphics, MapLevel level, View view, int overlays) {
 		graphics.enableScissor(view.x(), view.y(), view.x() + view.width(), view.y() + view.height());
 		boolean cave = view.layer() != TileKey.SURFACE;
-		graphics.fill(view.x(), view.y(), view.x() + view.width(), view.y() + view.height(), cave ? 0xFF0C0E12 : 0xFF8C99AB);
+		graphics.fill(view.x(), view.y(), view.x() + view.width(), view.y() + view.height(), Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP ? 0xFFE5CB96 : cave ? 0xFF0C0E12 : 0xFF8C99AB);
 
 		var lighting = dev.diorama.EnvironmentLighting.current(cave || level.roofless());
         this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0, lighting);
@@ -163,7 +171,10 @@ public final class MapViewport {
 				}
 				float sx = view.screenX(tu * units);
 				float sy = view.screenY(tv * units);
-				canvas.lit(tile.texture(), tile.nightTexture(), sampling, sx, sy, sx + size, sy + size, lighting);
+                if (Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP && !dev.diorama.EnvironmentLighting.supported()) {
+                    // Reuse the common fog pipeline as a sepia tile pass on older day-only backends.
+                    canvas.antiqueTile(tile.texture(), FogTextures.parchment(), sx, sy, sx + size, sy + size);
+                } else canvas.lit(tile.texture(), tile.nightTexture(), sampling, sx, sy, sx + size, sy + size, lighting);
 				MapTexture overlay = overlays == 0 || lod > 0 ? null : tile.overlay(overlays);
 				if (overlay != null) {
 					canvas.rect(overlay, sampling, sx, sy, sx + size, sy + size, 0, 0, 1, 1, -1);
@@ -193,7 +204,14 @@ public final class MapViewport {
 		double originU = Math.floor((view.minU() - MASK_MARGIN) / snap) * snap;
 		double originV = Math.floor((view.minV() - MASK_MARGIN) / snap) * snap;
 		boolean fast = TileBaker.fast();
-		this.buildMask(level, view, originU, originV, texel, steps, fast);
+        boolean antique = Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP;
+        SeedPreview preview = null;
+        MapSession session = MapSession.get();
+        if (antique && Settings.get().seedPreview && !level.roofless() && view.layer() == TileKey.SURFACE && session != null && session.map() == level) {
+            preview = session.seedPreview();
+            if (preview != null) preview.request(previewBounds(view));
+        }
+		this.buildMask(level, view, originU, originV, texel, steps, fast, antique, preview);
 
 		double span = MASK * texel;
 		float mu0 = (float) ((view.minU() - originU) / span);
@@ -205,21 +223,32 @@ public final class MapViewport {
 		boolean cave = view.layer() != TileKey.SURFACE;
 		int fogCode = (cave ? 128 : 0) | steps << 4 | fraction;
 		// The mask scale code takes the alpha byte's high nibble; 4 in the low nibble asks for fast fog.
-		int quality = fast ? 4 : 0;
-		int daylight = Math.round(lighting.daylight() * 255);
-        // Noise offsets occupy the high three bits; the low bits carry draw-time daylight.
-        int params = (scaleCode * 16 | quality) << 24 | (noiseU * 32 | daylight & 31) << 16
-            | (noiseV * 32 | daylight >> 5) << 8 | fogCode;
+		int quality = (fast ? 4 : 0) | (antique ? 8 : 0);
+		int daylight = Math.round(lighting.daylight() * 63);
+        int progress = Math.round(this.reveal.progress(System.nanoTime()) * 63);
+        // Six bits each for daylight and reveal easing; no per-frame mask uploads.
+        int params = (scaleCode * 16 | quality | progress >> 4) << 24 | (noiseU * 32 | daylight & 31) << 16
+            | (noiseV * 32 | daylight >> 5 | (progress & 15) << 1) << 8 | fogCode;
 
 		MapCanvas.of(graphics).fog(
-			this.maskTexture, FogTextures.noise(),
+			this.maskTexture, antique ? FogTextures.parchment() : FogTextures.noise(),
 			view.x(), view.y(), view.width(), view.height(),
 			mu0, mv0, mu1, mv1,
 			params
 		);
 	}
 
-	private void buildMask(MapLevel level, View view, double originU, double originV, double texel, int scaleSteps, boolean fast) {
+    private static SeedPreview.Bounds previewBounds(View view) {
+        double depth0 = Projection.zAt(view.minV(), 64), depth1 = Projection.zAt(view.minV() + view.height() / view.zoom(), 64);
+        double u0 = view.minU(), u1 = u0 + view.width() / view.zoom();
+        var d = Projection.direction();
+        double[] xs = {d.worldX(u0, depth0), d.worldX(u0, depth1), d.worldX(u1, depth0), d.worldX(u1, depth1)};
+        double[] zs = {d.worldZ(u0, depth0), d.worldZ(u0, depth1), d.worldZ(u1, depth0), d.worldZ(u1, depth1)};
+        return new SeedPreview.Bounds((int)Math.floor(java.util.Arrays.stream(xs).min().orElse(0)),
+            (int)Math.floor(java.util.Arrays.stream(zs).min().orElse(0)), (int)Math.ceil(java.util.Arrays.stream(xs).max().orElse(0)),
+            (int)Math.ceil(java.util.Arrays.stream(zs).max().orElse(0)), view.zoom() >= .15);
+    }
+	private void buildMask(MapLevel level, View view, double originU, double originV, double texel, int scaleSteps, boolean fast, boolean antique, @Nullable SeedPreview preview) {
 		if (this.maskTexture == null) {
 			this.maskTexture = MapTexture.create("diorama fog mask", MASK, 1);
 		}
@@ -227,16 +256,30 @@ public final class MapViewport {
 		// Caves keep the sharp mask: rounding would erode narrow explored tunnels away.
 		// Once a texel spans a chunk there are no chunk steps left to smooth, and rounding would
 		// only eat small explored areas that are a few texels across.
-		boolean rounded = MapStyle.get().roundedFog() && view.layer() == TileKey.SURFACE && texel < 16;
-		MaskInputs inputs = new MaskInputs(level.coverageVersion(), view.layer(), lod, originU, originV, texel, rounded, scaleSteps, fast);
+		boolean rounded = MapStyle.get().roundedFog() && !antique && view.layer() == TileKey.SURFACE && texel < 16;
+		MaskInputs inputs = new MaskInputs(level.coverageVersion(), view.layer(), lod, originU, originV, texel, rounded, scaleSteps, fast, antique, preview == null ? -1 : preview.revision(), Projection.direction());
 		if (this.maskLevel.get() == level && inputs.equals(this.maskInputs)) {
+            if (this.settleFlags && this.reveal.progress(System.nanoTime()) == 1) {
+                this.settleFlags = false;
+                for (int i = 0; i < this.maskPixels.length; i++) this.maskPixels[i] = (this.maskPixels[i] & 255) * 0x01000001;
+                this.markReach(fogReach(texel, view.layer() != TileKey.SURFACE, fast, scaleSteps));
+                this.maskTexture.write(0, 0, 0, MASK, this.maskPixels);
+            }
 			return;
 		}
+        long maskStart = System.nanoTime();
         maskBuilds++;
+		boolean reset = this.maskLevel.get() != level || this.maskInputs == null || this.maskInputs.layer() != view.layer() || this.maskInputs.direction() != Projection.direction();
 		this.maskInputs = inputs;
 		this.maskLevel = new WeakReference<>(level);
 		double units = (double) Projection.TILE_UNITS * (1 << lod);
 		double cellUnits = units / Projection.COVERAGE_CELLS;
+        for (int i = 0; i < MASK; i++) {
+            double u = originU + (i + .5) * texel;
+            int tu = (int)Math.floor(u / units);
+            this.columnTiles[i] = tu;
+            this.columnCells[i] = Math.min(Projection.COVERAGE_CELLS - 1, (int)((u - tu * units) / cellUnits));
+        }
 		int lastTu = Integer.MIN_VALUE;
 		int lastTv = Integer.MIN_VALUE;
 		MapTile tile = null;
@@ -245,8 +288,7 @@ public final class MapViewport {
 			int tv = (int) Math.floor(v / units);
 			int cellY = Math.min(Projection.COVERAGE_CELLS - 1, (int) ((v - tv * units) / cellUnits));
 			for (int i = 0; i < MASK; i++) {
-				double u = originU + (i + 0.5) * texel;
-				int tu = (int) Math.floor(u / units);
+				int tu = this.columnTiles[i];
 				if (tu != lastTu || tv != lastTv) {
 					tile = level.peek(new TileKey(view.layer(), tu, tv, lod));
 					lastTu = tu;
@@ -254,7 +296,7 @@ public final class MapViewport {
 				}
 				float known = 0;
 				if (tile != null && tile.hasCoverage()) {
-					int cellX = Math.min(Projection.COVERAGE_CELLS - 1, (int) ((u - tu * units) / cellUnits));
+					int cellX = this.columnCells[i];
 					known = tile.coverage(cellX, cellY);
 				}
 				this.maskPixels[j * MASK + i] = 0xFF000000 | Math.round(known * 255);
@@ -263,8 +305,22 @@ public final class MapViewport {
 		if (rounded) {
 			this.roundOff(Math.max(1, (int) Math.round(10 / texel)));
 		}
-		this.markReach(fogReach(texel, view.layer() != TileKey.SURFACE, fast, scaleSteps));
+        this.reveal.update(this.maskPixels, originU, originV, texel, reset, System.nanoTime());
+        this.settleFlags = !antique && this.reveal.progress(System.nanoTime()) < 1;
+        if (antique) {
+            SeedPreview.Cursor cursor = preview == null ? null : preview.cursor();
+            if (preview != null) for (int j = 0; j < MASK; j++) {
+                double depth = Projection.zAt(originV + (j + .5) * texel, 64);
+                for (int i = 0; i < MASK; i++) {
+                    double u = originU + (i + .5) * texel;
+                    int wx = (int)Math.floor(Projection.direction().worldX(u, depth));
+                    int wz = (int)Math.floor(Projection.direction().worldZ(u, depth));
+                    this.maskPixels[j * MASK + i] |= (cursor.sample(wx, wz) * 32) << 8;
+                }
+            }
+        } else this.markReach(fogReach(texel, view.layer() != TileKey.SURFACE, fast, scaleSteps));
 		this.maskTexture.write(0, 0, 0, MASK, this.maskPixels);
+        maskNanos += System.nanoTime() - maskStart;
 	}
 
 	/**
@@ -313,8 +369,9 @@ public final class MapViewport {
 			int lineNotKnown = 0;
 			int lineNotUnknown = 0;
 			for (int i = 0; i < MASK; i++) {
-				int known = this.maskPixels[j * MASK + i] & 0xFF;
-				lineNotKnown += known == 0xFF ? 0 : 1;
+				int pixel = this.maskPixels[j * MASK + i];
+                int known = pixel & 0xFF;
+				lineNotKnown += known == 0xFF && pixel >>> 24 == 255 ? 0 : 1;
 				lineNotUnknown += known == 0 ? 0 : 1;
 				notKnown[(j + 1) * row + i + 1] = notKnown[j * row + i + 1] + lineNotKnown;
 				notUnknown[(j + 1) * row + i + 1] = notUnknown[j * row + i + 1] + lineNotUnknown;
@@ -389,5 +446,6 @@ public final class MapViewport {
 			this.maskTexture = null;
 		}
 		this.maskInputs = null;
+        this.reveal.reset();
 	}
 }
