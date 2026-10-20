@@ -126,7 +126,7 @@ public final class MapScreen extends Screen {
 		String status = String.format(
 			"%s   ·   %d, %d, %d   ·   %d chunks%s",
 			mode, player.getBlockX(), player.getBlockY(), player.getBlockZ(), session.map().chunkCount(),
-			session.map().bakingCount() > 0 ? "   ·   baking" : ""
+			session.map().bakingCount() > 0 || session.map().refreshingAppearance() ? "   ·   baking" : ""
 		);
 		graphics.fill(0, 0, this.width, 14, 0x90000000);
 		graphics.text(this.font, status, 6, 3, 0xFFFFFFFF, false);

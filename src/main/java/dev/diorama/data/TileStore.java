@@ -153,6 +153,18 @@ public final class TileStore {
 		}
 	}
 
+	/** Flush pending detail revisions, then derive their overview hierarchy on the writer. */
+	public CompletableFuture<Void> refreshOverviews() {
+        return this.previousClose.thenRunAsync(() -> {
+            Set<TileKey> keys;
+            synchronized (this) { keys = new HashSet<>(this.handedOver.keySet()); }
+            for (TileKey key : keys) this.merge(key);
+            synchronized (this) { keys = new HashSet<>(this.unwritten.keySet()); }
+            for (TileKey key : keys) this.write(key);
+            this.rebuildOverviews();
+        }, WRITER);
+    }
+
 	/** Rebuilds and writes every out-of-date overview tile, one level at a time. Writer thread. */
 	private void rebuildOverviews() {
 		Set<TileKey> level;

@@ -86,6 +86,10 @@ public final class MapLevel implements ChunkSource {
 	private final TileFreshness freshness = new TileFreshness();
     private final Map<TileKey, TileFreshness.Version> jobVersions = new HashMap<>();
     private long submittedJobs;
+    private @Nullable AppearanceRefresh appearanceRefresh;
+    private long appearanceVersion;
+    public long appearanceVersion() { return appearanceVersion; }
+    public boolean refreshingAppearance() { return appearanceRefresh != null; }
     public long submittedJobs() { return this.submittedJobs; }
     public long gpuBytes() { return this.tiles.values().stream().mapToLong(MapTile::gpuBytes).sum(); }
     public long tileWrites() { return this.store == null ? 0 : this.store.writes(); }
@@ -220,14 +224,8 @@ public final class MapLevel implements ChunkSource {
 		if (overlays == null) {
 			return;
 		}
-		int blocks = (Projection.TILE_PIXELS / TileImage.BLOCK) * (Projection.TILE_PIXELS / TileImage.BLOCK);
-		Set<TileKey> keys = new HashSet<>(this.tiles.keySet());
-		keys.addAll(this.inFlight);
-		for (TileKey key : keys) {
-			if (key.lod() == 0) {
-				this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, blocks);
-			}
-		}
+        // New overlay data is published as a complete revision too.
+        this.colorsChanged();
 	}
 
 	/** Whether spawn spots are recorded, so light changes have to refresh the surface. */
@@ -291,6 +289,7 @@ public final class MapLevel implements ChunkSource {
         boolean reproject = !this.bakeContext.sameProjection(next);
         this.surfaceGeneration++;
         this.caveGeneration++;
+        this.appearanceRefresh = null;
         if (reproject) {
             this.dropTiles(false);
             this.switchStoreIfNeeded();
@@ -299,6 +298,9 @@ public final class MapLevel implements ChunkSource {
             // Pending old jobs must not erase these tiles when their generations are rejected.
             Set<TileKey> refresh = new HashSet<>(this.tiles.keySet());
             refresh.addAll(this.inFlight);
+            refresh.removeAll(this.backgroundBakes);
+            this.appearanceRefresh = new AppearanceRefresh(refresh);
+            this.requestAppearanceSources(this.appearanceRefresh);
             int blocks = (Projection.TILE_PIXELS / TileImage.BLOCK) * (Projection.TILE_PIXELS / TileImage.BLOCK);
             for (TileKey key : refresh) {
                 this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, blocks);
@@ -312,6 +314,7 @@ public final class MapLevel implements ChunkSource {
 		while (it.hasNext()) {
 			Map.Entry<TileKey, MapTile> e = it.next();
 			if (!cavesOnly || e.getKey().isCave() || this.roofless()) {
+                if (this.appearanceRefresh != null) this.appearanceRefresh.forget(e.getKey());
 				e.getValue().close();
 				it.remove();
 				this.dirty.remove(e.getKey());
@@ -425,7 +428,9 @@ public final class MapLevel implements ChunkSource {
 				if (layer == TileKey.SURFACE && this.store != null && terrain) {
 					this.unsaved.put(key, now);
 				}
-				if (!this.tiles.containsKey(key) && !this.inFlight.contains(key)) {
+                boolean refreshSource = this.appearanceRefresh != null && this.appearanceRefresh.tracks(key);
+                if (refreshSource) this.appearanceRefresh.pending.add(key);
+				if (!this.tiles.containsKey(key) && !this.inFlight.contains(key) && !refreshSource) {
 					continue;
 				}
 				int bx0 = Math.max(0, (int) Math.floor((u0 - tu * units) / blockUnits));
@@ -510,6 +515,10 @@ public final class MapLevel implements ChunkSource {
 	 * {@code priority} is lower for tiles that matter more, such as those near the view center.
 	 */
 	public @Nullable MapTile want(TileKey key, double priority) {
+        if (this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.remove(key)) {
+            this.appearanceRefresh.pending.add(key);
+            this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
+        }
 		this.wanted.merge(key, priority, Math::min);
 		MapTile tile = this.tiles.get(key);
 		if (tile != null) {
@@ -571,6 +580,19 @@ public final class MapLevel implements ChunkSource {
 				}
 				continue;
 			}
+            if (this.appearanceRefresh != null && (!background || this.appearanceRefresh.pending.contains(image.key()))) {
+                // Hold the old map intact while this revision is prepared in the background.
+                if (image.key().lod() > 0 && (this.appearanceRefresh.overviewBarrier == null
+                    || !this.appearanceRefresh.overviewBarrier.isDone())) {
+                    this.dirty.computeIfAbsent(image.key(), k -> new Dirty(0)).blocks.set(0);
+                } else if (image.isFull()) {
+                    boolean diskOnly = this.appearanceRefresh.diskOnly.contains(image.key());
+                    this.appearanceRefresh.stage(image, version, !diskOnly);
+                    if (diskOnly && this.store != null) this.store.baked(image);
+                }
+                else this.appearanceRefresh.forget(image.key());
+                continue;
+            }
 			MapTile tile = this.tiles.get(image.key());
 			if (background && tile == null) {
 				// Baked only to be saved; a map that wants it will bake it again.
@@ -604,10 +626,17 @@ public final class MapLevel implements ChunkSource {
 			this.trimChunks();
 		}
 
+        this.finishAppearanceRefresh();
 		BlockLooks looks = BlockLooks.get();
 		if (looks != null && this.topY != Integer.MIN_VALUE) {
 			long now = System.currentTimeMillis();
 			int limit = 6;
+            if (this.appearanceRefresh != null) {
+                for (TileKey key : this.appearanceRefresh.pending) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
+                if (this.appearanceRefresh.overviewBarrier != null && this.appearanceRefresh.overviewBarrier.isDone()) {
+                    for (TileKey key : this.appearanceRefresh.overviews) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
+                }
+            }
 			List<Map.Entry<TileKey, Double>> order = new ArrayList<>(this.wanted.entrySet());
 			order.sort(Map.Entry.comparingByValue());
 			for (Map.Entry<TileKey, Double> entry : order) {
@@ -618,8 +647,13 @@ public final class MapLevel implements ChunkSource {
 				if (this.inFlight.contains(key) || !this.retries.ready(key, now)) {
 					continue;
 				}
+                // Staged cache misses are ready for the transaction, even though the old
+                // visible cache deliberately has no entry for them yet.
+                if (this.appearanceRefresh != null && this.appearanceRefresh.ready(key) && !this.dirty.containsKey(key)) continue;
 				boolean missing = !this.tiles.containsKey(key);
 				if (key.lod() > 0) {
+                    if (this.appearanceRefresh != null && (this.appearanceRefresh.overviewBarrier == null
+                        || !this.appearanceRefresh.overviewBarrier.isDone())) continue;
 					// Overview tiles come from disk, shrunk from saved tiles; nothing to bake.
 					if ((missing || this.dirty.containsKey(key)) && this.store != null && !this.emptyOverviews.contains(key)) {
 						this.dirty.remove(key);
@@ -632,7 +666,8 @@ public final class MapLevel implements ChunkSource {
 				if (missing || ready) {
 					this.dirty.remove(key);
 					this.unsaved.remove(key);
-					this.bake(key, looks, missing || d.blocks.cardinality() > 160 ? null : d.blocks);
+                    if (this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.contains(key)) this.backgroundBakes.add(key);
+					this.bake(key, looks, this.appearanceRefresh != null || missing || d.blocks.cardinality() > 160 ? null : d.blocks);
 				}
 			}
 			this.bakeUnsaved(looks, now);
@@ -640,6 +675,87 @@ public final class MapLevel implements ChunkSource {
 		this.wanted.clear();
 		this.evict();
 	}
+
+    /** A distant view may have no detailed GPU tiles. Refresh its loaded children on disk too. */
+    private void requestAppearanceSources(AppearanceRefresh refresh) {
+        if (this.store == null || refresh.overviews.isEmpty()) return;
+        for (ChunkSnapshot snapshot : this.chunks.values()) {
+            if (snapshot.maxY == Integer.MIN_VALUE) continue;
+            int x = snapshot.chunkX << 4, z = snapshot.chunkZ << 4;
+            for (var region : TileInvalidation.regions(x, Math.min(snapshot.floorY, this.topY), this.minY,
+                z, x + 15, this.topY, z + 15, true, this.roofless(), this.roof,
+                Set.of(TileKey.SURFACE), Projection.direction())) {
+                for (int u = (int) Math.floor(region.minU() / Projection.TILE_UNITS); u <= (int) Math.floor(region.maxU() / Projection.TILE_UNITS); u++) {
+                    for (int v = (int) Math.floor(region.minV() / Projection.TILE_UNITS); v <= (int) Math.floor(region.maxV() / Projection.TILE_UNITS); v++) {
+                        var key = new TileKey(TileKey.SURFACE, u, v);
+                        for (TileKey overview : refresh.overviews) {
+                            if (Math.floorDiv(u, 1 << overview.lod()) == overview.tileU()
+                                && Math.floorDiv(v, 1 << overview.lod()) == overview.tileV()) {
+                                if (refresh.pending.add(key)) refresh.diskOnly.add(key);
+                                this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** One render-thread commit: a frame can see either the old appearance or the complete new one. */
+    private void finishAppearanceRefresh() {
+        AppearanceRefresh refresh = this.appearanceRefresh;
+        if (refresh == null || !refresh.pending.isEmpty()) return;
+        for (TileKey key : new HashSet<>(refresh.versions.keySet())) {
+            if (refresh.generations.get(key) != this.generation(key)
+                || !this.freshness.accepts(key, refresh.versions.get(key))) {
+                refresh.images.remove(key);
+                refresh.versions.remove(key);
+                refresh.generations.remove(key);
+                if (key.lod() == 0) refresh.pending.add(key);
+                refresh.overviewBarrier = null;
+                for (TileKey overview : refresh.overviews) {
+                    refresh.images.remove(overview);
+                    this.dirty.computeIfAbsent(overview, k -> new Dirty(0)).blocks.set(0);
+                }
+                this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
+            }
+        }
+        if (!refresh.pending.isEmpty()) return;
+        if (!refresh.overviews.isEmpty()) {
+            if (refresh.overviewBarrier == null) {
+                if (this.inFlight.stream().anyMatch(key -> key.lod() > 0)) return;
+                // Publish children to the writer first, then derive every requested overview from them.
+                if (this.store != null) {
+                    for (TileImage image : refresh.images.values())
+                        if (!image.key().isCave() && image.key().lod() == 0) this.store.baked(image);
+                    refresh.overviewBarrier = this.store.refreshOverviews();
+                } else refresh.overviewBarrier = java.util.concurrent.CompletableFuture.completedFuture(null);
+                return;
+            }
+            if (!refresh.overviewBarrier.isDone()) return;
+            if (refresh.overviewBarrier.isCompletedExceptionally()) {
+                Diorama.LOGGER.error("Couldn't refresh map overviews; retaining the previous appearance");
+                refresh.overviewBarrier = null;
+                return;
+            }
+            for (TileKey key : refresh.overviews) if (!refresh.images.containsKey(key)) return;
+        }
+        // Updating existing textures avoids a second GPU cache. The bounded resident set is
+        // uploaded together here, deliberately outside the incremental terrain-upload budget.
+        long start = System.nanoTime();
+        for (TileImage image : refresh.images.values()) {
+            MapTile tile = this.tiles.get(image.key());
+            if (tile == null) { tile = new MapTile(); this.tiles.put(image.key(), tile); }
+            tile.upload(image);
+            if (this.store != null && !image.key().isCave() && image.key().lod() == 0) this.store.baked(image);
+        }
+        this.appearanceRefresh = null;
+        this.appearanceVersion++;
+        this.coverageVersion++;
+        Diorama.LOGGER.info("Committed appearance revision {}: {} tiles together in {} ms",
+            this.appearanceVersion, refresh.images.size(), (System.nanoTime() - start) / 1_000_000.0);
+    }
 
 	/** Bakes one tile on a baker thread: all of it if {@code blocks} is null, else those blocks. */
 	private void bake(TileKey key, BlockLooks looks, @Nullable BitSet blocks) {
@@ -717,6 +833,9 @@ public final class MapLevel implements ChunkSource {
 
     private void evict() {
         this.tiles.evict(this.frame, MAX_GPU_TILES, key -> {
+            if (this.appearanceRefresh != null) this.appearanceRefresh.evicted(key, image -> {
+                if (this.store != null) this.store.baked(image);
+            });
             this.coverageVersion++;
             if (!this.inFlight.contains(key)) this.freshness.remove(key);
             if (this.dirty.remove(key) != null && this.store != null && !key.isCave() && key.lod() == 0)
@@ -756,6 +875,8 @@ public final class MapLevel implements ChunkSource {
         boolean fog = this.roofless() ? this.storeName.contains("-fog") : this.fogOfWar;
         Overlays overlays = this.overlays;
         java.util.List<TileImage> completed = new ArrayList<>();
+        if (this.appearanceRefresh != null) for (TileImage image : this.appearanceRefresh.images.values())
+            if (!image.key().isCave() && image.key().lod() == 0) completed.add(image);
         BakeScheduler.Result result;
         while ((result = this.scheduler.poll()) != null) {
             this.inFlight.remove(result.key());
