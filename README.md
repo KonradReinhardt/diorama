@@ -11,20 +11,20 @@ Places the map has no data for sit under animated fog. Underground, the map swit
 ## What it does
 
 - **Minimap** in a corner of your choice, with a compass, coordinates and biome. `=` and `-` zoom it. Its frame can be a thin border or the paper of a vanilla map held in hand (Settings → Minimap → Frame), with the compass inked on the margin and the map's edge torn into the paper.
-- **Fullscreen map** with smooth, cursor-anchored wheel zoom, from close-up blocks out to about 10,000 blocks across.
+- **Fullscreen map** with smooth, cursor-anchored wheel zoom, from close-up blocks out to about 10,000 blocks across. It opens with a short zoom in, and its menus are a pixel-art **book** over the map: colored ribbons at the right edge, each with an item icon from your resource pack, open its sections (Banners, Look, Layers, Radar). Settings that change the world map are changed there, with the map live around the book; only the minimap's own settings leave the map.
 - **Radar** for other players and mobs, each shown as its own face, framed red, yellow or green for hostile, neutral or passive, with markers for whether they're above or below you.
 - **Waypoints** on the map and as labels in the world, plus a marker wherever you die. Each waypoint is a pixel-art banner standing on its block, designed like at the loom: base dye, up to six pattern layers (sixteen if you lift the limit in the settings), every pattern the game has registered, including datapacks' and mods', undo and redo, and a button that copies the banner you're holding. Share one in chat from its edit screen; shared waypoints, including Xaero's, get an [Add] link in chat. Teleport to one if you're allowed to use `/tp`. Coming from Xaero's Minimap? The waypoint list offers to import its waypoints for the world you're in.
 - **Saved map.** Everything your client loads is saved per world and dimension, so the map is still there next time, and you can zoom out over everywhere you've been.
 - **The Nether** from above: the sky view starts under the bedrock roof and shows everything below it, lit by block light.
 - **Overlays** on the fullscreen map: chunk grid, slime chunks (singleplayer) and the spots where monsters can spawn.
-- **Settings** for all of the above, from a button on the fullscreen map.
+- **Settings** for all of the above, in the fullscreen map's book, and in one screen from a key or Mod Menu.
 
 Saved maps and waypoints live in `.minecraft/diorama/`, one folder per world. On a server, each world behind its address gets its own folder, told apart by the world seed the server sends, so a network's lobby and survival worlds, or a map reset, don't mix.
 
 ## Keys
 
-- `M` opens the fullscreen map. Drag to pan, scroll to zoom, right-click to add a waypoint, click a waypoint to edit it.
-- In the fullscreen map, `C` toggles the cave slice, `PgUp`/`PgDn` move the slice by 4 blocks, `U` lists waypoints, and `Space` recenters on you.
+- `M` opens the fullscreen map. Drag to pan, scroll to zoom, right-click to plant a banner (named in the book), click a banner to open its page in the book.
+- In the fullscreen map, `C` toggles the cave slice, `PgUp`/`PgDn` move the slice by 4 blocks, `U` opens the book's banners, `Space` recenters on you, and `Esc` shuts the book before the map.
 - `B` adds a waypoint where you stand, and `U` opens the waypoint list.
 - `=` and `-` zoom the minimap. Map settings and hiding the minimap have keys too, unbound by default.
 
@@ -98,7 +98,7 @@ The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> Map
 `BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.
 Session retirement freezes chunks and settings and finishes unsaved surface tiles asynchronously. Application shutdown waits for those saves.
 
-When Mod Menu is installed on Fabric, Diorama's configure button opens the same screen as Settings in the world map.
+When Mod Menu is installed on Fabric, Diorama's configure button opens the settings screen with every setting; the world map's book and that screen are built from the same list (`SettingsCatalog`).
 Mod Menu is optional. To verify its entrypoint in development, use
 `DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.
 
@@ -110,6 +110,8 @@ Caves, roofed dimensions and the End retain their existing lighting. Decorative 
 Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share a 256 MiB budget, with up to three tile uploads per GUI frame on 26.3.
 
 `DIORAMA_TESTS=banner-waypoints ./gradlew --configure-on-demand :26.3:runClientGameTest` places banner waypoints around the player and captures them on the fullscreen map (both sizes, gathered, on the edge, in sepia), on the minimap (also in its map-paper frame) and in the banner editor, asserting the layout, sharing through chat and editing with undo. See [the design](docs/design/banner-waypoints.md).
+
+`DIORAMA_TESTS=book-map ./gradlew --configure-on-demand :26.3:runClientGameTest` opens the world map and checks its zoom in, captures each section of the book, picks a look in the book (the map redraws behind it without leaving), tints the antique map without redrawing tiles, goes out through the minimap ribbon and back, opens a banner's page from the map, types its name without the map's keys firing, and checks the pages at 1280x720. See [the design](docs/design/book-map-ui.md). The book's sprite sheet is drawn by `docs/design/book-sprites.py`.
 
 `DIORAMA_TESTS=day-night ./gradlew --configure-on-demand :26.3:runClientGameTest` checks real block-light propagation in all four directions and both quality modes, captures lighting states and asserts zero jobs, writes, snapshots or fog-mask rebuilds during a time-only cycle. See [the design](docs/design/day-night-lighting.md) and [validation report](docs/testing/day-night-lighting.md).
 

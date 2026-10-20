@@ -2,10 +2,9 @@
 
 Status: plano escrito em 20/10/2026 e revisado no mesmo dia depois do estilo de render Pintado e
 da correção de nitidez (`feature/painted-style`), e de novo depois da grade pixel perfect, do
-Pintado sem contornos e da opção de tingir o explorado no mapa antigo (`feature/pixel-grid`). Nada
-do livro implementado ainda. Ao implementar,
-acrescentar no fim uma seção "Como ficou" com o que se afastou do plano, como em
-`banner-waypoints.md`.
+Pintado sem contornos e da opção de tingir o explorado no mapa antigo (`feature/pixel-grid`).
+Implementado em 20/10/2026 na branch `feature/book-map-ui` (etapas 1–8); a seção "Como ficou" no
+fim registra onde a implementação se afastou do plano.
 
 ## Objetivo
 
@@ -270,3 +269,52 @@ Todas curtas, por tempo real e interrompíveis:
    em vez de fechar o livro.
 2. Edição de waypoint: proposto inline no livro, com só o editor de tear em tela própria.
 3. Tela de opções do minimapa: proposto manter a tela vanilla filtrada agora, sem estilo de livro.
+
+## Como ficou
+
+- **Código**: `ui/SettingsCatalog` (lista única; cada opção tem `shown` — a versão suporta — e
+  `active` — outra opção a deixa sem efeito, como o tingimento sob as Nuvens), `ui/MapBook`
+  (estado, fitas, animação, desenho, entrada), `ui/PageFlow` (distribui o conteúdo pelas páginas),
+  `ui/BookPages` (Aparência, Camadas, Radar, Opções dos estandartes), `ui/BannersPage`,
+  `ui/BookLayout`, `ui/BookWidget` (base com todos os blocos de versão de widget),
+  `ui/BookWidgets`, `ui/BookSprites`, `ui/OpeningZoom`, `waypoint/WaypointDraft` e
+  `waypoint/WaypointListModel`. `SettingsScreen` é montada pelo catálogo, com o mesmo layout de
+  três colunas, e aceita só algumas seções numa coluna (`new SettingsScreen(map, Section.MINIMAP)`).
+- **Sprites**: em vez de sprites do atlas de GUI com `.mcmeta`, uma única folha
+  `assets/diorama/textures/gui/book.png` (256×256), gerada por `docs/design/book-sprites.py` sem
+  dependências, desenhada por `MapCanvas.blit` com nine-slice próprio (cantos fixos, bordas e miolo
+  repetidos, um texel = um pixel da GUI). Motivo: `blitSprite` muda de assinatura em quatro grupos
+  de versões, enquanto `MapCanvas` já resolve todos. Resource packs trocam a folha inteira; as
+  regiões ficam listadas em `BookSprites`. Capa e página têm 64×64 para o miolo custar poucos quads.
+- **Miniaturas** de Render e de estilo do fog são desenhadas proceduralmente pelo script (uma ilha
+  de blocos 4×4 em cada estilo), não reduzidas de capturas.
+- **Ícones**: itens buscados pelo id no registro (`BookSprites.stack`), porque no 26.x os
+  estandartes viraram uma `ColorCollection` em `Items`. A fita de Estandartes usa `white_banner`:
+  o vermelho sumia na fita vermelha. Radar: `player_head`, `creeper_head`, `wolf_spawn_egg`,
+  `cow_spawn_egg`. Camadas: `grass_block` e `lantern` nas duas vistas.
+- **Camadas de desenho**: o livro começa num estrato novo (`nextStratum()` a partir de 1.21.6,
+  `flush()` antes), senão os textos do mapa apareciam por cima das páginas.
+- **Layout**: abas sobem 18 px (o ícone de 16 px não cabia em 14). Duas páginas de até 160×196;
+  abaixo de ~300 px de largura de GUI, uma página por vez. O conteúdo é um fluxo: o que não cabe passa
+  para a próxima página e, além do par aberto, para outras folhas viradas pelas setas no rodapé.
+- **Fechado**: etiqueta de pergaminho no canto superior esquerdo (modo, coordenadas, chunks,
+  "desenhando") e um selo "?" com os controles no tooltip; nos primeiros 6 s da primeira abertura
+  da sessão os controles aparecem sozinhos num cartão. A faixa preta e a linha de ajuda saíram.
+- **Estandartes**: botão direito no mapa cria um rascunho no livro (Salvar/Descartar), que só
+  entra no `WaypointStore` ao salvar. Um estandarte existente é editado no lugar: nome e posição
+  valem a cada digitação válida (coordenada inválida fica em vermelho) e são gravados ao trocar de
+  seleção, de seção, fechar o livro ou sair do mapa. "Centralizar" desliza a vista até ele;
+  "Excluir" pede um segundo clique. Com vários mundos do Xaero, "Do Xaero…" abre a lista clássica
+  para escolher. `XaeroImport.find()` foi separado em `request()` (estado do cliente, thread
+  principal) e `find(Request)` (arquivos, rodando num worker).
+- **Animações**: zoom de entrada de 200 ms de 0,85× até um passo inteiro de pixels (o zoom inicial
+  é encaixado antes, então não há estalo ao terminar); o livro sobe 10 px e aparece por
+  `Spring.SOFT`; as fitas deslizam da borda até o livro; o mouse estica a fita 3 px. A troca de
+  seção ficou só com o som de página (`BOOK_PAGE_TURN`), sem o deslizamento de 120 ms previsto.
+- **Teclado**: Esc fecha o livro antes do mapa; com um campo focado, as teclas do mapa (C,
+  PgUp/PgDn, tecla do mapa, U) não disparam; Espaço aperta o widget focado em vez de recentralizar.
+- **Traduções**: `pt_br.json` passou a traduzir todas as chaves do mod (antes cobria só parte).
+- **Testes**: JUnit de `SettingsCatalog`, `BookLayout`, `OpeningZoom` e `WaypointDraft`; cenário
+  `DIORAMA_TESTS=book-map`. O cenário `waypoints` agora espera o rascunho no livro após o botão
+  direito e continua as checagens de campos no `WaypointEditScreen` clássico.
+
