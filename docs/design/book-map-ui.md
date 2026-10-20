@@ -1,7 +1,9 @@
 # Mapa mundi com interface de livro — plano
 
-Status: plano escrito em 20/10/2026. Nada implementado ainda. Ao implementar, acrescentar no fim
-uma seção "Como ficou" com o que se afastou do plano, como em `banner-waypoints.md`.
+Status: plano escrito em 20/10/2026 e revisado no mesmo dia depois do estilo de render Pintado e
+da correção de nitidez (`feature/painted-style`). Nada do livro implementado ainda. Ao implementar,
+acrescentar no fim uma seção "Como ficou" com o que se afastou do plano, como em
+`banner-waypoints.md`.
 
 ## Objetivo
 
@@ -26,7 +28,17 @@ A imagem de referência define a estética, não os pixels: todos os sprites sã
   Clique em estandarte abre `WaypointEditScreen`; botão direito cria waypoint; tecla U abre
   `WaypointListScreen`; C, PgUp/PgDn e Espaço controlam cavernas, fatia e recentralização.
 - `SettingsScreen`: todas as opções em três colunas de botões vanilla que alternam valores, com
-  layout compacto para 427×240. Também é a tela do Mod Menu e da tecla de configurações.
+  layout compacto para 427×240. Também é a tela do Mod Menu e da tecla de configurações. Em
+  Aparência, o antigo toggle "Contornos" virou o ciclo **Render** (`Settings.renderStyle`:
+  `PLAIN`/`OUTLINED`/`PAINTED`, padrão `OUTLINED`, com tooltip); configs antigas migram do campo
+  privado `outlines`, que não é mais gravado.
+- Estilo **Pintado** (`docs/design/painted-style.md`): o terreno vira mapa de fantasia pintado à
+  mão no bake (`TileBaker` + `PaintedFinish`) — luz chapada em dois tons, tinta sépia sutil, costas
+  com espuma, água em aguadas, pinceladas e grão de papel. Trocar de Render redesenha o mapa
+  inteiro em segundo plano pelo refresh atômico existente, sem perder a exploração.
+- Tiles do mapa são ampliados com NEAREST sempre que um texel cobre ≥ 1 pixel de tela
+  (`MapViewport.magnified`, que conta a escala da GUI e o nível de overview); abaixo disso, mipmaps
+  trilineares. Antes o mapa ficava borrado com GUI 2× ou 3×.
 - `WaypointListScreen`: lista com Editar/Ocultar/Excluir/TP e importação do Xaero.
 - Já existem peças reaproveitáveis: `Spring` (animação por mola), `BannerAtlas`/`BannerCompositor`
   (estandartes em pixel art), `PaperFrame` (leitura de texturas do resource pack), `SmoothZoom`.
@@ -48,7 +60,7 @@ A imagem de referência define a estética, não os pixels: todos os sprites sã
 | Fita | Cor | Item (ícone) | Conteúdo |
 |---|---|---|---|
 | Estandartes | vermelho | `minecraft:red_banner` | lista de waypoints + opções de waypoints e estandartes |
-| Aparência | azul | `minecraft:filled_map` | estilo do fog, cartografia da seed, fog sempre, fog arredondado, sombreamento, contornos, qualidade, iluminação, direção |
+| Aparência | azul | `minecraft:filled_map` | render (Simples/Contornos/Pintado), estilo do fog, cartografia da seed, fog sempre, fog arredondado, sombreamento, qualidade, iluminação, direção |
 | Camadas | verde | `minecraft:lantern` | superfície/caverna, fatia Y (− / +), grade de chunks, slime chunks, pontos de spawn |
 | Radar | amarelo | `minecraft:spyglass` | jogadores, hostis, neutros, passivos (com as carinhas de `MobFaces`), alcance |
 | Minimapa | creme | `minecraft:compass` | sai para a tela de opções do minimapa (com um pequeno sinal de "sair" na fita) |
@@ -65,8 +77,8 @@ Regra: tudo o que muda o que o mapa mundi mostra fica no livro, inclusive o que 
 minimapa (radar, sobreposições, aparência, waypoints). Sai do mapa somente o que é exclusivo do
 minimapa:
 
-- **No livro**: `fogStyle`, `seedPreview`, `alwaysFogOfWar`, `roundedFog`, `depthShading`,
-  `outlines`, `quality`, `lighting` (quando `EnvironmentLighting.supported()`), `mapDirection`,
+- **No livro**: `renderStyle`, `fogStyle`, `seedPreview`, `alwaysFogOfWar`, `roundedFog`,
+  `depthShading`, `quality`, `lighting` (quando `EnvironmentLighting.supported()`), `mapDirection`,
   `chunkGrid`, `slimeChunks`, `spawnSpots`, `radar*`, `waypointsOnMap`, `waypointsInWorld`,
   `deathMarkers`, `animateBanners`, `sepiaBanners`, `extraBannerLayers`.
 - **Fora (fita Minimapa)**: `minimap`, `minimapSize`, `minimapCorner`, `minimapFrame`,
@@ -76,7 +88,10 @@ minimapa:
 
 As mudanças valem ao vivo: o livro chama `Settings.save()` como hoje, e `MapSession` continua
 juntando refresh de qualidade/aparência no próximo tick, preservando exploração e texturas
-residentes pelas barreiras existentes. Nenhum rebake extra por estar no livro.
+residentes pelas barreiras existentes. Nenhum rebake extra por estar no livro. `renderStyle`,
+`depthShading` e `quality` redesenham o mapa inteiro em segundo plano a cada troca, então o
+livro só aplica no clique (nada de pré-visualizar ao passar o mouse) e o ciclo de Render não
+deve passar por valores intermediários: os espaços de Render escolhem o valor direto.
 
 ### Conteúdo das páginas
 
@@ -87,9 +102,14 @@ residentes pelas barreiras existentes. Nenhum rebake extra por estar no livro.
   página, coordenadas, distância e ações (Centralizar no mapa, Editar estandarte, Ocultar/Mostrar,
   Compartilhar, Teleportar com permissão, Excluir com confirmação no segundo clique).
 - **Estandartes / Opções**: as seis opções de waypoints/estandartes.
-- **Aparência**: estilo do fog como três espaços com miniaturas estáticas (Nuvens, Mapa antigo,
-  Mapa antigo colorido); direção como uma rosa dos ventos de quatro espaços; o resto como
-  alternâncias e ciclos.
+- **Aparência**: render como três espaços com miniaturas estáticas (Simples, Contornos,
+  Pintado), no topo da página por ser a escolha mais visível; estilo do fog também como três
+  espaços (Nuvens, Mapa antigo, Mapa antigo colorido); direção como uma rosa dos ventos de quatro
+  espaços; o resto como alternâncias e ciclos. As miniaturas são sprites fixos gerados pelo
+  `book-sprites.py` a partir de capturas de `DIORAMA_TESTS=painted` reduzidas à mão para pixel
+  art, não tiles ao vivo. O Pintado combina com o livro (tinta sépia, papel quente): a cor de
+  tinta `#5A2E22` da paleta do livro pode ser conferida contra o `INK` de `PaintedFinish` para os
+  dois parecerem a mesma pena.
 - **Camadas**: modo superfície/caverna e fatia Y com botões (o equivalente de mouse para C e
   PgUp/PgDn); sobreposições. Slime chunks aparece desabilitado com dica quando não há seed.
 - **Radar**: quatro categorias com ícones e o alcance.
@@ -168,16 +188,20 @@ Todas curtas, por tempo real e interrompíveis:
   pouco mais aberta no início pede no máximo ~38% mais área, quase sempre já residente; nenhum
   rebake. Roda só na primeira `init()` da instância (não em resize nem ao voltar de tela filha),
   termina na hora ao rolar, arrastar, `lookAt()` (testes) ou mudança de direção, e não mexe no
-  alvo do `SmoothZoom`. As fitas deslizam da borda no mesmo intervalo.
+  alvo do `SmoothZoom`. As fitas deslizam da borda no mesmo intervalo. Se o fator cruzar o limite
+  de `MapViewport.magnified` (um texel = um pixel de tela), a amostragem troca de trilinear para
+  NEAREST no meio da animação; conferir nas capturas se isso aparece como um "estalo" e, se
+  aparecer, decidir a amostragem pelo zoom alvo durante a animação.
 - **Abrir/fechar o livro (~180 ms)**: `Spring.SOFT` — o livro sobe alguns pixels e aparece.
 - **Trocar de seção (~120 ms)**: o conteúdo desliza levemente como uma página virando.
 - **Fitas**: passar o mouse estica a fita 3 px (`Spring.BOUNCY`); a selecionada fica mais longa.
 
 ## Etapas
 
-0. Antes de começar: os 60 arquivos alterados de `feature/banner-waypoints` precisam estar
-   commitados/integrados. A branch nova `feature/book-map-ui` sai de `development` depois dessa
-   integração (ou de `feature/banner-waypoints`, se ela ainda não tiver entrado).
+0. Antes de começar: o trabalho de `feature/banner-waypoints` já está commitado (`c1e2b6e`), e
+   `feature/painted-style` (nitidez `6fc05f1` e Pintado `5093742`) está em cima dela. A branch
+   nova `feature/book-map-ui` sai de `development` depois de integrar as duas (ou de
+   `feature/painted-style`, se ainda não tiverem entrado), para o livro já usar `renderStyle`.
 1. `SettingsCatalog` e `SettingsScreen` montada por ele, sem mudança visual; filtro por seção.
    Testes JUnit do catálogo.
 2. `BookSprites` com Stonecutter, sprites gerados pelo script, `BookLayout` e widgets do livro.
@@ -196,8 +220,9 @@ Todas curtas, por tempo real e interrompíveis:
 ## Verificação prevista
 
 - JUnit (`./gradlew --configure-on-demand :26.3:build`):
-  - `SettingsCatalog`: todo campo de `Settings` aparece uma vez; os de minimapa têm escopo
-    MINIMAPA; toda chave de tradução existe em `en_us.json` e `pt_br.json`.
+  - `SettingsCatalog`: todo campo público de `Settings` aparece uma vez (o campo privado legado
+    `outlines`, só lido na migração, fica de fora); os de minimapa têm escopo MINIMAPA; toda chave
+    de tradução existe em `en_us.json` e `pt_br.json` (inclusive `render_style.*`).
   - `BookLayout`: em 427×240, 640×360 e 960×540 nada sai da tela nem se sobrepõe; o modo de página
     única entra abaixo do limite.
   - `OpeningZoom`: começa no fator, termina exatamente no alvo, é monótono e para ao cancelar.
@@ -206,8 +231,10 @@ Todas curtas, por tempo real e interrompíveis:
   `config.json`, `MapStyle` e que a tela continua sendo `MapScreen`; ida e volta pela fita
   Minimapa sem repetir o zoom; clique num estandarte abre a seção com ele selecionado; renomeia
   inline; repete a checagem de sobreposição em 1280×720; digitar "c" no nome não troca a camada.
-- Rodar também `settings-refresh`, `modmenu` (a tela do Mod Menu continua completa) e
-  `banner-waypoints`, que tocam as telas alteradas.
+- No `book-map`, trocar Render para Pintado pelo livro e conferir que `MapStyle.get().painted()`
+  liga, que o mapa atrás continua com cobertura e que a tela continua sendo `MapScreen`.
+- Rodar também `settings-refresh` (que já alterna o Pintado), `painted`, `modmenu` (a tela do Mod
+  Menu continua completa) e `banner-waypoints`, que tocam as telas alteradas.
 - Compilar os alvos com APIs de GUI diferentes: Fabric 26.3, NeoForge 26.3, 26.1, 1.21.11,
   1.21.6, 1.21.4 e 1.21.1 (assinaturas de `blitSprite` e de desenho de item mudam entre eles).
 
