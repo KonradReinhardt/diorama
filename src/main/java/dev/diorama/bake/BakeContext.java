@@ -12,14 +12,18 @@ public record BakeContext(MapStyle style, MapDirection direction, boolean fast) 
     }
     /** Bump when bakes start drawing the same settings differently, so saved tiles are redrawn. */
     // 2: tiles baked before deep-ocean pixels were refreshed when their neighbours loaded.
-    private static final int LOOK_REVISION = 2;
+    // 3: one ray per pixel on the block grid, and outlines from the faces' own geometry.
+    private static final int LOOK_REVISION = 3;
 
-    /** Identifies how baked pixels look: tiles saved under another value are redrawn when shown. */
+    /**
+     * Identifies how baked pixels look: tiles saved under another value are redrawn when shown.
+     * Quality doesn't count: every pixel shows one face, so both qualities bake the same pixels.
+     */
     public int appearance() {
-        return java.util.Objects.hash(LOOK_REVISION, this.style.looksHash(), this.direction, this.fast);
+        return java.util.Objects.hash(LOOK_REVISION, this.style.looksHash(), this.direction);
     }
 
-    public double sin() { return Math.sin(Math.toRadians(this.style.pitchDegrees())); }
-    public double cos() { return Math.cos(Math.toRadians(this.style.pitchDegrees())); }
-    public double zAt(double v, double y) { return (v + y * cos()) / sin(); }
+    public double zScale() { return Projection.zScale(this.style.pitchDegrees()); }
+    public double yScale() { return Projection.yScale(this.style.pitchDegrees()); }
+    public double zAt(double v, double y) { return (v + y * yScale()) / zScale(); }
 }

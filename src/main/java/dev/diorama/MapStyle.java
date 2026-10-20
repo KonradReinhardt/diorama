@@ -55,10 +55,11 @@ public record MapStyle(
 	 * What players get: {@link #FLAT} made to read in depth. Ground that sees less sky gets
 	 * darker, a lower sun casts longer shadows, shadows are deeper and cooler against warm
 	 * sunlight, high ground is a little brighter than low ground, and the camera looks a bit
-	 * lower so more block sides show.
+	 * lower so more block sides show: at 45 degrees, where a block's top and side are both whole
+	 * 4 by 4 pixel squares (see {@link Projection}).
 	 */
 	public static final MapStyle DEFAULT = FLAT.withName("Default")
-		.withPitch(50)
+		.withPitch(45)
 		.withGrade(1.35F, 1.16F, new float[] {1.14F, 1.0F, 0.8F}, new float[] {0.74F, 0.86F, 1.18F})
 		.withSkyOcclusion(0.85F)
 		.withSunElevation(38)

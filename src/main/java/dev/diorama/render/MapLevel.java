@@ -306,15 +306,24 @@ public final class MapLevel implements ChunkSource {
 	 * Where the sky view's tiles are saved: one folder per kind of view, since their pixels mean
 	 * different things and saved pixels are merged into fresh bakes. The camera angle moves where
 	 * pixels land. Under a roof, the view is a different picture, and with fog of war it may only
-	 * hold what the player has seen. 60 degrees was the only angle before others existed, and its
-	 * sky view tiles are in "surface".
+	 * hold what the player has seen. Since the block grid ({@link Projection}) every folder name
+	 * says "grid": "surface", "surface-50" and "under-roof-50" hold maps from the projection
+	 * before it, and stay as they were.
 	 */
 	private String storeName() {
-		long pitch = Math.round(dev.diorama.MapStyle.get().pitchDegrees());
 		if (this.roofless()) {
-			return "under-roof-" + pitch + (this.fogOfWar ? "-fog" : "") + directionSuffix();
+			return "under-roof-grid-" + pitchName() + (this.fogOfWar ? "-fog" : "") + directionSuffix();
 		}
-		return (pitch == 60 ? "surface" : "surface-" + pitch) + directionSuffix();
+		return surfaceStoreName();
+	}
+
+	/** The folder of the surface map for the current camera, under a world's map folder. */
+	public static String surfaceStoreName() {
+		return "surface-grid-" + pitchName() + directionSuffix();
+	}
+
+	private static long pitchName() {
+		return Math.round(dev.diorama.MapStyle.get().pitchDegrees());
 	}
 
     private Path stampsFile() {
@@ -949,7 +958,7 @@ public final class MapLevel implements ChunkSource {
      */
     boolean chunksReach(TileKey key) {
         if (this.chunks.isEmpty()) return false;
-        double sin = Projection.sin(), cos = Projection.cos();
+        double sin = Projection.zScale(), cos = Projection.yScale();
         double u0 = key.minU() - BAKE_REACH, u1 = key.minU() + Projection.TILE_UNITS + BAKE_REACH;
         double v0 = key.minV(), v1 = key.minV() + Projection.TILE_UNITS;
         double d0 = (v0 + this.minY * cos) / sin - BAKE_REACH, d1 = (v1 + this.maxY * cos) / sin + BAKE_REACH;

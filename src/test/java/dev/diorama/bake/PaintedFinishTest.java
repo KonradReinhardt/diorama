@@ -8,50 +8,56 @@ import org.junit.jupiter.api.Test;
 class PaintedFinishTest {
     private static final int B = PaintedFinish.BORDER;
 
-    /** A traced area {@code size} pixels across plus the border, with some water, cliffs and unknown pixels. */
-    private record Area(int size, int[] day, int[] night, float[] depth, float[] wet, float[] water, float[] sun) {
+    /** A traced area {@code size} pixels across plus the border: block faces with some water, steps and unknown pixels. */
+    private record Area(int size, PaintedFinish.Traced traced) {
         static Area random(int size, long seed) {
             int w = size + 2 * B, n = w * w;
             Random random = new Random(seed);
             int[] day = new int[n], night = new int[n];
-            float[] depth = new float[n], wet = new float[n], water = new float[n], sun = new float[n];
+            boolean[] wet = new boolean[n], sun = new boolean[n];
+            float[] water = new float[n], albedo = new float[n * 3], behind = new float[n], front = new float[n];
             for (int i = 0; i < n; i++) {
                 int x = i % w, y = i / w;
                 boolean unknown = x + y < 6 || random.nextInt(40) == 0;
-                int alpha = unknown ? 0 : random.nextInt(8) == 0 ? 191 : 255;
-                // Blocky colours, the way four pixels share a block.
-                Random block = new Random(seed * 31 + (x / 4) * 7919L + (y / 4));
-                day[i] = alpha << 24 | block.nextInt(0x1000000);
-                night[i] = alpha << 24 | (block.nextInt(0x1000000) & 0x3F3F3F);
-                depth[i] = unknown ? Float.NaN : (x / 4 + y / 4) % 5 == 0 ? 2 : 9;
-                wet[i] = x > w / 2 ? 1 : 0;
+                // One colour per 4 by 4 face, the way the map's grid draws blocks.
+                Random face = new Random(seed * 31 + (x / 4) * 7919L + (y / 4));
+                day[i] = unknown ? 0 : 0xFF000000 | face.nextInt(0x1000000);
+                night[i] = unknown ? 0 : 0xFF000000 | (face.nextInt(0x1000000) & 0x3F3F3F);
+                for (int k = 0; k < 3; k++) albedo[i * 3 + k] = 0.05F + face.nextFloat() * 0.6F;
+                wet[i] = x > w / 2;
                 water[i] = (x - w / 2) * 0.4F;
-                sun[i] = block.nextBoolean() ? 1 : 0;
+                sun[i] = face.nextBoolean();
+                behind[i] = y % 4 == 0 && (x / 4) % 3 == 0 ? 2.8F : 0;
+                front[i] = y % 4 == 3 && (x / 4) % 3 == 0 ? 2.8F : 0;
             }
-            return new Area(size, day, night, depth, wet, water, sun);
+            return new Area(size, new PaintedFinish.Traced(day, night, wet, water, sun, albedo, behind, front));
         }
 
         /** The {@code size}-pixel square at (x0, y0) of this area's interior, with its own border. */
         Area crop(int x0, int y0, int size) {
             int from = this.size + 2 * B, to = size + 2 * B;
-            Area out = new Area(size, new int[to * to], new int[to * to], new float[to * to], new float[to * to], new float[to * to], new float[to * to]);
+            PaintedFinish.Traced t = this.traced;
+            PaintedFinish.Traced out = new PaintedFinish.Traced(new int[to * to], new int[to * to], new boolean[to * to], new float[to * to],
+                new boolean[to * to], new float[to * to * 3], new float[to * to], new float[to * to]);
             for (int y = 0; y < to; y++) {
                 for (int x = 0; x < to; x++) {
                     int i = (y0 + y) * from + x0 + x, j = y * to + x;
-                    out.day[j] = this.day[i];
-                    out.night[j] = this.night[i];
-                    out.depth[j] = this.depth[i];
-                    out.wet[j] = this.wet[i];
-                    out.water[j] = this.water[i];
-                    out.sun[j] = this.sun[i];
+                    out.day()[j] = t.day()[i];
+                    out.night()[j] = t.night()[i];
+                    out.wet()[j] = t.wet()[i];
+                    out.waterDepth()[j] = t.waterDepth()[i];
+                    out.sun()[j] = t.sun()[i];
+                    out.behind()[j] = t.behind()[i];
+                    out.front()[j] = t.front()[i];
+                    System.arraycopy(t.albedo(), i * 3, out.albedo(), j * 3, 3);
                 }
             }
-            return out;
+            return new Area(size, out);
         }
 
         int[][] finish(int gx0, int gy0) {
             int[] day = new int[this.size * this.size], night = new int[day.length];
-            PaintedFinish.apply(this.size, this.size, gx0, gy0, this.day, this.night, this.depth, this.wet, this.water, this.sun, day, night);
+            PaintedFinish.apply(this.size, this.size, gx0, gy0, this.traced, day, night);
             return new int[][] {day, night};
         }
     }
@@ -75,11 +81,16 @@ class PaintedFinishTest {
         int w = 48 + 2 * B;
         for (int y = 0; y < 48; y++) {
             for (int x = 0; x < 48; x++) {
-                int traced = area.day()[(y + B) * w + x + B];
+                int traced = area.traced().day()[(y + B) * w + x + B];
                 assertEquals(traced >>> 24, out[0][y * 48 + x] >>> 24);
                 if (traced >>> 24 == 0) assertEquals(traced, out[0][y * 48 + x]);
             }
         }
+    }
+
+    @Test void patchesOffTheBlockGridAreRefused() {
+        Area area = Area.random(32, 1);
+        assertThrows(IllegalArgumentException.class, () -> area.finish(2, 0));
     }
 
     @Test void waterWashesDeepenOutward() {

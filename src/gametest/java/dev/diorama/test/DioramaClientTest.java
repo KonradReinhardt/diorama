@@ -65,10 +65,18 @@ public class DioramaClientTest implements FabricClientGameTest {
 	 */
 	private static final int SERVER_PORT = freePort();
 
+	/**
+	 * Chunks the client loads around the player. DIORAMA_RENDER_DISTANCE lowers it for quicker runs
+	 * of scenarios that only look near the player: 8 loads about half the chunks of 12.
+	 */
+	static final int RENDER_DISTANCE = Integer.parseInt(System.getenv().getOrDefault("DIORAMA_RENDER_DISTANCE", "12"));
+	/** How many chunks must be mapped before a scenario starts: most of what the render distance loads. */
+	static final int LOADED_CHUNKS = Math.min(400, (2 * RENDER_DISTANCE + 1) * (2 * RENDER_DISTANCE + 1) * 2 / 3);
+
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		context.getInput().resizeWindow(1600, 900);
-		context.runOnClient(mc -> mc.options.renderDistance().set(12));
+		context.runOnClient(mc -> mc.options.renderDistance().set(RENDER_DISTANCE));
 		String seed = System.getProperty("diorama.seed", "diorama");
 		Set<String> tests = selectedTests();
 		if (tests.contains("showcase") && tests.size() > 1) {
@@ -92,7 +100,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 				world.getServer().runCommand("tp @a " + tp);
 			}
 
-			context.waitFor(mc -> MapSession.get() != null && MapSession.get().map().chunkCount() > 400, 2400);
+			context.waitFor(mc -> MapSession.get() != null && MapSession.get().map().chunkCount() > LOADED_CHUNKS, 2400);
 			settle(context, 100);
 			save = world.getWorldSave();
 			spawnCell = tests.contains("saved-map") ? knownSpawnCell(context) : null;
@@ -660,7 +668,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 		// Back home the level switches before the loading screen closes; the next scenario starts
 		// with a minimap screenshot, so wait for the screen to go and the map to fill in again.
 		context.waitFor(mc -> mc.level.dimension() == net.minecraft.world.level.Level.OVERWORLD && mc.gui.screen() == null
-			&& MapSession.get() != null && MapSession.get().map().chunkCount() > 400, 2400);
+			&& MapSession.get() != null && MapSession.get().map().chunkCount() > LOADED_CHUNKS, 2400);
 		settle(context, 100);
 	}
 
@@ -826,7 +834,8 @@ public class DioramaClientTest implements FabricClientGameTest {
 		double narrowFov = 17;
 		double frameBlocks = 64;
 		double distance = frameBlocks / (2 * Math.tan(Math.toRadians(narrowFov) / 2));
-		double[] above = {centre[0], centre[1] + distance * Projection.sin(), centre[2] + distance * Projection.cos()};
+		double pitch = Math.toRadians(MapStyle.get().pitchDegrees());
+		double[] above = {centre[0], centre[1] + distance * Math.sin(pitch), centre[2] + distance * Math.cos(pitch)};
 		double[] start = {cx + 14.5, base + 4.6, cz + 120.5};
 		double[] end = {cx + 12.5, base + 7.6, cz + 110.5};
 
@@ -2385,7 +2394,7 @@ public class DioramaClientTest implements FabricClientGameTest {
 			server.overworld().getChunk(village).getHeight(Heightmap.Types.MOTION_BLOCKING, village.getX() & 15, village.getZ() & 15));
 		world.getServer().runCommand("tp @a " + village.getX() + " " + (surface + 1) + " " + village.getZ());
 		context.waitTicks(200);
-		context.waitFor(mc -> MapSession.get() != null && MapSession.get().map().chunkCount() > 400, 2400);
+		context.waitFor(mc -> MapSession.get() != null && MapSession.get().map().chunkCount() > LOADED_CHUNKS, 2400);
 		settle(context, 100);
 		for (MapStyle style : MapStyle.tour()) {
 			context.runOnClient(mc -> MapStyle.set(style));

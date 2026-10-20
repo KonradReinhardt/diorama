@@ -97,9 +97,8 @@ public final class Settings {
 	public boolean depthShading = true;
 	public boolean alwaysFogOfWar = false;
 	/**
-	 * Fast is for slower computers: the map takes one sample per pixel instead of four, so it
-	 * fills in about four times sooner, and the fog draws two layers instead of eight, without
-	 * lighting them from the sun.
+	 * Fast is for slower computers: the fog draws two layers instead of eight, without lighting
+	 * them from the sun. The map itself is the same either way, one ray per pixel on the block grid.
 	 */
 	public Quality quality = Quality.FANCY;
     public EnvironmentLighting.Mode lighting = EnvironmentLighting.Mode.WORLD;

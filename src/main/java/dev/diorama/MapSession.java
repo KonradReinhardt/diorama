@@ -61,7 +61,6 @@ public final class MapSession {
 	private boolean underground;
 	private MapStyle style = MapStyle.get();
 	private MapDirection direction = Projection.direction();
-    private boolean fast = dev.diorama.bake.TileBaker.fast();
 
 	private MapSession(ClientLevel level, @Nullable String key) {
 		this.level = level;
@@ -117,11 +116,10 @@ public final class MapSession {
 		}
 		if (BlockLooks.get() == null) {
 			BlockLooks.build();
-		} else if (session.style != MapStyle.get() || session.direction != Projection.direction() || session.fast != dev.diorama.bake.TileBaker.fast()) {
-			// Only a change the tiles show re-bakes them; the fog edge is drawn over them.
-			boolean rebake = !MapStyle.get().looksLike(session.style) || session.direction != Projection.direction()
-                || session.fast != dev.diorama.bake.TileBaker.fast();
-            session.fast = dev.diorama.bake.TileBaker.fast();
+		} else if (session.style != MapStyle.get() || session.direction != Projection.direction()) {
+			// Only a change the tiles show re-bakes them; the fog edge is drawn over them, and
+			// quality only changes the fog now.
+			boolean rebake = !MapStyle.get().looksLike(session.style) || session.direction != Projection.direction();
 			session.direction = Projection.direction();
 			session.style = MapStyle.get();
 			if (rebake) {

@@ -105,7 +105,8 @@ public final class MapScreen extends Screen {
 		}
 		// Switching to a cave slice while zoomed far out comes back to the closest zoom it can show.
 		this.zoom = Math.max(this.minZoom(), this.zoom);
-		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, this.zoom, this.layer);
+		// Drawn pixel perfect; the smooth zoom and pan keep their own exact values.
+		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, this.zoom, this.layer).pixelPerfect();
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		Radar.Blip hovered = null;
 		this.blips = List.of();

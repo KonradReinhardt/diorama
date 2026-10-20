@@ -23,8 +23,8 @@ redesenham os tiles salvos) e o compositor dia/noite continua só misturando os 
 - **Dois tons**: cada superfície fica com a cor iluminada pelo sol ou com uma única cor de sombra
   projetada. Sem oclusão de cantos (AO), oclusão de céu ou degradê de altitude; paredes ficam só
   um pouco mais escuras que o chão (0,86).
-- **Sombras nítidas**: o sol não recebe o jitter por amostra, então a borda da sombra é uma mancha
-  chapada (o supersampling ainda suaviza o serrilhado).
+- **Sombras nítidas**: um raio por pixel na grade de blocos (`docs/design/pixel-grid.md`), sem
+  jitter do sol, então a sombra é uma mancha chapada recortada nos texels de cada face.
 - **Paleta**: sol dourado, sombra lavanda‑azulada, um pouco mais de luz ambiente
   (`MapStyle.paint()`), e uma curva de pigmento em que nada chega ao preto puro nem estoura no
   branco (piso levemente violeta, ombro nos realces).
@@ -35,15 +35,19 @@ redesenham os tiles salvos) e o compositor dia/noite continua só misturando os 
 
 ### Acabamento (`PaintedFinish`)
 
-Recebe o patch rastreado com 4 pixels de borda e devolve só o miolo:
+Recebe o patch rastreado com 2 faces (8 px) de borda, começando numa borda de face, e devolve só
+o miolo:
 
-1. **Tinta**: filtro de Kuwahara (janelas 4×4) aplicado a 90%: cada área vira a mancha lisa de um
-   pincel e as bordas entre áreas se mantêm. É isso que derrete a textura dos blocos. O plano
-   noturno usa a janela escolhida pelo diurno, para os dois ficarem em registro.
-2. **Nanquim**: linha sépia quente atrás de cada borda mais próxima (peso pela diferença de
-   profundidade), linha mais leve no lado escuro de fronteiras de cor nítidas, linha firme na terra
-   ao longo de toda costa e anéis azulados onde a água muda de aguada. O traço varia de peso com um
-   ruído de mundo, como pena à mão; a linha mais forte vence em vez de somar.
+1. **Tinta**: filtro de Kuwahara sobre as faces da grade (cada uma uma célula de 4×4 px), no
+   albedo: o dab de uma face é a média da janela de 2×2 faces que menos varia, aplicado a 90%. Cada
+   pixel muda pela razão entre o dab e o seu albedo, então a cor das faces derrete em manchas e a
+   luz por texel (sombras) fica intacta; nada sai da grade. Dia e noite recebem o mesmo fator.
+2. **Nanquim**: linha sépia quente nos pixels que ficam atrás de uma aresta (peso pela distância
+   exata calculada pelo `TileBaker` a partir das faces), linha mais leve no lado escuro de faces
+   vizinhas de cores bem diferentes, linha firme na terra ao longo de toda costa e anéis azulados
+   onde a água muda de aguada. Só os 4 vizinhos: 1 px, sem engrossar nas quinas. O traço varia de
+   peso com um ruído de mundo, como pena à mão; a linha mais forte vence em vez de somar. Nada de
+   contorno do fundo através da água.
 3. **Luz**: um brilho quente fino nas bordas ensolaradas voltadas para a câmera e uma linha de
    espuma na água junto à terra.
 4. **Textura**: pinceladas curtas que seguem um campo de direção que gira devagar (longas e
@@ -58,20 +62,17 @@ Recebe o patch rastreado com 4 pixels de borda e devolve só o miolo:
   (`PaintedFinishTest.aPatchMatchesTheSamePixelsOfAWholeArea`).
 - Alpha é preservado e pixels desconhecidos continuam desconhecidos: o estilo nunca aumenta a
   cobertura nem revela terreno (`keepsEveryAlphaSoCoverageNeverGrows`).
-- O alcance extra (4 px, menos de um bloco) fica dentro das margens já usadas por
-  `TileInvalidation`, então edições redesenham tudo o que afetam.
+- O alcance extra (8 px, dois blocos) fica dentro das margens já usadas por `TileInvalidation`
+  (a sombra e a oclusão de céu já pedem bem mais), então edições redesenham tudo o que afetam.
 - Trocar de estilo preserva exploração e tiles residentes (cenário `settings-refresh`).
-- Simples e Contornos continuam produzindo exatamente os pixels de antes; nada muda para quem não
-  escolhe Pintado.
+- Simples e Contornos não usam nada do acabamento pintado; os três estilos compartilham a grade e o
+  contorno geométrico.
 
 ## Nitidez
 
 Os tiles são ampliados com NEAREST sempre que um texel cobre pelo menos um pixel real de tela
-(zoom × escala da GUI × tamanho do nível de overview). Antes a conta ignorava a escala da GUI: com
-GUI 3×, zooms de 1 a 4 px de GUI por bloco mostravam texels de 1 a 3 pixels de tela com filtro
-linear, e o mapa parecia borrado. Vale para todos os estilos, mapa mundial e minimapa. Abaixo de um
-pixel de tela por texel os mipmaps continuam com filtro trilinear, para o mapa não cintilar ao
-mover ou dar zoom.
+(zoom × escala da GUI × tamanho do nível de overview), e a vista desenhada encaixa num número
+inteiro de pixels de tela por texel; ver `docs/design/pixel-grid.md`.
 
 ## Migração
 
@@ -80,12 +81,11 @@ ser gravado. O padrão para configs novas continua Contornos.
 
 ## Custo
 
-O acabamento é uma passada linear sobre a área: as janelas do Kuwahara saem de somas de caixa
-(contagem, luma e luma², cada janela somada a partir dos próprios pixels, sem janela deslizante,
-para patch e tile darem o mesmo resultado), mais vizinhos e consultas de tabela. Medido num tile
-inteiro de 512² com dia e noite (JUnit, melhor de 8, nesta máquina): ~79 ms, contra ~0,7 s de bake
-médio por tile nos logs do teste de cliente — cerca de 10% a mais por tile no estilo pintado. As
-tabelas de pincel, aguada e grão são geradas uma vez na carga da classe (256², 128², 128²).
+O acabamento é uma passada linear sobre a área: médias por face, um Kuwahara por face (não por
+pixel), 4 vizinhos e consultas de tabela. Medido num tile inteiro de 512² com dia e noite (JUnit,
+melhor de 8, nesta máquina): ~31 ms, contra ~0,2–0,34 s de bake médio por tile nos logs do teste de
+cliente com a grade. As tabelas de pincel, aguada e grão são geradas uma vez na carga da classe
+(256², 128², 128²).
 
 ## Limites
 
@@ -98,5 +98,6 @@ tabelas de pincel, aguada e grão são geradas uma vez na carga da classe (256²
 
 ## Validação
 
-`DIORAMA_TESTS=painted ./gradlew --configure-on-demand :26.3:runClientGameTest` fotografa uma
-aldeia e uma costa em Contornos e Pintado, em três zooms, mais o minimapa e a noite (Fabric 26.3).
+`DIORAMA_TESTS=painted DIORAMA_RENDER_DISTANCE=8 ./gradlew --configure-on-demand :26.3:runClientGameTest`
+fotografa uma aldeia e uma costa nos três estilos de perto, o Pintado no zoom médio, o minimapa e a
+noite (Fabric 26.3).

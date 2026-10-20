@@ -23,9 +23,9 @@ public final class Markers {
 	 */
 	public static void player(GuiGraphicsExtractor graphics, float x, float y, float yawDegrees, float scale) {
 		double yaw = Math.toRadians(yawDegrees - dev.diorama.Projection.direction().ordinal() * 90);
-		// Screen direction of travel. North-south distances look shorter under the tilted camera.
+		// Screen direction of travel: a block north moves zScale units up the map.
 		double dx = -Math.sin(yaw);
-		double dy = Math.cos(yaw) * dev.diorama.Projection.sin();
+		double dy = Math.cos(yaw) * dev.diorama.Projection.zScale();
 		// The sprite points up; turn it toward the direction of travel, in sixteenths of a turn.
 		double turn = Math.round(Math.atan2(dx, -dy) / (Math.PI / 8)) * (Math.PI / 8);
 		float cos = (float) Math.cos(turn);

@@ -97,6 +97,39 @@ public final class MapViewport {
 		public float screenY(double v) {
 			return (float) (this.y + this.height / 2.0 + (v - this.centerV) * this.zoom);
 		}
+
+		/**
+		 * This view as it should be drawn, pixel perfect. Once a map pixel covers a screen pixel or
+		 * more, the zoom rounds to a whole number of screen pixels per map pixel and the centre moves
+		 * by less than a screen pixel, so every map pixel is the same square of screen pixels and the
+		 * block grid lines up with the screen's. Smaller map pixels blend through mipmaps, so the
+		 * view stays as it is.
+		 */
+		public View pixelPerfect() {
+			return this.pixelPerfect(Minecraft.getInstance().getWindow().getGuiScale());
+		}
+
+		/** Same, for a GUI scale of {@code gui} screen pixels per GUI pixel. */
+		public View pixelPerfect(double gui) {
+			double perMapPixel = this.zoom * gui / Projection.PIXELS_PER_UNIT;
+			if (perMapPixel < 1) {
+				return this;
+			}
+			double zoom = Math.round(perMapPixel) * (double) Projection.PIXELS_PER_UNIT / gui;
+			double screenPerUnit = zoom * gui;
+			double u = align(this.centerU, gui * (this.x + this.width / 2.0), screenPerUnit);
+			double v = align(this.centerV, gui * (this.y + this.height / 2.0), screenPerUnit);
+			return new View(this.x, this.y, this.width, this.height, u, v, zoom, this.layer);
+		}
+
+		/**
+		 * The centre nearest {@code centre} that puts map unit 0, and so every map pixel edge, on a
+		 * whole screen pixel, given the screen pixel the centre is drawn at.
+		 */
+		private static double align(double centre, double screenCentre, double screenPerUnit) {
+			double origin = screenCentre - centre * screenPerUnit;
+			return centre - (Math.rint(origin) - origin) / screenPerUnit;
+		}
 	}
 
 	/** Below this zoom (GUI pixels per block) overlay lines and dots would blur into noise. */

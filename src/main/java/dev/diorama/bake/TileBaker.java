@@ -11,24 +11,21 @@ import org.jspecify.annotations.Nullable;
 /**
  * Ray traces one map tile through the block data.
  *
- * <p>Every texture pixel fires four rays along the camera direction. Each ray walks the blocks in
+ * <p>Every texture pixel fires one ray, through its middle, along the camera direction: the
+ * projection puts every block edge on a pixel boundary, so a pixel always shows a single face and
+ * its light is that of one texel of it. Each ray walks the blocks in
  * its column (the camera faces due north, so a ray never changes x) until it hits something solid.
  * That hit is then lit: in the surface view by the sun, with a second ray toward it for shadows;
  * in a cave slice by the game's own block and sky light. Corner ambient occlusion and partial
  * colour from plants, glass and water come on top.
  */
 public final class TileBaker {
-	/** Rotated-grid sample offsets inside a pixel. */
-	private static final double[][] SAMPLES = {{0.375, 0.125}, {0.875, 0.375}, {0.125, 0.625}, {0.625, 0.875}};
-	/** One sample in the middle of the pixel: a quarter of the work, with jaggier block edges. */
-	private static final double[][] FAST_SAMPLES = {{0.5, 0.5}};
+	/** The Quality setting: it only thins the fog now, since every pixel takes one ray either way. */
 	private static volatile boolean fast;
 
 	// The sun is in the west, slightly south, so shadows fall to the east; how high is per style.
 	private static final double SUN_AZIMUTH_X = -0.878;
 	private static final double SUN_AZIMUTH_Z = 0.479;
-	/** Small per-sample nudges of the sun direction, which soften shadow edges. */
-	private static final double[][] SUN_JITTER = {{0.03, 0.0, -0.02}, {-0.02, 0.0, 0.03}, {0.02, 0.0, 0.02}, {-0.03, 0.0, -0.03}};
 
 
 	/**
@@ -57,8 +54,15 @@ public final class TileBaker {
 		SKY_WEIGHTS[ring * 2] = 1.5;
 	}
 	private static final float[] AO_LEVELS = {0.6F, 0.74F, 0.87F, 1.0F};
-	/** How much nearer a neighbouring pixel has to be, in blocks, before an outline is drawn. */
+	/**
+	 * How far behind a neighbouring face a pixel must lie, in blocks along the view, before an
+	 * outline is drawn: a step of two blocks or more, not every single-block terrace.
+	 */
 	private static final float OUTLINE_DEPTH = 1.5F;
+	/** What a pixel shows, for outlines: no face (sky, void, the rock of a cave cut), a top face or a south face. */
+	static final byte NO_FACE = 0;
+	static final byte TOP_FACE = 1;
+	static final byte SOUTH_FACE = 2;
 	/** How far below the cut a cave slice looks. */
 	public static final int CAVE_DEPTH = 48;
 	private static final int SHADOW_STEPS = 96;
@@ -108,10 +112,9 @@ public final class TileBaker {
 	private final java.util.Map<Long, Boolean> slimeChunks = new java.util.HashMap<>();
 	private final ChunkSource source;
 	private final MapStyle style;
-	private final boolean fastQuality;
 	// The camera angle when this bake started; a change mid-bake makes the result stale anyway.
-	private final double sin;
-	private final double cos;
+	private final double zScale;
+	private final double yScale;
 	// Direction toward the sun for this style.
 	private final double sunX;
 	private final double sunY;
@@ -124,12 +127,21 @@ public final class TileBaker {
 	private float outG;
 	private float outB;
     private float nightR, nightG, nightB;
-	/** Camera depth of the last hit relative to {@link #depthOrigin}; larger is farther. */
-	private float outDepth;
 	/** Vertical depth in blocks of the water the last trace went through, or NaN if it met none. */
 	private float outWater;
 	/** Whether the last trace's surface was in direct sunlight. */
 	private boolean outSun;
+	/**
+	 * The face the last trace shows, for outlines: the water surface wherever it went through
+	 * water, so what lies on the bottom never draws lines; and that face's plane, the height of a
+	 * top face or the z of a south face.
+	 */
+	private byte outFace;
+	private int outPlane;
+	/** The linear colour of the last trace's surface before light, plants and glass over it included. */
+	private float outAlbedoR;
+	private float outAlbedoG;
+	private float outAlbedoB;
 	// The block the last trace stopped on, when it was solid, for the overlays.
 	private boolean hitSolid;
 	private boolean hitTop;
@@ -140,11 +152,6 @@ public final class TileBaker {
 	/** Where across the block the ray landed, 0..1: east-west, and north-south on a top face. */
 	private double hitFx;
 	private double hitFz;
-	/**
-	 * Camera depth of this tile's top-left ray start. Depths are kept relative to it so they stay
-	 * small enough for float precision anywhere in the world.
-	 */
-	private final double depthOrigin;
 
 	private TileBaker(TileKey key, ChunkSource source, BlockLooks looks, boolean fogOfWar, @Nullable Overlays overlays, BakeContext context) {
 		this.key = key;
@@ -157,18 +164,15 @@ public final class TileBaker {
 		this.source = source;
 		this.fogOfWar = this.lit && fogOfWar;
 		this.style = context.style();
-        this.fastQuality = context.fast();
 		double elevation = Math.toRadians(this.style.sunElevation());
 		this.sunX = Math.cos(elevation) * SUN_AZIMUTH_X;
 		this.sunY = Math.sin(elevation);
 		this.sunZ = Math.cos(elevation) * SUN_AZIMUTH_Z;
-		this.sin = context.sin();
-		this.cos = context.cos();
+		this.zScale = context.zScale();
+		this.yScale = context.yScale();
 		this.topY = localTop(key, source, 0, context);
 		this.rayTop = localTop(key, source, SKY_REACH, context);
 		this.startY = this.cave ? Math.min(key.layer(), source.maxY()) : this.roofless ? Math.min(source.roof(), source.maxY()) : this.topY;
-		double originZ = (key.minV() + this.startY * this.cos) / this.sin;
-		this.depthOrigin = -(this.sin * this.startY + this.cos * originZ);
 		this.limitY = this.cave ? Math.max(source.minY(), this.startY - CAVE_DEPTH) : source.minY();
 	}
 
@@ -205,7 +209,7 @@ public final class TileBaker {
 	 * Bakes the whole tile, or only the {@link TileImage#BLOCK}-pixel blocks set in {@code blocks}.
 	 * {@code fogOfWar} is the cave mode when the bake was scheduled, so it matches its generation.
 	 */
-	/** Whether bakes take one sample per pixel instead of four. Set from the Quality setting. */
+	/** The Quality setting's Fast: fewer fog layers. Bakes are the same either way. */
 	public static boolean fast() {
 		return fast;
 	}
@@ -391,80 +395,66 @@ public final class TileBaker {
 		if (this.startY <= this.limitY) {
 			return;
 		}
-		// Outlines compare each pixel with its neighbours, so bake a one-pixel border around the area;
-		// the painted finish reads a little further.
+		// Outlines compare each pixel's face with its neighbours', so bake a one-pixel border around
+		// the area; the painted finish reads whole block faces further.
 		boolean painted = this.style.painted();
 		int border = painted ? PaintedFinish.BORDER : this.style.outline() > 0 ? 1 : 0;
 		int w = width + 2 * border;
 		int h = height + 2 * border;
-		int[] pixels = border == 0 ? out : new int[w * h];
-        int[] nights = nightOut == null ? null : border == 0 ? nightOut : new int[w * h];
-		float[] depth = border == 0 ? null : new float[w * h];
-		float[] wet = painted ? new float[w * h] : null;
-		float[] waterDepth = painted ? new float[w * h] : null;
-		float[] sunlit = painted ? new float[w * h] : null;
+		int n = w * h;
+		int[] pixels = border == 0 ? out : new int[n];
+        int[] nights = nightOut == null ? null : border == 0 ? nightOut : new int[n];
+		byte[] faces = border == 0 ? null : new byte[n];
+		int[] planes = border == 0 ? null : new int[n];
+		boolean[] wet = painted ? new boolean[n] : null;
+		float[] waterDepth = painted ? new float[n] : null;
+		boolean[] sunlit = painted ? new boolean[n] : null;
+		float[] albedo = painted ? new float[n * 3] : null;
 		double minU = this.key.minU();
 		double minV = this.key.minV();
 		double unitsPerPixel = 1.0 / Projection.PIXELS_PER_UNIT;
-		double[][] samples = this.fastQuality ? FAST_SAMPLES : SAMPLES;
 		for (int y = 0; y < h; y++) {
 			for (int x = 0; x < w; x++) {
-				float r = 0;
-				float g = 0;
-				float b = 0;
-				float d = 0;
-                float nr = 0, ng = 0, nb = 0;
-				int known = 0;
-				int wetRays = 0;
-				int sunRays = 0;
-				float water = 0;
-				for (int s = 0; s < samples.length; s++) {
-					double u = minU + (px0 + x - border + samples[s][0]) * unitsPerPixel;
-					double v = minV + (py0 + y - border + samples[s][1]) * unitsPerPixel;
-					if (this.trace(u, v, s)) {
-						if (s == 0 && info != null && this.hitSolid) {
-							int ix = x - border;
-							int iy = y - border;
-							if (ix >= 0 && iy >= 0 && ix < width && iy < height) {
-								info[iy * width + ix] = (byte) this.overlayBits();
-							}
-						}
-						r += this.outR;
-						g += this.outG;
-						b += this.outB;
-						d += this.outDepth;
-                        nr += this.nightR; ng += this.nightG; nb += this.nightB;
-						known++;
-						if (!Float.isNaN(this.outWater)) {
-							wetRays++;
-							water += this.outWater;
-						}
-						if (this.outSun) {
-							sunRays++;
-						}
-					}
+				int i = y * w + x;
+				double u = minU + (px0 + x - border + 0.5) * unitsPerPixel;
+				double v = minV + (py0 + y - border + 0.5) * unitsPerPixel;
+				if (!this.trace(u, v)) {
+					continue;
 				}
-				if (known > 0) {
-					pixels[y * w + x] = this.abgr(r / known, g / known, b / known, known * 255 / samples.length, this.style.painted());
-                    if (nights != null) nights[y * w + x] = this.abgr(nr / known, ng / known, nb / known, known * 255 / samples.length);
+				int ix = x - border;
+				int iy = y - border;
+				if (info != null && this.hitSolid && ix >= 0 && iy >= 0 && ix < width && iy < height) {
+					info[iy * width + ix] = (byte) this.overlayBits();
 				}
-				if (depth != null) {
-					depth[y * w + x] = known > 0 ? d / known : Float.NaN;
+				pixels[i] = this.abgr(this.outR, this.outG, this.outB, 255, painted);
+				if (nights != null) {
+					nights[i] = this.abgr(this.nightR, this.nightG, this.nightB, 255);
 				}
-				if (painted && known > 0) {
-					wet[y * w + x] = wetRays / (float) known;
-					waterDepth[y * w + x] = wetRays > 0 ? water / wetRays : 0;
-					sunlit[y * w + x] = sunRays / (float) known;
+				if (faces != null) {
+					faces[i] = this.outFace;
+					planes[i] = this.outPlane;
+				}
+				if (painted) {
+					wet[i] = !Float.isNaN(this.outWater);
+					waterDepth[i] = wet[i] ? this.outWater : 0;
+					sunlit[i] = this.outSun;
+					albedo[i * 3] = this.outAlbedoR;
+					albedo[i * 3 + 1] = this.outAlbedoG;
+					albedo[i * 3 + 2] = this.outAlbedoB;
 				}
 			}
 		}
 		if (border == 0) {
 			return;
 		}
+		float[] behind = new float[n];
+		float[] front = new float[n];
+		this.edges(py0, border, w, h, faces, planes, behind, front);
 		if (painted) {
 			int gx0 = (int) Math.round(minU * Projection.PIXELS_PER_UNIT) + px0 - border;
 			int gy0 = (int) Math.round(minV * Projection.PIXELS_PER_UNIT) + py0 - border;
-			PaintedFinish.apply(width, height, gx0, gy0, pixels, nights, depth, wet, waterDepth, sunlit, out, nightOut);
+			PaintedFinish.apply(width, height, gx0, gy0,
+				new PaintedFinish.Traced(pixels, nights, wet, waterDepth, sunlit, albedo, behind, front), out, nightOut);
 			return;
 		}
 		float keep = 1 - this.style.outline();
@@ -473,8 +463,7 @@ public final class TileBaker {
 				int i = (y + 1) * w + x + 1;
 				int pixel = pixels[i];
                 int nightPixel = nights == null ? 0 : nights[i];
-				float here = depth[i];
-				if (pixel != 0 && (nearer(depth[i - 1], here) || nearer(depth[i + 1], here) || nearer(depth[i - w], here) || nearer(depth[i + w], here))) {
+				if (pixel != 0 && behind[i] > OUTLINE_DEPTH) {
 					pixel = darken(pixel, keep);
                     nightPixel = darken(nightPixel, keep);
 				}
@@ -482,6 +471,67 @@ public final class TileBaker {
                 if (nightOut != null) nightOut[y * width + x] = nightPixel;
 			}
 		}
+	}
+
+	/**
+	 * Finds the block edges where one surface hides another. For each pixel and the neighbour to
+	 * its right and below, it compares where their two faces are at the screen line between them:
+	 * faces that meet there, a top and its own side or a floor running into a wall, are one
+	 * surface; otherwise the farther pixel lies {@code behind} the nearer one by the gap, in blocks
+	 * along the view, and the nearer one is in {@code front} of it. Exact to the pixel, with no
+	 * depth threshold, since every edge of a block lies on a pixel boundary.
+	 */
+	private void edges(int py0, int border, int w, int h, byte[] faces, int[] planes, float[] behind, float[] front) {
+		double a = this.zScale;
+		double b = this.yScale;
+		double length = Math.sqrt(a * a + b * b);
+		double unitsPerPixel = 1.0 / Projection.PIXELS_PER_UNIT;
+		for (int y = 0; y < h; y++) {
+			double top = this.key.minV() + (py0 + y - border) * unitsPerPixel;
+			double middle = top + unitsPerPixel / 2;
+			double bottom = top + unitsPerPixel;
+			for (int x = 0; x < w; x++) {
+				int i = y * w + x;
+				if (faces[i] == NO_FACE) {
+					continue;
+				}
+				if (x + 1 < w) {
+					edge(i, i + 1, middle, faces, planes, behind, front, a, b, length);
+				}
+				if (y + 1 < h) {
+					edge(i, i + w, bottom, faces, planes, behind, front, a, b, length);
+				}
+			}
+		}
+	}
+
+	private static void edge(int i, int j, double v, byte[] faces, int[] planes, float[] behind, float[] front, double a, double b, double length) {
+		if (faces[j] == NO_FACE) {
+			return;
+		}
+		// Positive when j's face is farther from the camera than i's where they meet.
+		float gap = (float) ((faceDepth(faces[j], planes[j], v, a, b) - faceDepth(faces[i], planes[i], v, a, b)) / length);
+		if (gap > 1e-3F) {
+			behind[j] = Math.max(behind[j], gap);
+			front[i] = Math.max(front[i], gap);
+		} else if (gap < -1e-3F) {
+			behind[i] = Math.max(behind[i], -gap);
+			front[j] = Math.max(front[j], -gap);
+		}
+	}
+
+	/** Depth along the view, larger farther, of a face's plane where map row {@code v} crosses it. */
+	static double faceDepth(byte face, int plane, double v, double a, double b) {
+		double y;
+		double z;
+		if (face == TOP_FACE) {
+			y = plane;
+			z = (v + plane * b) / a;
+		} else {
+			z = plane;
+			y = (plane * a - v) / b;
+		}
+		return -(a * y + b * z);
 	}
 
 	/** The {@link Overlays} bits for the block the last trace stopped on. */
@@ -492,7 +542,7 @@ public final class TileBaker {
 		if ((this.hitX & 15) == 0 && this.hitFx < 1.0 / Projection.PIXELS_PER_UNIT) {
 			bits |= Overlays.CHUNK_WEST;
 		}
-		if (this.hitTop && (this.hitZ & 15) == 0 && this.hitFz < 1.0 / (Projection.PIXELS_PER_UNIT * this.sin)) {
+		if (this.hitTop && (this.hitZ & 15) == 0 && this.hitFz < 1.0 / (Projection.PIXELS_PER_UNIT * this.zScale)) {
 			bits |= Overlays.CHUNK_NORTH;
 		}
 		Long seed = this.overlays.slimeSeed();
@@ -519,11 +569,6 @@ public final class TileBaker {
 		return bits;
 	}
 
-	/** True if the neighbour is a much nearer surface, so this pixel sits just behind an edge. */
-	private static boolean nearer(float neighbour, float here) {
-		return here - neighbour > OUTLINE_DEPTH;
-	}
-
 	private static int darken(int abgr, float keep) {
 		int r = Math.round((abgr & 0xFF) * keep);
 		int g = Math.round(((abgr >> 8) & 0xFF) * keep);
@@ -532,20 +577,22 @@ public final class TileBaker {
 	}
 
 	/** Traces one ray. Returns false when it ran into a chunk the map has no data for. */
-	private boolean trace(double u, double v, int sample) {
-		final double sin = this.sin;
-		final double cos = this.cos;
+	private boolean trace(double u, double v) {
+		// Along the ray, per step of t, it falls this far and goes this far north: (z * zScale -
+		// y * yScale) stays the same, so it stays on its map pixel.
+		final double fall = this.zScale;
+		final double back = this.yScale;
 		final int x = (int) Math.floor(u);
 		final double fx = u - x;
 		final double y0 = this.startY;
-		final double z0 = (v + y0 * cos) / sin;
+		final double z0 = (v + y0 * back) / fall;
 
 		int by = this.startY - 1;
 		int bz = (int) Math.floor(z0);
-		double tMaxY = (y0 - by) / sin;
-		double tMaxZ = (z0 - bz) / cos;
-		final double tDeltaY = 1.0 / sin;
-		final double tDeltaZ = 1.0 / cos;
+		double tMaxY = (y0 - by) / fall;
+		double tMaxZ = (z0 - bz) / back;
+		final double tDeltaY = 1.0 / fall;
+		final double tDeltaZ = 1.0 / back;
 		double t = 0;
 		boolean enteredTop = true;
 
@@ -553,6 +600,7 @@ public final class TileBaker {
 		this.hitSolid = false;
 		this.outWater = Float.NaN;
 		this.outSun = false;
+		this.outFace = NO_FACE;
 		// Colour picked up from plants and glass on the way down, applied to the surface below.
 		float overR = 0;
 		float overG = 0;
@@ -564,6 +612,7 @@ public final class TileBaker {
 		double waterT = 0;
 		int waterBy = 0;
 		int waterBz = 0;
+		boolean waterTop = true;
 
 		while (by >= this.limitY) {
 			if (skippingRock) {
@@ -600,8 +649,8 @@ public final class TileBaker {
 						&& !(enteredTop ? this.reader.isSeen(x, by + 1, bz) : this.reader.isSeen(x, by, bz + 1))) {
 						return false;
 					}
-					double hitY = y0 - t * sin;
-					double hitZ = z0 - t * cos;
+					double hitY = y0 - t * fall;
+					double hitZ = z0 - t * back;
 					this.hitSolid = kind == BlockLooks.SOLID;
 					this.hitId = id;
 					this.hitTop = enteredTop;
@@ -610,8 +659,11 @@ public final class TileBaker {
 					this.hitZ = bz;
 					this.hitFx = fx;
 					this.hitFz = hitZ - bz;
-					this.outDepth = (float) (-(sin * hitY + cos * hitZ) - this.depthOrigin);
-					this.shade(id, x, by, bz, fx, hitY, hitZ, enteredTop, sample);
+					this.face(enteredTop, by, bz, waterId >= 0, waterTop, waterBy, waterBz);
+					this.shade(id, x, by, bz, fx, hitY, hitZ, enteredTop);
+					this.outAlbedoR = this.albedoR * through + overR;
+					this.outAlbedoG = this.albedoG * through + overG;
+					this.outAlbedoB = this.albedoB * through + overB;
 					if (through < 1) {
 						// The overlay tints the albedo; approximate by mixing it in after lighting.
 						this.nightR = this.nightR * through + overNightR;
@@ -623,7 +675,7 @@ public final class TileBaker {
 						this.outB = this.outB * through + overB * light;
 					}
 					if (waterId >= 0) {
-						this.mixWater(waterId, x, waterBy, waterBz, u, z0, waterT, t, sample);
+						this.mixWater(waterId, x, waterBy, waterBz, u, z0, waterT, t);
 					}
 					return true;
 				}
@@ -633,6 +685,7 @@ public final class TileBaker {
 						waterT = t;
 						waterBy = by;
 						waterBz = bz;
+						waterTop = enteredTop;
 					}
 				}
 				case BlockLooks.PLANT, BlockLooks.GLASS -> {
@@ -669,7 +722,6 @@ public final class TileBaker {
 		if (this.fogOfWar && (skippingRock || waterId < 0 || !this.reader.isSeen(x, waterBy, waterBz))) {
 			return false;
 		}
-		this.outDepth = (float) (-(sin * (y0 - t * sin) + cos * (z0 - t * cos)) - this.depthOrigin);
 		if (skippingRock) {
 			// Solid rock all the way down the slice: draw the cut face.
 			this.outR = 0.0065F;
@@ -681,7 +733,8 @@ public final class TileBaker {
 			this.outG = 0;
 			this.outB = 0;
             this.nightR = this.nightG = this.nightB = 0;
-			this.mixWater(waterId, x, waterBy, waterBz, u, z0, waterT, waterT + 64, sample);
+			this.face(true, 0, 0, true, waterTop, waterBy, waterBz);
+			this.mixWater(waterId, x, waterBy, waterBz, u, z0, waterT, waterT + 64);
 		} else {
 			this.outR = 0.01F;
 			this.outG = 0.01F;
@@ -694,6 +747,17 @@ public final class TileBaker {
 	private float albedoR;
 	private float albedoG;
 	private float albedoB;
+
+	/** Records the face a trace shows: the water surface it entered, or else the face it hit. */
+	private void face(boolean top, int by, int bz, boolean water, boolean waterTop, int waterBy, int waterBz) {
+		if (water) {
+			top = waterTop;
+			by = waterBy;
+			bz = waterBz;
+		}
+		this.outFace = top ? TOP_FACE : SOUTH_FACE;
+		this.outPlane = top ? by + 1 : bz + 1;
+	}
 
 	/** Sets {@code albedo*} to the block's linear colour for its top or front face at this column. */
 	private void albedo(int id, int x, int z, boolean top) {
@@ -731,7 +795,7 @@ public final class TileBaker {
 		};
 	}
 
-	private void shade(int id, int x, int by, int bz, double fx, double hitY, double hitZ, boolean top, int sample) {
+	private void shade(int id, int x, int by, int bz, double fx, double hitY, double hitZ, boolean top) {
 		this.albedo(id, x, bz, top);
 		float variation = this.style.blockVariation();
 		if (variation > 0) {
@@ -785,11 +849,9 @@ public final class TileBaker {
 				lb *= fade;
 			}
 		} else {
-			// Painted shadows keep a crisp edge, the way they are laid in with one flat colour.
-			double[] j = this.style.painted() ? NO_JITTER : SUN_JITTER[sample];
-			double sx = this.sunX + j[0];
-			double sy = this.sunY + j[1];
-			double sz = this.sunZ + j[2];
+			double sx = this.sunX;
+			double sy = this.sunY;
+			double sz = this.sunZ;
 			// Relative to a top face, so tops stay as bright whatever the sun's height.
 			double lambert = top ? 1 : Math.max(0, sz) / sy;
 			float direct = 0;
@@ -853,7 +915,7 @@ public final class TileBaker {
         this.nightB = this.lit ? this.outB : this.albedoB * nb;
 	}
 
-	private void mixWater(int waterId, int x, int by, int bz, double u, double z0, double tEntry, double tHit, int sample) {
+	private void mixWater(int waterId, int x, int by, int bz, double u, double z0, double tEntry, double tHit) {
 		this.albedo(waterId, x, bz, true);
 		float wr = this.albedoR;
 		float wg = this.albedoG;
@@ -864,10 +926,10 @@ public final class TileBaker {
 			int sl = this.reader.skyLight(x, by + 1, bz);
 			light = 0.42F + (float) Math.pow(Math.max(bl, sl * 0.8F) / 15.0F, 1.5) * 0.8F;
 		} else {
-			double sy = this.sunY + SUN_JITTER[sample][1];
+			double sy = this.sunY;
 			double ox = u;
-			double oy = this.startY - tEntry * this.sin + 1e-4;
-			double oz = z0 - tEntry * this.cos;
+			double oy = this.startY - tEntry * this.zScale + 1e-4;
+			double oz = z0 - tEntry * this.yScale;
 			boolean shadow = this.inShadow(ox, oy, oz, this.sunX, sy, this.sunZ);
 			// Lit like the ground around it: the style's light, sky occlusion and height shade.
 			float ambient = this.style.ambient();
@@ -886,7 +948,7 @@ public final class TileBaker {
 		float nightLight = this.lit ? light : 0.035F * this.reader.skyLight(x, by + 1, bz) / 15.0F
             + 0.8F * (float) Math.pow(this.reader.blockLight(x, by + 1, bz) / 15.0F, 1.5);
         double depth = Math.max(0, tHit - tEntry);
-		this.outWater = (float) (depth * this.sin);
+		this.outWater = (float) (depth * this.zScale);
 		if (this.style.painted()) {
 			// Flat washes that step from pale shallows to deep water, each a little darker and
 			// hiding more of the bottom.
@@ -1076,8 +1138,6 @@ public final class TileBaker {
 		return 0.2126F * r + 0.7152F * g + 0.0722F * b;
 	}
 
-	/** No nudge of the sun: the painted look's single, crisp shadow. */
-	private static final double[] NO_JITTER = {0, 0, 0};
 	/** How much darker a painted wall is than the ground in front of it. */
 	private static final float PAINTED_SIDE = 0.86F;
 	/** Per painted water wash ({@link PaintedFinish#WATER_STEPS}): how much of the bottom shows, and how light the water is. */

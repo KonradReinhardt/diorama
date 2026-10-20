@@ -1,17 +1,21 @@
 package dev.diorama.bake;
 
+import dev.diorama.Projection;
 import java.util.SplittableRandom;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Finishes a freshly traced patch of the painted look: what turns a lit render into a map painted
- * by hand. In order:
+ * by hand. The map is a grid of block faces, each {@link #CELL} pixels square (see
+ * {@link Projection}), and everything here keeps to it. In order:
  *
  * <ol>
- * <li>Paint: a Kuwahara filter flattens each little area into the dab of colour a brush leaves,
- * keeping the edges between them.
- * <li>Ink: soft, warm lines of varying weight behind every nearer edge and between areas of
- * clearly different colour, a firmer line round every coast, and lighter lines where water
- * steps into a deeper wash.
+ * <li>Paint: a Kuwahara filter over whole faces flattens neighbouring blocks into the dab of
+ * colour a brush leaves, keeping the edges between areas. It moves each face's albedo, never its
+ * light, so shadows keep their exact texels.
+ * <li>Ink: soft, warm lines behind every nearer edge, from the faces' own geometry, and between
+ * faces of clearly different colour; a firmer line round every coast, and lighter lines where
+ * water steps into a deeper wash. One pixel, four neighbours, so lines never thicken at corners.
  * <li>Light: a thin warm catch-light on sunlit edges that face the camera, and a line of foam
  * where water meets land.
  * <li>Texture: brush strokes that follow a slowly turning flow (long and level on water), an
@@ -20,22 +24,23 @@ import java.util.SplittableRandom;
  *
  * <p>Every pattern is looked up by world pixel, never by position in the patch, so a patch baked
  * alone matches the same pixels of a whole tile and neighbouring tiles meet without a seam. The
- * cel-shaded light itself is worked out per ray in {@link TileBaker}; this only needs what a
- * pixel's neighbours look like.
+ * cel-shaded light itself is worked out per ray in {@link TileBaker}.
  */
 public final class PaintedFinish {
-	/** Kuwahara reach in pixels: the four windows touching a pixel are squares of {@code RADIUS + 1}. */
-	private static final int RADIUS = 3;
-	/** Traced pixels needed round the patch: the filter, plus one for the lines read off its result. */
-	public static final int BORDER = RADIUS + 1;
-	/** How much of the brush dab replaces the traced colour: nearly all, so block textures melt into flat paint. */
+	/** Pixels across a block face on the map. */
+	static final int CELL = Projection.PIXELS_PER_UNIT;
+	/** Kuwahara reach in faces: the four windows touching a face are squares of {@code RADIUS + 1} faces. */
+	private static final int RADIUS = 1;
+	/** Traced pixels needed round the patch, in whole faces: a face's windows, then a neighbour's for the lines. */
+	public static final int BORDER = 2 * CELL;
+	/** How far each face's colour moves to its dab: nearly all, so block textures melt into flat paint. */
 	private static final float DAB = 0.9F;
 
 	/** Weight of the line behind a nearer edge, and how much nearer it must be (blocks) to start and to reach full weight. */
 	private static final float EDGE_INK = 0.48F;
 	private static final float EDGE_NEAR = 1.2F;
 	private static final float EDGE_FULL = 3.5F;
-	/** Weight of the line between areas of clearly different colour, and the colour distances it fades in over. */
+	/** Weight of the line between faces of clearly different colour, and the colour distances it fades in over. */
 	private static final float COLOUR_INK = 0.24F;
 	private static final float COLOUR_FROM = 0.11F;
 	private static final float COLOUR_TO = 0.30F;
@@ -43,7 +48,7 @@ public final class PaintedFinish {
 	private static final float COAST_INK = 0.42F;
 	private static final float FOAM = 0.38F;
 	/** Lines where water steps into a deeper wash, like the rings a painter draws off a coast. */
-	private static final float RIPPLE_INK = 0.15F;
+	private static final float RIPPLE_INK = 0.24F;
 	/** Catch-light on sunlit edges of a nearer surface. */
 	private static final float RIM_LIGHT = 0.13F;
 	/** What an ink line multiplies a colour by at full weight: a dark, warm sepia rather than black. */
@@ -80,6 +85,22 @@ public final class PaintedFinish {
 	}
 
 	/**
+	 * What the baker traced for a patch and its border, one entry per pixel, row by row.
+	 *
+	 * @param day colours, ABGR; alpha 0 where unknown
+	 * @param night the night colours, or null
+	 * @param wet whether the pixel looks through water first
+	 * @param waterDepth vertical depth of that water, blocks
+	 * @param sun whether the pixel's surface is in direct sunlight
+	 * @param albedo the surface's own linear colour before light, three floats a pixel
+	 * @param behind how far, in blocks, the pixel lies behind a neighbour across a block edge; 0 for none
+	 * @param front how far a neighbour across a block edge lies behind the pixel; 0 for none
+	 */
+	record Traced(int[] day, int @Nullable [] night, boolean[] wet, float[] waterDepth, boolean[] sun, float[] albedo,
+		float[] behind, float[] front) {
+	}
+
+	/**
 	 * Which wash a water pixel of this vertical depth belongs to, 0 for the shallows. Rings are
 	 * inked where neighbouring water changes wash.
 	 */
@@ -95,20 +116,19 @@ public final class PaintedFinish {
 	 * Finishes {@code width x height} pixels from a traced area {@link #BORDER} pixels larger on every
 	 * side. Unknown pixels (alpha 0) stay unknown and every alpha is kept, so coverage never grows.
 	 *
-	 * @param gx0 world pixel column of the traced area's first column
-	 * @param gy0 world pixel row of the traced area's first row
-	 * @param day traced colours, ABGR, {@code (width + 2 * BORDER)} wide
-	 * @param night the night colours, or null
-	 * @param depth camera depth per pixel, NaN where unknown
-	 * @param wet share of a pixel's rays that went through water first, 0..1
-	 * @param waterDepth vertical depth of that water, blocks
-	 * @param sun share of a pixel's rays whose surface was in direct sunlight, 0..1
+	 * @param gx0 world pixel column of the traced area's first column, on a face boundary
+	 * @param gy0 world pixel row of the traced area's first row, on a face boundary
 	 */
-	static void apply(int width, int height, int gx0, int gy0, int[] day, int @org.jspecify.annotations.Nullable [] night,
-		float[] depth, float[] wet, float[] waterDepth, float[] sun, int[] out, int @org.jspecify.annotations.Nullable [] nightOut) {
+	static void apply(int width, int height, int gx0, int gy0, Traced traced, int[] out, int @Nullable [] nightOut) {
+		if (Math.floorMod(gx0, CELL) != 0 || Math.floorMod(gy0, CELL) != 0 || width % CELL != 0 || height % CELL != 0) {
+			throw new IllegalArgumentException("A painted patch must cover whole block faces");
+		}
 		int w = width + 2 * BORDER;
 		int h = height + 2 * BORDER;
 		int n = w * h;
+		int[] day = traced.day();
+		int[] night = traced.night();
+		boolean[] wet = traced.wet();
 		float[] r = new float[n], g = new float[n], b = new float[n];
 		unpack(day, r, g, b);
 		float[] nr = null, ng = null, nb = null;
@@ -119,24 +139,27 @@ public final class PaintedFinish {
 			unpack(night, nr, ng, nb);
 		}
 
-		// 1. Paint: every pixel the lines will read, so the interior and a ring of one round it.
-		float[] pr = r.clone(), pg = g.clone(), pb = b.clone();
-		float[] qr = nr == null ? null : nr.clone(), qg = ng == null ? null : ng.clone(), qb = nb == null ? null : nb.clone();
-		float[] mean = new float[6];
-		Windows windows = new Windows(w, h, day, r, g, b);
-		for (int y = RADIUS; y < h - RADIUS; y++) {
-			for (int x = RADIUS; x < w - RADIUS; x++) {
+		// 1. Paint: each face's dab, then every land pixel's colour moved by the change in albedo.
+		Faces faces = new Faces(w, h, day, wet, traced.albedo());
+		float[] dab = faces.dabs();
+		float[] albedo = traced.albedo();
+		for (int y = CELL; y < h - CELL; y++) {
+			for (int x = CELL; x < w - CELL; x++) {
 				int i = y * w + x;
-				if (day[i] >>> 24 == 0 || !dab(x, y, w, day, windows, r, g, b, nr, ng, nb, mean)) {
+				int c = faces.of(x, y);
+				if (day[i] >>> 24 == 0 || wet[i] || Float.isNaN(dab[c * 3])) {
 					continue;
 				}
-				pr[i] += (mean[0] - pr[i]) * DAB;
-				pg[i] += (mean[1] - pg[i]) * DAB;
-				pb[i] += (mean[2] - pb[i]) * DAB;
-				if (qr != null) {
-					qr[i] += (mean[3] - qr[i]) * DAB;
-					qg[i] += (mean[4] - qg[i]) * DAB;
-					qb[i] += (mean[5] - qb[i]) * DAB;
+				float fr = repaint(dab[c * 3], albedo[i * 3]);
+				float fg = repaint(dab[c * 3 + 1], albedo[i * 3 + 1]);
+				float fb = repaint(dab[c * 3 + 2], albedo[i * 3 + 2]);
+				r[i] *= fr;
+				g[i] *= fg;
+				b[i] *= fb;
+				if (nr != null) {
+					nr[i] *= fr;
+					ng[i] *= fg;
+					nb[i] *= fb;
 				}
 			}
 		}
@@ -155,49 +178,45 @@ public final class PaintedFinish {
 				}
 				int gx = gx0 + x + BORDER;
 				int gy = gy0 + y + BORDER;
-				boolean water = wet[i] >= 0.5F;
+				boolean water = wet[i];
 
 				// 2. Ink, 3. light. The strongest line wins rather than adding up.
 				float wobble = 0.72F + 0.5F * (0.5F + 0.5F * washAt(gx * 9 + 1_337, gy * 9 - 4_242));
-				float edge = 0;
+				float edge = smoothstep(EDGE_NEAR, EDGE_FULL, traced.behind()[i]);
+				float rim = smoothstep(EDGE_NEAR, EDGE_FULL, traced.front()[i]);
 				float colour = 0;
 				float coast = 0;
 				float ripple = 0;
-				float rim = 0;
 				float foam = 0;
-				float here = depth[i];
-				float lum = luma(pr[i], pg[i], pb[i]);
-				int band = water ? washBand(waterDepth[i]) : 0;
-				for (int k = 0; k < 8; k++) {
-					int j = i + NEIGHBOUR_X[k] + NEIGHBOUR_Y[k] * w;
+				int here = faces.of(x + BORDER, y + BORDER);
+				int band = water ? washBand(traced.waterDepth()[i]) : 0;
+				for (int k = 0; k < 4; k++) {
+					int nx = x + BORDER + NEIGHBOUR_X[k];
+					int ny = y + BORDER + NEIGHBOUR_Y[k];
+					int j = ny * w + nx;
 					if (day[j] >>> 24 == 0) {
 						continue;
 					}
-					float weight = k < 4 ? 1 : 0.5F;
-					float gap = here - depth[j];
-					edge = Math.max(edge, weight * smoothstep(EDGE_NEAR, EDGE_FULL, gap));
-					rim = Math.max(rim, weight * smoothstep(EDGE_NEAR, EDGE_FULL, -gap));
-					boolean otherWater = wet[j] >= 0.5F;
-					if (water != otherWater) {
+					if (water != wet[j]) {
 						if (water) {
-							foam = Math.max(foam, weight);
+							foam = 1;
 						} else {
-							coast = Math.max(coast, weight);
+							coast = 1;
 						}
-					} else if (water && washBand(waterDepth[j]) < band) {
-						ripple = Math.max(ripple, weight);
-					}
-					if (k < 4 && water == otherWater) {
-						// Only the darker side of a colour boundary takes the line, so it stays one pixel thin.
-						float dr = pr[j] - pr[i], dg = pg[j] - pg[i], db = pb[j] - pb[i];
-						if (luma(pr[j], pg[j], pb[j]) > lum) {
-							colour = Math.max(colour, smoothstep(COLOUR_FROM, COLOUR_TO, (float) Math.sqrt(dr * dr + dg * dg + db * db)));
+					} else if (water) {
+						if (washBand(traced.waterDepth()[j]) < band) {
+							ripple = 1;
+						}
+					} else {
+						int there = faces.of(nx, ny);
+						if (there != here) {
+							colour = Math.max(colour, faces.contrast(here, there));
 						}
 					}
 				}
 				float ink = Math.max(Math.max(edge * EDGE_INK, colour * COLOUR_INK), coast * COAST_INK) * wobble;
 				float rings = ripple * RIPPLE_INK * wobble;
-				float light = rim * RIM_LIGHT * sun[i] * (1 - edge);
+				float light = traced.sun()[i] ? rim * RIM_LIGHT * (1 - edge) : 0;
 				float froth = foam * FOAM * (0.75F + 0.25F * wobble);
 
 				// 4. Texture.
@@ -212,7 +231,7 @@ public final class PaintedFinish {
 				float grain = GRAIN_NOISE[Math.floorMod(gy, GRAIN_SIZE) * GRAIN_SIZE + Math.floorMod(gx, GRAIN_SIZE)] * GRAIN;
 				float tone = 1 + stroke + wash * WASH + grain;
 
-				float cr = pr[i], cg = pg[i], cb = pb[i];
+				float cr = r[i], cg = g[i], cb = b[i];
 				cr = ink(cr, ink, INK[0]);
 				cg = ink(cg, ink, INK[1]);
 				cb = ink(cb, ink, INK[2]);
@@ -234,9 +253,9 @@ public final class PaintedFinish {
 						continue;
 					}
 					// The same lines and brushwork at night; foam catches a little of what light there is.
-					float mr = ink(ink(qr[i], ink, INK[0]), rings, RIPPLE[0]);
-					float mg = ink(ink(qg[i], ink, INK[1]), rings, RIPPLE[1]);
-					float mb = ink(ink(qb[i], ink, INK[2]), rings, RIPPLE[2]);
+					float mr = ink(ink(nr[i], ink, INK[0]), rings, RIPPLE[0]);
+					float mg = ink(ink(ng[i], ink, INK[1]), rings, RIPPLE[1]);
+					float mb = ink(ink(nb[i], ink, INK[2]), rings, RIPPLE[2]);
 					float lift = 1 + froth * 0.6F;
 					float nightTone = 1 + stroke + grain;
 					nightOut[o] = pack(mr * lift * nightTone, mg * lift * nightTone, mb * lift * nightTone, nightAlpha);
@@ -245,117 +264,137 @@ public final class PaintedFinish {
 		}
 	}
 
-	private static final int[] NEIGHBOUR_X = {-1, 1, 0, 0, -1, 1, -1, 1};
-	private static final int[] NEIGHBOUR_Y = {0, 0, -1, 1, -1, -1, 1, 1};
+	private static final int[] NEIGHBOUR_X = {-1, 1, 0, 0};
+	private static final int[] NEIGHBOUR_Y = {0, 0, -1, 1};
 
 	/**
-	 * The Kuwahara dab at (x, y): the mean colour of whichever of the four overlapping windows
-	 * touching the pixel varies least, ignoring unknown pixels. Night takes the window day chose,
-	 * so the two stay in register. False if no window has enough known pixels.
+	 * What an sRGB colour is multiplied by when its face's albedo moves from {@code was} to
+	 * {@code dab}, both linear. Bounded, so a near-black albedo can't blow a pixel out.
 	 */
-	private static boolean dab(int x, int y, int w, int[] day, Windows windows, float[] r, float[] g, float[] b,
-		float @org.jspecify.annotations.Nullable [] nr, float @org.jspecify.annotations.Nullable [] ng,
-		float @org.jspecify.annotations.Nullable [] nb, float[] mean) {
-		float best = Float.MAX_VALUE;
-		int bestX = 0;
-		int bestY = 0;
-		for (int quadrant = 0; quadrant < 4; quadrant++) {
-			int x0 = (quadrant & 1) == 0 ? x - RADIUS : x;
-			int y0 = (quadrant & 2) == 0 ? y - RADIUS : y;
-			int corner = y0 * w + x0;
-			float count = windows.count[corner];
-			float sum = windows.sum[corner];
-			float squares = windows.squares[corner];
-			if (count < (RADIUS + 1) * (RADIUS + 1) / 2 + 1) {
-				continue;
-			}
-			float variance = squares / count - (sum / count) * (sum / count);
-			if (variance < best) {
-				best = variance;
-				bestX = x0;
-				bestY = y0;
-			}
-		}
-		if (best == Float.MAX_VALUE) {
-			return false;
-		}
-		java.util.Arrays.fill(mean, 0);
-		int count = 0;
-		for (int yy = bestY; yy <= bestY + RADIUS; yy++) {
-			for (int xx = bestX; xx <= bestX + RADIUS; xx++) {
-				int j = yy * w + xx;
-				if (day[j] >>> 24 == 0) {
-					continue;
-				}
-				mean[0] += r[j];
-				mean[1] += g[j];
-				mean[2] += b[j];
-				if (nr != null) {
-					mean[3] += nr[j];
-					mean[4] += ng[j];
-					mean[5] += nb[j];
-				}
-				count++;
-			}
-		}
-		for (int c = 0; c < 6; c++) {
-			mean[c] /= count;
-		}
-		return true;
+	private static float repaint(float dab, float was) {
+		float ratio = (float) Math.pow(Math.max(0.25F, Math.min(4F, dab / Math.max(was, 1e-4F))), 1 / 2.4);
+		return 1 + (ratio - 1) * DAB;
 	}
 
 	/**
-	 * The known-pixel count, luma sum and squared luma sum of every Kuwahara window, stored at its
-	 * top-left pixel. Each is summed afresh from its own pixels, a row of sums then a column, never
-	 * by sliding, so a window adds up the same in a patch as in a whole tile.
+	 * The land faces of a traced area: each one's mean albedo, and the Kuwahara dab it takes, the
+	 * mean of whichever of the four 2 by 2 face windows around it varies least. Water and unknown
+	 * pixels take no part; faces with too few land pixels have no colour (NaN).
 	 */
-	private static final class Windows {
-		final float[] count;
-		final float[] sum;
-		final float[] squares;
+	private static final class Faces {
+		private final int across;
+		private final int down;
+		/** Mean linear albedo per face, three floats each; NaN where the face has too little land. */
+		private final float[] mean;
+		/** The dab per face once {@link #dabs} has run, three floats each; NaN where there is none. */
+		private float @Nullable [] dab;
 
-		Windows(int w, int h, int[] day, float[] r, float[] g, float[] b) {
-			int n = w * h;
-			float[] known = new float[n];
-			float[] luma = new float[n];
-			float[] luma2 = new float[n];
-			for (int i = 0; i < n; i++) {
-				if (day[i] >>> 24 != 0) {
-					float l = luma(r[i], g[i], b[i]);
-					known[i] = 1;
-					luma[i] = l;
-					luma2[i] = l * l;
+		Faces(int w, int h, int[] day, boolean[] wet, float[] albedo) {
+			this.across = w / CELL;
+			this.down = h / CELL;
+			int faces = this.across * this.down;
+			float[] sum = new float[faces * 3];
+			int[] count = new int[faces];
+			for (int y = 0; y < h; y++) {
+				for (int x = 0; x < w; x++) {
+					int i = y * w + x;
+					if (day[i] >>> 24 == 0 || wet[i]) {
+						continue;
+					}
+					int c = (y / CELL) * this.across + x / CELL;
+					sum[c * 3] += albedo[i * 3];
+					sum[c * 3 + 1] += albedo[i * 3 + 1];
+					sum[c * 3 + 2] += albedo[i * 3 + 2];
+					count[c]++;
 				}
 			}
-			float[] row = new float[n];
-			this.count = box(known, row, w, h);
-			this.sum = box(luma, row, w, h);
-			this.squares = box(luma2, row, w, h);
+			this.mean = new float[faces * 3];
+			for (int c = 0; c < faces; c++) {
+				boolean enough = count[c] * 2 >= CELL * CELL;
+				for (int k = 0; k < 3; k++) {
+					this.mean[c * 3 + k] = enough ? sum[c * 3 + k] / count[c] : Float.NaN;
+				}
+			}
 		}
 
-		/** Sums over each {@code RADIUS + 1} square, by its top-left corner; {@code row} is scratch. */
-		private static float[] box(float[] values, float[] row, int w, int h) {
-			int k = RADIUS + 1;
-			for (int y = 0; y < h; y++) {
-				for (int x = 0; x + k <= w; x++) {
-					float total = 0;
-					for (int d = 0; d < k; d++) {
-						total += values[y * w + x + d];
+		/** The face holding pixel (x, y) of the traced area. */
+		int of(int x, int y) {
+			return (y / CELL) * this.across + x / CELL;
+		}
+
+		/** Each face's dab, three floats each; NaN at the outer ring of faces and where the face has no colour. */
+		float[] dabs() {
+			float[] dab = new float[this.mean.length];
+			java.util.Arrays.fill(dab, Float.NaN);
+			for (int cy = RADIUS; cy < this.down - RADIUS; cy++) {
+				for (int cx = RADIUS; cx < this.across - RADIUS; cx++) {
+					int c = cy * this.across + cx;
+					if (Float.isNaN(this.mean[c * 3])) {
+						continue;
 					}
-					row[y * w + x] = total;
+					float best = Float.MAX_VALUE;
+					for (int quadrant = 0; quadrant < 4; quadrant++) {
+						int x0 = (quadrant & 1) == 0 ? cx - RADIUS : cx;
+						int y0 = (quadrant & 2) == 0 ? cy - RADIUS : cy;
+						int known = 0;
+						float sum = 0;
+						float squares = 0;
+						float r = 0, g = 0, b = 0;
+						for (int yy = y0; yy <= y0 + RADIUS; yy++) {
+							for (int xx = x0; xx <= x0 + RADIUS; xx++) {
+								int f = yy * this.across + xx;
+								if (Float.isNaN(this.mean[f * 3])) {
+									continue;
+								}
+								float l = luma(this.mean[f * 3], this.mean[f * 3 + 1], this.mean[f * 3 + 2]);
+								sum += l;
+								squares += l * l;
+								r += this.mean[f * 3];
+								g += this.mean[f * 3 + 1];
+								b += this.mean[f * 3 + 2];
+								known++;
+							}
+						}
+						// A window needs most of its faces, or a lone face at a coast would take the water's side.
+						if (known < (RADIUS + 1) * (RADIUS + 1) - 1) {
+							continue;
+						}
+						float variance = squares / known - (sum / known) * (sum / known);
+						if (variance < best) {
+							best = variance;
+							dab[c * 3] = r / known;
+							dab[c * 3 + 1] = g / known;
+							dab[c * 3 + 2] = b / known;
+						}
+					}
+					if (best == Float.MAX_VALUE) {
+						dab[c * 3] = this.mean[c * 3];
+						dab[c * 3 + 1] = this.mean[c * 3 + 1];
+						dab[c * 3 + 2] = this.mean[c * 3 + 2];
+					}
 				}
 			}
-			float[] out = new float[w * h];
-			for (int y = 0; y + k <= h; y++) {
-				for (int x = 0; x + k <= w; x++) {
-					float total = 0;
-					for (int d = 0; d < k; d++) {
-						total += row[(y + d) * w + x];
-					}
-					out[y * w + x] = total;
-				}
+			this.dab = dab;
+			return dab;
+		}
+
+		/**
+		 * How strongly to ink face {@code here} against neighbouring face {@code there}, 0..1: by how
+		 * different their painted colours are, and only on the darker side, so the line is one pixel.
+		 */
+		float contrast(int here, int there) {
+			float[] dab = this.dab;
+			if (dab == null || Float.isNaN(dab[here * 3]) || Float.isNaN(dab[there * 3])) {
+				return 0;
 			}
-			return out;
+			// Compared as sRGB, roughly, so the distance follows what the eye sees.
+			float hr = (float) Math.sqrt(dab[here * 3]), hg = (float) Math.sqrt(dab[here * 3 + 1]), hb = (float) Math.sqrt(dab[here * 3 + 2]);
+			float tr = (float) Math.sqrt(dab[there * 3]), tg = (float) Math.sqrt(dab[there * 3 + 1]), tb = (float) Math.sqrt(dab[there * 3 + 2]);
+			if (luma(tr, tg, tb) <= luma(hr, hg, hb)) {
+				return 0;
+			}
+			float dr = tr - hr, dg = tg - hg, db = tb - hb;
+			return smoothstep(COLOUR_FROM, COLOUR_TO, (float) Math.sqrt(dr * dr + dg * dg + db * db));
 		}
 	}
 

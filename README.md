@@ -63,10 +63,18 @@ The GitHub Actions workflow builds every supported version and runs selected cli
 Map direction is configured in Settings under Look. North is the default; East, South and West preserve the angled camera.
 Saved maps use separate folders per direction. Existing north-facing maps keep their original paths.
 
-Map pixels stay sharp: tiles are magnified with nearest-neighbour sampling whenever a texture
-pixel covers at least one real screen pixel, GUI scale included; only smaller pixels use mipmaps.
+The map is pixel perfect on a block grid. The camera keeps its angled view, stretched up the
+screen so every visible block face, top or side, is exactly 4 by 4 map pixels and every block
+edge lies on a pixel boundary. Each pixel shows a single face and takes one ray through its
+middle, so shadows and light fall per texel and baking is about four times quicker than the
+four rays a pixel took before. Outlines come from the faces' own geometry: one pixel at the
+block edges where one surface hides another, never from what lies under water. On screen,
+once a map pixel covers a screen pixel or more, the drawn zoom rounds to a whole number of
+screen pixels per map pixel and the map lines up with the screen's pixels (GUI scale included);
+smaller pixels blend through mipmaps. Maps saved before the grid stay in their folders
+(`surface`, `surface-50`); the grid map is saved in `surface-grid-45` and starts empty.
 
-Appearance changes such as the render style, depth shading and quality prepare a complete
+Appearance changes such as the render style and depth shading prepare a complete
 revision in the background and replace resident tiles together. Exploration stays
 visible while it prepares, and distant overviews wait for their updated detail tiles.
 In singleplayer on 26.3, tiles whose chunks aren't loaded are redrawn from the chunks
@@ -114,9 +122,11 @@ in flat washes ringed by light lines, and faint brushwork, an uneven wash and pa
 top. It is computed while baking tiles, so it works on every version and loader; switching keeps
 exploration and redraws the map like any other look change. Older configs keep their choice:
 outlines on becomes Outlined, off becomes Plain.
-`DIORAMA_TESTS=painted ./gradlew --configure-on-demand :26.3:runClientGameTest` captures a village
-and a coast in Outlined and Painted at three zooms, plus the minimap and night. See
-[the design](docs/design/painted-style.md).
+`DIORAMA_TESTS=painted DIORAMA_RENDER_DISTANCE=8 ./gradlew --configure-on-demand :26.3:runClientGameTest`
+captures a village and a coast in all three styles, the painted village further out, the minimap
+and night. `DIORAMA_RENDER_DISTANCE` (default 12) lowers the loaded area for quicker runs of
+scenarios that only look near the player. See [the design](docs/design/painted-style.md) and
+[the block grid](docs/design/pixel-grid.md).
 
 ## Antique map style (fork 0.4.0)
 

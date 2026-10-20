@@ -20,8 +20,8 @@ public final class MapPick {
 		VoxelReader reader = new VoxelReader(source);
 		boolean cave = layer != TileKey.SURFACE;
 		boolean roofless = !cave && source.roof() != ChunkSource.NO_ROOF;
-		double sin = Projection.sin();
-		double cos = Projection.cos();
+		double sin = Projection.zScale();
+		double cos = Projection.yScale();
 		// Start where the baker starts for this tile, so whatever the map draws can be picked.
 		TileKey tile = new TileKey(layer, (int) Math.floor(u / Projection.TILE_UNITS), (int) Math.floor(v / Projection.TILE_UNITS));
 		int startY = cave ? Math.min(layer, source.maxY()) : roofless ? Math.min(source.roof(), source.maxY()) : TileBaker.localTop(tile, source, 0);

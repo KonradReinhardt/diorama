@@ -69,9 +69,7 @@ final class CardinalDirectionScenario {
             } catch (java.io.IOException failure) { throw new RuntimeException(failure); }
         });
         dev.diorama.render.MapLevel.awaitSaves();
-        long pitch = Math.round(MapStyle.get().pitchDegrees());
-        String name = (pitch == 60 ? "surface" : "surface-" + pitch)
-            + (Projection.direction() == MapDirection.NORTH ? "" : "-" + Projection.direction().name().toLowerCase(java.util.Locale.ROOT));
+        String name = dev.diorama.render.MapLevel.surfaceStoreName();
         var store = new dev.diorama.data.TileStore(folder.resolve(name));
         double u = Projection.u(-12.5, -9.5), v = Projection.worldV(-12.5, 201, -9.5);
         var key = new TileKey(TileKey.SURFACE, (int) Math.floor(u / Projection.TILE_UNITS), (int) Math.floor(v / Projection.TILE_UNITS));

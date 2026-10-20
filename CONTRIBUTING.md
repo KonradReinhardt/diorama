@@ -49,4 +49,5 @@ The implemented fog style is described in [the antique-map design](docs/design/a
 Version 0.4.0 implements the style and the 26.3 singleplayer Overworld sampler.
 Use `DIORAMA_TESTS=antique-fog` for its client regression; it captures both fog styles
 at three zooms. The painted render style ([design](docs/design/painted-style.md)) has
-`DIORAMA_TESTS=painted`, which captures it beside Outlined.
+`DIORAMA_TESTS=painted`, which captures all three styles on the block grid
+([design](docs/design/pixel-grid.md)); add `DIORAMA_RENDER_DISTANCE=8` to run it in about half the time.

@@ -88,7 +88,7 @@ public final class MinimapHud implements HudElement {
 			graphics.fill(x - 2, y - 2, x + size + 2, y + size + 2, 0xC0101418);
 			graphics.fill(x - 1, y - 1, x + size + 1, y + size + 1, 0x60FFFFFF);
 		}
-		MapViewport.View view = new MapViewport.View(x, y, size, size, Projection.u(pos.x, pos.z), Projection.worldV(pos.x, pos.y, pos.z), settings.zoom(), layer);
+		MapViewport.View view = new MapViewport.View(x, y, size, size, Projection.u(pos.x, pos.z), Projection.worldV(pos.x, pos.y, pos.z), settings.zoom(), layer).pixelPerfect();
 		if (cutout) {
 			// The map itself takes the vanilla sheet's shape: drawn only where its texture is opaque, the sheet over it.
 			ClippedCanvas.within(PaperFrame.silhouette(x, y, size), () -> this.viewport.draw(graphics, session.map(), view));
