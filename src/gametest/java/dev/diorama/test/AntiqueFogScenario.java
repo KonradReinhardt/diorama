@@ -72,12 +72,14 @@ final class AntiqueFogScenario {
                 screen.lookAt(Projection.u(p.getX(), p.getZ()), Projection.worldV(p.getX(), p.getY(), p.getZ()), 2, TileKey.SURFACE);
             });
             context.waitTicks(3);
-            var before = context.computeOnClient(mc -> ((MapScreen)mc.gui.screen()).view());
+            // The held view: the drawn one is snapped to whole screen pixels once the zoom rests.
+            var before = context.computeOnClient(mc -> ((MapScreen)mc.gui.screen()).heldView());
             context.runOnClient(mc -> ((MapScreen)mc.gui.screen()).mouseScrolled(before.width() / 2.0 + 70, before.height() / 2.0 - 40, 0, 3));
             context.waitTicks(1);
             context.runOnClient(mc -> {
-                var view = ((MapScreen)mc.gui.screen()).view();
-                if (!(view.zoom() > 2 && view.zoom() < 2 * Math.pow(1.25, 3))) throw new AssertionError("Wheel zoom jumped to its final value");
+                var screen = (MapScreen)mc.gui.screen();
+                var view = screen.heldView();
+                if (!(view.zoom() > 2 && view.zoom() < screen.zoomTarget())) throw new AssertionError("Wheel zoom jumped to its final value");
                 if (Math.abs((view.centerU() + 70 / view.zoom()) - (before.centerU() + 35)) > .001
                     || Math.abs((view.centerV() - 40 / view.zoom()) - (before.centerV() - 20)) > .001)
                     throw new AssertionError("Smooth zoom lost the cursor anchor");

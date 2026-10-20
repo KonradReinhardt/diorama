@@ -338,6 +338,16 @@ public final class MapScreen extends Screen {
 		return this.lastView;
 	}
 
+	/** For tests: the view the map holds, with its exact zoom and centre, before it is snapped for drawing. */
+	public MapViewport.View heldView() {
+		return new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, this.zoom, this.layer);
+	}
+
+	/** For tests: the zoom the wheel is easing toward. */
+	public double zoomTarget() {
+		return this.smoothZoom.target();
+	}
+
 	/** For tests: the waypoint pins drawn last frame, in GUI coordinates. */
 	public List<WaypointOverlay.Pin> pins() {
 		return this.pins;
