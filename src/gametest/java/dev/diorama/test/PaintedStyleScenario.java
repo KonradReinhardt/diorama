@@ -11,8 +11,7 @@ import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /**
- * The three render styles on the block grid, close up: a village and a coast in Plain, Outlined
- * and Painted, plus the painted village further out, on the minimap and at night. Switching must
+ * The render styles on the block grid, close up: a village and a coast in each of them, plus the painted village further out, on the minimap and at night. Switching must
  * keep the map. Kept short: each capture is one settled view, and quick with
  * DIORAMA_RENDER_DISTANCE=8, since everything is looked at near the player.
  */
@@ -35,7 +34,6 @@ final class PaintedStyleScenario {
                 use(context, style);
                 capture(context, "village-" + name(style), NEAR);
             }
-            capture(context, "village-painted-mid", MID);
 
             // Switching keeps the visible map while the new look is prepared.
             MapTile before = context.computeOnClient(mc -> playerTile());
@@ -46,6 +44,7 @@ final class PaintedStyleScenario {
                 MapTile after = playerTile();
                 if (before != null && (after == null || !after.hasCoverage())) throw new AssertionError("Painted refresh lost coverage");
             });
+            capture(context, "village-painted-mid", MID);
 
             context.setScreen(() -> null);
             context.waitTicks(20);

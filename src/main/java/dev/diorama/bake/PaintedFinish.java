@@ -122,8 +122,9 @@ public final class PaintedFinish {
 	 *
 	 * @param gx0 world pixel column of the traced area's first column
 	 * @param gy0 world pixel row of the traced area's first row
+	 * @param inked whether to draw the ink lines at edges, between colours and round coasts
 	 */
-	static void apply(int width, int height, int gx0, int gy0, Traced traced, int[] out, int @Nullable [] nightOut) {
+	static void apply(int width, int height, int gx0, int gy0, Traced traced, boolean inked, int[] out, int @Nullable [] nightOut) {
 		int w = width + 2 * BORDER;
 		int h = height + 2 * BORDER;
 		int n = w * h;
@@ -215,7 +216,7 @@ public final class PaintedFinish {
 						}
 					}
 				}
-				float ink = Math.max(Math.max(edge * EDGE_INK, colour * COLOUR_INK), coast * COAST_INK) * wobble;
+				float ink = inked ? Math.max(Math.max(edge * EDGE_INK, colour * COLOUR_INK), coast * COAST_INK) * wobble : 0;
 				float rings = ripple * RIPPLE_INK * wobble;
 				float light = traced.sun()[i] ? rim * RIM_LIGHT * (1 - edge) : 0;
 				float froth = foam * FOAM * (0.75F + 0.25F * wobble);

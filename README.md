@@ -116,7 +116,8 @@ Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints tog
 ## Painted render style
 
 Settings → Look → Render replaces the old outlines toggle with **Plain**, **Outlined** (the
-default, the previous look) and **Painted**. Painted turns explored terrain into a hand-painted
+default, the previous look), **Painted** and **Painted, no outlines** (the same paint without any
+ink lines). Painted turns explored terrain into a hand-painted
 fantasy map: block textures and soft shading melt into flat areas of paint, light is cel shaded
 (one sunlit colour, one bluish shadow colour), soft sepia ink lines follow edges and colour
 boundaries, coasts are inked with a line of foam, water steps from pale shallows to deep teal

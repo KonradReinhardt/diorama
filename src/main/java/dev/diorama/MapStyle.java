@@ -21,6 +21,8 @@ import java.util.List;
  * @param heightShade how much brighter high ground is than low ground, 0 for none
  * @param painted the hand-painted look: light in cel-shaded bands, soft ink lines, brushwork and
  *     a storybook palette instead of plain outlines; see {@link dev.diorama.bake.PaintedFinish}
+ * @param ink whether the painted look draws its ink lines: at edges, between colours and round
+ *     coasts. Without, the paint alone shapes the map
  */
 public record MapStyle(
 	String name,
@@ -38,14 +40,15 @@ public record MapStyle(
 	float ambient,
 	float sunStrength,
 	float heightShade,
-	boolean painted
+	boolean painted,
+	boolean ink
 ) {
 	/** The lowest and highest sun a style may use; shadow reach for re-baking is worked out from them. */
 	public static final double MIN_SUN_ELEVATION = 25;
 	public static final double MAX_SUN_ELEVATION = 60;
 
 	public static final MapStyle BASELINE = new MapStyle(
-		"Baseline", 60, 1.18F, 1.06F, new float[] {1.06F, 1.0F, 0.9F}, new float[] {0.9F, 0.95F, 1.08F}, 0, 0, false, false, 0, 51.3, 0.5F, 0.484F, 0, false
+		"Baseline", 60, 1.18F, 1.06F, new float[] {1.06F, 1.0F, 0.9F}, new float[] {0.9F, 0.95F, 1.08F}, 0, 0, false, false, 0, 51.3, 0.5F, 0.484F, 0, false, true
 	);
 
 	/** The look before depth: outlines for crisp silhouettes and a rounded fog edge. */
@@ -112,58 +115,63 @@ public record MapStyle(
 			&& this.ambient == other.ambient
 			&& this.sunStrength == other.sunStrength
 			&& this.heightShade == other.heightShade
-			&& this.painted == other.painted;
+			&& this.painted == other.painted
+			&& this.ink == other.ink;
 	}
 
 	/** A hash agreeing with {@link #looksLike}: equal for styles whose tiles look the same. */
 	public int looksHash() {
 		return java.util.Objects.hash(this.pitchDegrees, this.saturation, this.exposure, java.util.Arrays.hashCode(this.sunTint),
 			java.util.Arrays.hashCode(this.shadowTint), this.outline, this.blockVariation, this.clearWater, this.skyOcclusion,
-			this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+			this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withName(String name) {
-		return new MapStyle(name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withPitch(double degrees) {
-		return new MapStyle(this.name, degrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, degrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withGrade(float saturation, float exposure, float[] sun, float[] shadow) {
-		return new MapStyle(this.name, this.pitchDegrees, saturation, exposure, sun, shadow, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, saturation, exposure, sun, shadow, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withOutline(float outline) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withBlockVariation(float variation) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, variation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, variation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withClearWater(boolean clear) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, clear, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, clear, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withRoundedFog(boolean rounded) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, rounded, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, rounded, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withSkyOcclusion(float amount) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, amount, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, amount, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withLight(float ambient, float sunStrength) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, ambient, sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, ambient, sunStrength, this.heightShade, this.painted, this.ink);
 	}
 
 	public MapStyle withHeightShade(float amount) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, amount, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, amount, this.painted, this.ink);
 	}
 
 	public MapStyle withPainted(boolean painted) {
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, painted, this.ink);
+	}
+
+	public MapStyle withInk(boolean ink) {
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade, this.painted, ink);
 	}
 
 	/** Afternoon gold for the painted look's sunlit faces. */
@@ -185,6 +193,6 @@ public record MapStyle(
 
 	public MapStyle withSunElevation(double degrees) {
 		double clamped = Math.max(MIN_SUN_ELEVATION, Math.min(MAX_SUN_ELEVATION, degrees));
-		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, clamped, this.ambient, this.sunStrength, this.heightShade, this.painted);
+		return new MapStyle(this.name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, clamped, this.ambient, this.sunStrength, this.heightShade, this.painted, this.ink);
 	}
 }

@@ -76,10 +76,11 @@ public final class Settings {
 	public boolean extraBannerLayers = false;
 
 	/**
-	 * How terrain is drawn: plain, with dark outlines behind every edge, or painted by hand with
-	 * cel-shaded light, soft ink lines and brushwork. Replaces the old outlines toggle.
+	 * How terrain is drawn: plain, with dark outlines behind every edge, painted by hand with
+	 * cel-shaded light, soft ink lines and brushwork, or painted with no ink lines at all.
+	 * Replaces the old outlines toggle.
 	 */
-	public enum RenderStyle { PLAIN, OUTLINED, PAINTED }
+	public enum RenderStyle { PLAIN, OUTLINED, PAINTED, PAINTED_NO_OUTLINES }
 	public RenderStyle renderStyle = RenderStyle.OUTLINED;
 	/** The old outlines toggle, read once from an older config to pick {@link #renderStyle}; never written. */
 	private @org.jspecify.annotations.Nullable Boolean outlines;
@@ -143,7 +144,11 @@ public final class Settings {
             .withPitch(MapStyle.DEFAULT.pitchDegrees())
 			.withOutline(this.renderStyle == RenderStyle.OUTLINED ? MapStyle.DEFAULT.outline() : 0)
 			.withRoundedFog(this.roundedFog);
-		return this.renderStyle == RenderStyle.PAINTED ? style.paint() : style;
+		return switch (this.renderStyle) {
+			case PAINTED -> style.paint();
+			case PAINTED_NO_OUTLINES -> style.paint().withInk(false);
+			default -> style;
+		};
 	}
 
 	public void save() {

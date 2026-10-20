@@ -454,7 +454,7 @@ public final class TileBaker {
 			int gx0 = (int) Math.round(minU * Projection.PIXELS_PER_UNIT) + px0 - border;
 			int gy0 = (int) Math.round(minV * Projection.PIXELS_PER_UNIT) + py0 - border;
 			PaintedFinish.apply(width, height, gx0, gy0,
-				new PaintedFinish.Traced(pixels, nights, wet, waterDepth, sunlit, albedo, behind, front), out, nightOut);
+				new PaintedFinish.Traced(pixels, nights, wet, waterDepth, sunlit, albedo, behind, front), this.style.ink(), out, nightOut);
 			return;
 		}
 		float keep = 1 - this.style.outline();

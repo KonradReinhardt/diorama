@@ -2,8 +2,12 @@
 
 Implementado em 20/10/2026 na branch `feature/painted-style`. A opção substitui o antigo toggle
 de contornos: `Configurações → Aparência → Render` alterna entre **Simples** (sem contornos),
-**Contornos** (o visual anterior e padrão) e **Pintado**. A preferência é a mesma para minimapa,
-mapa mundial e tela do Mod Menu.
+**Contornos** (o visual anterior e padrão), **Pintado** e **Pintado sem contornos**. A preferência
+é a mesma para minimapa, mapa mundial e tela do Mod Menu.
+
+**Pintado sem contornos** (`MapStyle.ink` falso) é o mesmo acabamento sem nenhuma linha de
+nanquim: nem nas arestas, nem entre cores, nem na costa. Ficam a tinta por face, a luz em dois
+tons, a água em aguadas com seus anéis e a espuma, o brilho de borda e a textura.
 
 ## Objetivo
 

@@ -56,8 +56,12 @@ class PaintedFinishTest {
         }
 
         int[][] finish(int gx0, int gy0) {
+            return this.finish(gx0, gy0, true);
+        }
+
+        int[][] finish(int gx0, int gy0, boolean ink) {
             int[] day = new int[this.size * this.size], night = new int[day.length];
-            PaintedFinish.apply(this.size, this.size, gx0, gy0, this.traced, day, night);
+            PaintedFinish.apply(this.size, this.size, gx0, gy0, this.traced, ink, day, night);
             return new int[][] {day, night};
         }
     }
@@ -86,6 +90,21 @@ class PaintedFinishTest {
                 if (traced >>> 24 == 0) assertEquals(traced, out[0][y * 48 + x]);
             }
         }
+    }
+
+    @Test void withoutInkNothingIsDarkenedByLines() {
+        Area area = Area.random(48, 11);
+        int[] inked = area.finish(0, 0, true)[0];
+        int[] plain = area.finish(0, 0, false)[0];
+        int darker = 0;
+        for (int i = 0; i < inked.length; i++) {
+            for (int shift = 0; shift < 24; shift += 8) {
+                int a = (inked[i] >> shift) & 0xFF, b = (plain[i] >> shift) & 0xFF;
+                assertTrue(b >= a, "ink only ever darkens");
+                if (b > a) darker++;
+            }
+        }
+        assertTrue(darker > 0, "the inked finish draws lines somewhere");
     }
 
     @Test void waterWashesDeepenOutward() {
