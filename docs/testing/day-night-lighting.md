@@ -63,10 +63,18 @@ paired uploads between GUI frames. The CPU read cache also accounts for both pla
 
 ## Reproduction
 
-Local release validation passed the 26.3 and NeoForge builds with 30 JUnit tests
-each, and the combined `day-night,directions,settings-refresh,modmenu,fog-of-war,saved-map`
-client run. The other nine Fabric targets also built successfully with the preceding
-29-test suite; the final added regression covers preserving unavailable legacy night data.
+Local release validation passed all ten Fabric builds (1.21.1, 1.21.3, 1.21.4,
+1.21.5, 1.21.6, 1.21.9, 1.21.11, 26.1, 26.2 and 26.3) and NeoForge 1.21.1/26.3,
+with 30 JUnit tests per target and no failures. The combined
+`day-night,directions,settings-refresh,modmenu,fog-of-war,saved-map` client run also
+passed. The final added regression preserves unavailable legacy night data.
+
+The builds above were repeated after integrating upstream `v0.2.1` (`d9f4a28`).
+The `day-night,settings-refresh` client scenarios also passed again on the integrated
+tree, including the zero-work clock sweep, resource reload and fixed-light dimensions.
+The updated NeoForge 26.3 client-test shim and scenarios also compile. The remaining
+nine NeoForge targets are declared in the 21-target CI matrix; they were not built
+locally, so the matrix declaration must not be read as a passing result for them.
 
 ```sh
 ./gradlew --configure-on-demand :26.3:build :26.3:gametestClasses
