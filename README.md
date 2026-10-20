@@ -63,6 +63,12 @@ The GitHub Actions workflow builds every supported version and runs selected cli
 Map direction is configured in Settings under Look. North is the default; East, South and West preserve the angled camera.
 Saved maps use separate folders per direction. Existing north-facing maps keep their original paths.
 
+Appearance changes such as outlines, depth shading and quality prepare a complete
+revision in the background and replace resident tiles together. Exploration stays
+visible while it prepares, and distant overviews wait for their updated detail tiles.
+Historical pixels whose terrain is no longer available retain their saved appearance
+until revisited; their original geometry and lighting cannot be recovered from RGB alone.
+
 The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> MapTile/TileStore`.
 `BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.
 Session retirement freezes chunks and settings and finishes unsaved surface tiles asynchronously. Application shutdown waits for those saves.

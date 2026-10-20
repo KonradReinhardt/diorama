@@ -78,7 +78,8 @@ final class DayNightScenario {
             world.getServer().runCommand("tick freeze");
             context.waitTicks(100);
             // Wait for map snapshots, light propagation, overview writes and preload jobs to drain.
-            context.waitFor(mc -> MapSession.get().map().bakingCount() == 0, 2400);
+            context.waitFor(mc -> MapSession.get().map().bakingCount() == 0
+                && !MapSession.get().map().refreshingAppearance(), 2400);
             context.waitTicks(160);
             var before = counters(context);
             List<Long> frameTimes = new ArrayList<>();

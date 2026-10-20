@@ -19,6 +19,19 @@ class TileStoreTest {
         Arrays.fill(pixels, color);
         return TileImage.full(key, new int[][] {pixels}, new byte[0]);
     }
+    @Test void appearanceBarrierRebuildsParentsFromTheNewChildrenBeforeCompleting() {
+        var key = new TileKey(TileKey.SURFACE, 0, 0);
+        TileStore store = new TileStore(folder);
+        try {
+            store.baked(image(key, 0xFF0000FF));
+            store.refreshOverviews().join();
+            assertEquals(0xFF0000FF, store.read(key.parent())[0]);
+            store.baked(image(key, 0xFFFF0000));
+            store.refreshOverviews().join();
+            assertEquals(0xFFFF0000, store.read(key.parent())[0]);
+            assertEquals(0xFFFF0000, store.read(key.parent().parent())[0]);
+        } finally { store.close(); }
+    }
     @Test void closingFlushesHandedOverImagesAndKeepsPartialPatches() {
         var key = new TileKey(TileKey.SURFACE, -1, -2);
         TileStore store = new TileStore(folder);

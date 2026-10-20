@@ -26,7 +26,10 @@ public final class MapTile {
 	private boolean empty = true;
 	long lastDrawn;
 
+    private long uploadCount;
+    public long uploadCount() { return uploadCount; }
 	void upload(TileImage image) {
+        uploadCount++;
 		if (image.isFull()) {
 			this.coverage = image.coverage();
 			this.info = image.info();
