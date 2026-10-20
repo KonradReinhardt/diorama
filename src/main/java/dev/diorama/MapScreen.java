@@ -105,8 +105,10 @@ public final class MapScreen extends Screen {
 		}
 		// Switching to a cave slice while zoomed far out comes back to the closest zoom it can show.
 		this.zoom = Math.max(this.minZoom(), this.zoom);
-		// Drawn pixel perfect; the smooth zoom and pan keep their own exact values.
-		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, this.zoom, this.layer).pixelPerfect();
+		// Drawn pixel perfect once the zoom comes to rest; while it eases it is drawn as it is, so it
+		// glides instead of stepping. The smooth zoom and pan keep their own exact values.
+		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, this.zoom, this.layer);
+		if (!this.smoothZoom.moving()) view = view.pixelPerfect();
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		Radar.Blip hovered = null;
 		this.blips = List.of();
@@ -268,7 +270,9 @@ public final class MapScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
-        this.smoothZoom.scroll(scrollY, x - this.width / 2.0, y - this.height / 2.0, this.minZoom(), MAX_ZOOM);
+        // GUI pixels per map unit at which a map pixel covers one screen pixel: the pixel-perfect steps start there.
+        double pixelZoom = Projection.PIXELS_PER_UNIT / this.minecraft.getWindow().getGuiScale();
+        this.smoothZoom.scroll(scrollY, x - this.width / 2.0, y - this.height / 2.0, this.minZoom(), MAX_ZOOM, pixelZoom);
         if (this.smoothZoom.target() != this.zoom) this.following = false;
 		return true;
 	}

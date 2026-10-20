@@ -10,10 +10,35 @@ public final class SmoothZoom {
     public double value() { return value; }
     public double target() { return target; }
     public void reset(double zoom) { value = target = zoom; }
+    /** Whether the zoom is still easing toward its target. */
+    public boolean moving() { return value != target; }
 
     public void scroll(double amount, double x, double y, double min, double max) {
+        this.scroll(amount, x, y, min, max, 0);
+    }
+
+    /**
+     * Same, where a zoom of {@code pixelZoom} draws one screen pixel per map pixel (0 for none).
+     * At or above it, the map is drawn pixel perfect, at whole screen pixels per map pixel, so each
+     * wheel step lands on the next whole number instead of 1.25 times further: every step does
+     * something, and the zoom comes to rest exactly where it will be drawn. Below it, steps stay
+     * 1.25 times apart.
+     */
+    public void scroll(double amount, double x, double y, double min, double max, double pixelZoom) {
         if (!Double.isFinite(amount) || !Double.isFinite(x) || !Double.isFinite(y)) return;
-        target = Math.max(min, Math.min(max, target * Math.pow(1.25, Math.max(-64, Math.min(64, amount)))));
+        amount = Math.max(-64, Math.min(64, amount));
+        double next = Math.max(min, Math.min(max, target * Math.pow(1.25, amount)));
+        if (pixelZoom > 0 && next >= pixelZoom * 0.999) {
+            double from = target / pixelZoom;
+            double whole = Math.rint(next / pixelZoom);
+            // A whole wheel notch always moves at least one step, even where 1.25 times rounds back.
+            if (amount >= 0.5) whole = Math.max(whole, Math.floor(from + 1e-6) + 1);
+            if (amount <= -0.5) whole = Math.min(whole, Math.ceil(from - 1e-6) - 1);
+            whole = Math.min(whole, Math.floor(max / pixelZoom + 1e-9));
+            // Leaving the whole steps zooms out 1.25 times from one screen pixel per map pixel.
+            next = whole >= 1 ? whole * pixelZoom : Math.max(min, pixelZoom / 1.25);
+        }
+        target = next;
         anchorX = x;
         anchorY = y;
     }
