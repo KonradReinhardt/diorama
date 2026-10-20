@@ -47,5 +47,5 @@ See [the day/night design](docs/design/day-night-lighting.md) for the feature's 
 
 The implemented fog style is described in [the antique-map design](docs/design/antique-fog.md).
 Version 0.4.0 implements the style and the 26.3 singleplayer Overworld sampler.
-Use `DIORAMA_TESTS=antique-fog` for its client regression and optionally
-`DIORAMA_TESTS=antique-fog,fog-gpu-bench` for the isolated GPU comparison.
+Use `DIORAMA_TESTS=antique-fog` for its client regression; it captures both fog styles
+at three zooms.

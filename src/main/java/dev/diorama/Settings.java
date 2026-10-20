@@ -48,6 +48,12 @@ public final class Settings {
 	public Size minimapSize = Size.MEDIUM;
 	public Corner minimapCorner = Corner.TOP_RIGHT;
 	public int minimapZoom = 3;
+	/**
+	 * The minimap's frame: a thin dark border, the paper of a vanilla map held in hand around it,
+	 * or the map cut to that sheet's own shape and printed on it.
+	 */
+	public enum MinimapFrame { PLAIN, MAP, MAP_CUTOUT }
+	public MinimapFrame minimapFrame = MinimapFrame.PLAIN;
 	public boolean compass = true;
 	public boolean coordinates = true;
 	public boolean biome = true;
@@ -62,10 +68,22 @@ public final class Settings {
 	public boolean waypointsOnMap = true;
 	public boolean waypointsInWorld = true;
 	public boolean deathMarkers = true;
+	/** Banner cloth waves on the maps and in the editor; off holds it still. */
+	public boolean animateBanners = true;
+	/** On the sepia antique map, banners take its ink too; by default they keep their dyes to stand out. */
+	public boolean sepiaBanners = false;
+	/** Lifts the loom's six-layer limit to {@link dev.diorama.waypoint.BannerDesign#MAX_LAYERS}. */
+	public boolean extraBannerLayers = false;
 
 	public boolean outlines = true;
 	public boolean roundedFog = true;
-    public enum FogStyle { CLOUDS, ANCIENT_MAP }
+    /** Antique map draws its unknown ground in sepia inks; the colour variant tints biomes. */
+    public enum FogStyle { CLOUDS, ANCIENT_MAP, ANCIENT_MAP_COLOR }
+
+    /** Whether the fog is either antique map. */
+    public boolean antiqueFog() {
+        return this.fogStyle == FogStyle.ANCIENT_MAP || this.fogStyle == FogStyle.ANCIENT_MAP_COLOR;
+    }
     public FogStyle fogStyle = FogStyle.CLOUDS;
     public boolean seedPreview = true;
 	/** The look with sky occlusion, deep shadows and a lower camera; off is the flatter look from before. */

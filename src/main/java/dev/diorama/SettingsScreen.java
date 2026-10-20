@@ -52,6 +52,8 @@ public final class SettingsScreen extends Screen {
 			i -> s.minimapSize = Settings.Size.values()[i], i -> Component.translatable("diorama.settings.size." + Settings.Size.values()[i].name().toLowerCase(java.util.Locale.ROOT)));
 		y = this.cycle(left, y, "diorama.settings.corner", () -> s.minimapCorner.ordinal(), Settings.Corner.values().length,
 			i -> s.minimapCorner = Settings.Corner.values()[i], i -> Component.translatable("diorama.settings.corner." + Settings.Corner.values()[i].name().toLowerCase(java.util.Locale.ROOT)));
+		y = this.cycle(left, y, "diorama.settings.minimap_frame", () -> s.minimapFrame.ordinal(), Settings.MinimapFrame.values().length,
+			i -> s.minimapFrame = Settings.MinimapFrame.values()[i], i -> Component.translatable("diorama.settings.minimap_frame." + Settings.MinimapFrame.values()[i].name().toLowerCase(java.util.Locale.ROOT)));
 		y = this.cycle(left, y, "diorama.settings.zoom", () -> s.minimapZoom, Settings.ZOOMS.length,
 			i -> s.minimapZoom = i, i -> Component.literal(Settings.ZOOMS[i] + "×"));
 		y = this.toggle(left, y, "diorama.settings.compass", () -> s.compass, v -> s.compass = v);
@@ -71,9 +73,14 @@ public final class SettingsScreen extends Screen {
 		y = this.header("diorama.settings.overlays", middle, y + 4);
 		y = this.toggle(middle, y, "diorama.settings.chunk_grid", () -> s.chunkGrid, v -> s.chunkGrid = v);
 		y = this.toggle(middle, y, "diorama.settings.slime_chunks", () -> s.slimeChunks, v -> s.slimeChunks = v);
-		this.cycle(middle, y, "diorama.settings.spawn_spots", () -> s.spawnSpots.ordinal(), Settings.SpawnSpots.values().length,
+		y = this.cycle(middle, y, "diorama.settings.spawn_spots", () -> s.spawnSpots.ordinal(), Settings.SpawnSpots.values().length,
 			i -> s.spawnSpots = Settings.SpawnSpots.values()[i],
 			i -> Component.translatable("diorama.settings.spawn_spots." + Settings.SpawnSpots.values()[i].name().toLowerCase(java.util.Locale.ROOT)));
+
+		y = this.header("diorama.settings.banners", middle, y + 4);
+		y = this.toggle(middle, y, "diorama.settings.animate_banners", () -> s.animateBanners, v -> s.animateBanners = v);
+		y = this.toggle(middle, y, "diorama.settings.sepia_banners", () -> s.sepiaBanners, v -> s.sepiaBanners = v);
+		this.toggle(middle, y, "diorama.settings.extra_banner_layers", () -> s.extraBannerLayers, v -> s.extraBannerLayers = v);
 
 		y = this.header("diorama.settings.waypoints", right, top);
 		y = this.toggle(right, y, "diorama.settings.waypoints_map", () -> s.waypointsOnMap, v -> s.waypointsOnMap = v);
@@ -123,7 +130,7 @@ public final class SettingsScreen extends Screen {
 			Settings.get().save();
 			b.setMessage(label(label, name.apply(next)));
 		}).bounds(x, y, this.buttonWidth, this.buttonHeight).build();
-        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.fog_style"))
+        if (key.equals("diorama.settings.seed_preview") || key.equals("diorama.settings.fog_style") || key.equals("diorama.settings.extra_banner_layers"))
             button.setTooltip(net.minecraft.client.gui.components.Tooltip.create(Component.translatable(key + ".tooltip")));
 		this.addRenderableWidget(button);
 		return y + this.row;

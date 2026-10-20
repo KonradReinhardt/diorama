@@ -4,7 +4,7 @@ import dev.diorama.render.gpu.MapTexture;
 import java.util.Random;
 import org.jspecify.annotations.Nullable;
 
-/** The noise texture every fog draw shares. */
+/** The noise and parchment textures every fog draw shares. */
 public final class FogTextures {
 	static final int NOISE_SIZE = 256;
 
@@ -29,6 +29,10 @@ public final class FogTextures {
                 java.util.Arrays.fill(pixels, 0xffadd8ed);
                 dev.diorama.Diorama.LOGGER.warn("Couldn't load parchment texture", error);
             }
+            // Alpha carries tileable noise for the antique style's organic edges, so the shader
+            // needs no extra texture and the pattern repeats exactly with the paper.
+            float[] grain = fractal(256, 10, 5L);
+            for (int i = 0; i < pixels.length; i++) pixels[i] = (pixels[i] & 0x00ffffff) | Math.round(grain[i] * 255) << 24;
             parchment = MapTexture.create("diorama parchment", 256, 1);
             parchment.write(0, 0, 0, 256, pixels);
         }

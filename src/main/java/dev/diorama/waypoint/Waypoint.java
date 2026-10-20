@@ -1,6 +1,7 @@
 package dev.diorama.waypoint;
 
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A marked place. Mutable so the edit screen can change it in place; {@link WaypointStore} saves
@@ -28,6 +29,11 @@ public final class Waypoint {
 	/** Dimension id, e.g. {@code minecraft:overworld}. */
 	public String dimension = "minecraft:overworld";
 	public int color = PALETTE[0];
+	/**
+	 * The banner it shows. Waypoints saved before banners have none and show a plain banner of the
+	 * dye nearest {@link #color}; nothing is rewritten until the player edits one.
+	 */
+	public @Nullable BannerDesign banner;
 	public boolean visible = true;
 	public Kind kind = Kind.MANUAL;
 	public long created = System.currentTimeMillis();
@@ -43,6 +49,14 @@ public final class Waypoint {
 		this.z = z;
 		this.dimension = dimension;
 		this.color = color;
+	}
+
+	/** The banner to draw: the saved design, or the plain one its colour stands for. */
+	public BannerDesign design() {
+		if (this.banner != null) {
+			return this.banner;
+		}
+		return this.kind == Kind.DEATH ? BannerDesign.death() : BannerDesign.forColour(this.color);
 	}
 
 	public String label() {

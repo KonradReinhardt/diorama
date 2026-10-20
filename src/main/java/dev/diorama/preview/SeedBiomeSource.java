@@ -37,7 +37,7 @@ public final class SeedBiomeSource {
             var settings = generator.generatorSettings().value();
             JsonElement encodedSettings = NoiseGeneratorSettings.DIRECT_CODEC.encodeStart(ops, settings).getOrThrow();
             long seed = world.getSeed();
-            String identity = "diorama-biomes-v1/26.3/" + seed + "/" + biomes + "/" + encodedSettings;
+            String identity = "diorama-biomes-v2/26.3/" + seed + "/" + biomes + "/" + encodedSettings;
             // No chunk lookup or generation. The actual server RandomState is never shared.
             return (java.util.function.Supplier<SeedPreview.Source>) () -> {
                 var cloned = BiomeSource.CODEC.parse(ops, biomes).getOrThrow();
@@ -58,8 +58,7 @@ public final class SeedBiomeSource {
                     fingerprintRegistry(digest, registries.lookupOrThrow(Registries.DENSITY_FUNCTION), net.minecraft.world.level.levelgen.densityfunction.DensityFunction.CODEC, ops);
                     fingerprintRegistry(digest, registries.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST), net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList.DIRECT_CODEC, ops);
                     String fingerprint = HexFormat.of().formatHex(digest.digest());
-                    return new SeedPreview.Source((x, z) -> classify(resolver.getNoiseBiome(x >> 2, 16, z >> 2)
-                        .unwrapKey().map(k -> k.identifier().getPath()).orElse("plains")), fingerprint);
+                    return new SeedPreview.Source((x, z) -> classify(resolver.getNoiseBiome(x >> 2, 16, z >> 2)), fingerprint);
                 } catch (Exception e) { throw new IllegalStateException(e); }
             };
         });
@@ -87,6 +86,37 @@ public final class SeedBiomeSource {
             digest.update(entry.getKey().identifier().toString().getBytes(StandardCharsets.UTF_8));
             digest.update(codec.encodeStart(ops, entry.getValue()).getOrThrow().toString().getBytes(StandardCharsets.UTF_8));
         });
+    }
+    //?}
+
+    //? if >=26.3 {
+    /**
+     * Biome tags for each class, in the order the names are tried below. Vanilla's own tags and the
+     * common "c" tags that Fabric, NeoForge and most biome mods and datapacks fill, so modded
+     * biomes land in the right class whatever they're called.
+     */
+    private static final java.util.List<java.util.Map.Entry<Byte, java.util.List<net.minecraft.tags.TagKey<net.minecraft.world.level.biome.Biome>>>> TAGS = java.util.List.of(
+        java.util.Map.entry((byte) 1, tags("minecraft:is_ocean", "minecraft:is_deep_ocean", "minecraft:is_river", "c:is_ocean", "c:is_deep_ocean", "c:is_shallow_ocean", "c:is_river")),
+        java.util.Map.entry((byte) 4, tags("minecraft:is_mountain", "minecraft:is_hill", "c:is_mountain", "c:is_mountain/peak", "c:is_mountain/slope", "c:is_hill")),
+        java.util.Map.entry((byte) 3, tags("minecraft:is_forest", "minecraft:is_taiga", "minecraft:is_jungle", "c:is_forest", "c:is_taiga", "c:is_jungle", "c:is_coniferous_tree", "c:is_deciduous_tree")),
+        java.util.Map.entry((byte) 5, tags("minecraft:is_badlands", "minecraft:is_savanna", "c:is_desert", "c:is_badlands", "c:is_savanna", "c:is_sandy")),
+        java.util.Map.entry((byte) 6, tags("c:is_snowy", "c:is_icy")),
+        java.util.Map.entry((byte) 7, tags("c:is_swamp", "c:is_wetland", "c:is_mushroom")));
+
+    private static java.util.List<net.minecraft.tags.TagKey<net.minecraft.world.level.biome.Biome>> tags(String... ids) {
+        return java.util.Arrays.stream(ids).map(id -> net.minecraft.tags.TagKey.create(Registries.BIOME, net.minecraft.resources.Identifier.parse(id))).toList();
+    }
+
+    /** The class of a biome: by its tags, else by its name. */
+    static byte classify(net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biome) {
+        try {
+            for (var entry : TAGS) {
+                for (var tag : entry.getValue()) if (biome.is(tag)) return entry.getKey();
+            }
+        } catch (RuntimeException unbound) {
+            // A biome without bound tags (an unusual biome source) still has its name.
+        }
+        return classify(biome.unwrapKey().map(k -> k.identifier().getPath()).orElse("plains"));
     }
     //?}
 

@@ -439,6 +439,32 @@ public final class TileStore {
 		// Pending pixels live in unwritten, independently of the bounded read cache.
 	}
 
+	/**
+	 * Every detailed surface tile saved here, including ones still waiting to be written. Lists the
+	 * folder, so call off the render thread.
+	 */
+	public Set<TileKey> savedTiles() {
+		Set<TileKey> keys = new HashSet<>();
+		try (var files = Files.list(this.folder)) {
+			files.forEach(path -> {
+				String name = path.getFileName().toString();
+				int dot = name.indexOf('.'), split = name.indexOf('_', 1);
+				if (split < 0 || dot < split || !(name.endsWith(".omt") || name.endsWith(".omt2"))) return;
+				try {
+					keys.add(new TileKey(TileKey.SURFACE, Integer.parseInt(name.substring(0, split)), Integer.parseInt(name.substring(split + 1, dot))));
+				} catch (NumberFormatException ignored) {
+					// Not a tile file.
+				}
+			});
+		} catch (IOException ignored) {
+			// No folder yet: nothing saved.
+		}
+		synchronized (this) {
+			for (TileKey key : this.unwritten.keySet()) if (key.lod() == 0) keys.add(key);
+		}
+		return keys;
+	}
+
 	private Path file(TileKey key) {
 		Path dir = key.lod() == 0 ? this.folder : this.folder.resolve("lod" + key.lod());
 		return dir.resolve(key.tileU() + "_" + key.tileV() + ".omt");

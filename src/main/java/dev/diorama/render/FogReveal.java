@@ -1,8 +1,15 @@
 package dev.diorama.render;
 
-/** CPU endpoints only; the GPU eases discovery without rebuilding or uploading a mask per frame. */
+/**
+ * CPU endpoints only; the GPU eases discovery without rebuilding or uploading a mask per frame.
+ *
+ * <p>The curve is an ease-out: it moves fastest at the start. Tiles stream in over many frames
+ * while a map opens, and each arrival restarts the clock from the displayed state. An ease-in
+ * curve (smoothstep) has zero speed at its start, so frequent restarts kept the reveal almost
+ * frozen until loading finished. With ease-out every restart keeps the fog visibly receding.
+ */
 public final class FogReveal {
-    public static final long DURATION_NANOS = 600_000_000L;
+    public static final long DURATION_NANOS = 420_000_000L;
     private final int size;
     private final byte[] from, to, scratch;
     private boolean initialized, changing;
@@ -18,7 +25,8 @@ public final class FogReveal {
 
     public float progress(long now) {
         float t = changing ? Math.max(0, Math.min(1, (now - started) / (float) DURATION_NANOS)) : 1;
-        return t * t * (3 - 2 * t);
+        float rest = 1 - t;
+        return 1 - rest * rest * rest;
     }
 
     /** A coverage decrease is immediate; only new knowledge fades in. Reprojects a moving viewport. */

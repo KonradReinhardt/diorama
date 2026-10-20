@@ -109,6 +109,13 @@ public record MapStyle(
 			&& this.heightShade == other.heightShade;
 	}
 
+	/** A hash agreeing with {@link #looksLike}: equal for styles whose tiles look the same. */
+	public int looksHash() {
+		return java.util.Objects.hash(this.pitchDegrees, this.saturation, this.exposure, java.util.Arrays.hashCode(this.sunTint),
+			java.util.Arrays.hashCode(this.shadowTint), this.outline, this.blockVariation, this.clearWater, this.skyOcclusion,
+			this.sunElevation, this.ambient, this.sunStrength, this.heightShade);
+	}
+
 	public MapStyle withName(String name) {
 		return new MapStyle(name, this.pitchDegrees, this.saturation, this.exposure, this.sunTint, this.shadowTint, this.outline, this.blockVariation, this.roundedFog, this.clearWater, this.skyOcclusion, this.sunElevation, this.ambient, this.sunStrength, this.heightShade);
 	}

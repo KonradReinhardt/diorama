@@ -1,12 +1,7 @@
 package dev.diorama.waypoint;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.TypeAdapter;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonWriter;
 import dev.diorama.Diorama;
 import dev.diorama.WorldKey;
 import java.io.IOException;
@@ -29,21 +24,6 @@ import org.jspecify.annotations.Nullable;
 public final class WaypointStore {
 	/** How many death markers to keep; older ones are dropped as new deaths come in. */
 	public static final int DEATHS_KEPT = 3;
-
-	private static final Gson GSON = new GsonBuilder()
-		.setPrettyPrinting()
-		.registerTypeAdapter(UUID.class, new TypeAdapter<UUID>() {
-			@Override
-			public void write(JsonWriter out, UUID value) throws IOException {
-				out.value(value.toString());
-			}
-
-			@Override
-			public UUID read(JsonReader in) throws IOException {
-				return UUID.fromString(in.nextString());
-			}
-		})
-		.create();
 
 	private static @Nullable WaypointStore current;
 
@@ -139,7 +119,7 @@ public final class WaypointStore {
 			} else {
 				for (JsonElement element : root.getAsJsonArray()) {
 					try {
-						Waypoint waypoint = normalise(GSON.fromJson(element, Waypoint.class));
+						Waypoint waypoint = normalise(WaypointJson.read(element));
 						if (waypoint != null) {
 							this.waypoints.add(waypoint);
 						} else {
@@ -167,7 +147,7 @@ public final class WaypointStore {
 	}
 
 	/** Fills in anything a hand-edited or older file left out; null if the entry is unusable. */
-	private static @Nullable Waypoint normalise(@Nullable Waypoint waypoint) {
+	static @Nullable Waypoint normalise(@Nullable Waypoint waypoint) {
 		if (waypoint == null || waypoint.dimension == null) {
 			return null;
 		}
@@ -192,7 +172,7 @@ public final class WaypointStore {
 			Files.createDirectories(this.file.getParent());
 			Path temp = this.file.resolveSibling("waypoints.json.tmp");
 			try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
-				GSON.toJson(this.waypoints, writer);
+				writer.write(WaypointJson.write(this.waypoints));
 			}
 			Files.move(temp, this.file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 		} catch (IOException | RuntimeException e) {
