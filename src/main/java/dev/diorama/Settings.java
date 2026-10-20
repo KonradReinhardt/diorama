@@ -74,6 +74,7 @@ public final class Settings {
 	 * lighting them from the sun.
 	 */
 	public Quality quality = Quality.FANCY;
+    public EnvironmentLighting.Mode lighting = EnvironmentLighting.Mode.WORLD;
 	public boolean chunkGrid = false;
 	public boolean slimeChunks = false;
 	public SpawnSpots spawnSpots = SpawnSpots.OFF;
@@ -156,7 +157,8 @@ public final class Settings {
 		if (settings == null) {
 			settings = new Settings();
 		}
-		if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
+		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.WORLD;
+        if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;
 		}

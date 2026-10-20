@@ -40,6 +40,19 @@ public final class DioramaPipelines {
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.build()
 	);
+	public static final RenderPipeline MAP_LIGHT = RenderPipelines.register(
+		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/map_light"))
+			.withBindGroupLayout(BindGroupLayouts.PROJECTION)
+			.withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/map_light"))
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.build()
+	);
 	//?} else if >=26.2 {
 	/*public static final RenderPipeline FOG = RenderPipelines.register(
 		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)

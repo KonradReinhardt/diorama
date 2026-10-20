@@ -9,7 +9,8 @@
 - `improvements/cardinal-map`: the initial improvements, persistence fixes, regression tests and cardinal camera directions.
 - `fix/preserve-map-on-settings`: preserves tile textures and exploration during appearance updates and coalesces settings changes.
 - `feat/modmenu-config`: optional Fabric Mod Menu entrypoint and its client test.
-- `docs/day-night-lighting`: the day/night rendering design; no runtime implementation yet.
+- `docs/day-night-lighting`: the original day/night rendering design.
+- `feat/day-night-lighting`: paired surface lighting, draw-time environment blending, incremental saved maps and regression fixtures.
 
 New work starts on a topic branch based on `development`. Make focused commits and merge a topic only after its relevant checks pass. Do not force-push shared history or put generated JARs, caches or local instance configuration in commits.
 
@@ -29,6 +30,6 @@ The local Windows wrapper `D:\MinecraftModding\diorama-dev.cmd` selects the work
 
 The Mod Menu dependency is compile-only by default. The `dioramaModMenuTest` property adds Mod Menu and Placeholder API only to the 26.3 development runtime; they are not bundled in the release JAR.
 
-GitHub Actions declares a build matrix for all supported versions and two client-test jobs (map regression scenarios and optional Mod Menu). Fork workflows may need to be enabled in GitHub before they run. A declared matrix is not evidence that every version has passed; inspect each run before preparing a release.
+GitHub Actions declares a build matrix for all supported versions and three client-test jobs (map regressions, lighting and optional Mod Menu). Fork workflows may need to be enabled in GitHub before they run. A declared matrix is not evidence that every version has passed; inspect each run before preparing a release.
 
-See [the day/night design](docs/design/day-night-lighting.md) for the next feature's scope, compatibility plan and performance gates.
+See [the day/night design](docs/design/day-night-lighting.md) for the feature's scope, compatibility policy and performance gates, and [its validation report](docs/testing/day-night-lighting.md) for measured results.

@@ -34,6 +34,9 @@ jobs:
           - name: map-regressions
             scenarios: directions,settings-refresh,settings,saved-map,radar,waypoints
             modmenu: 'false'
+          - name: lighting
+            scenarios: day-night
+            modmenu: 'false'
           - name: modmenu
             scenarios: modmenu
             modmenu: 'true'

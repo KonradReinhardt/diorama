@@ -91,9 +91,13 @@
 	"diorama.settings.spawn_spots.off": "Off",
 	"diorama.settings.spawn_spots.always_dark": "Always dark",
 	"diorama.settings.spawn_spots.at_night_too": "Also at night",
-  "diorama.settings.direction": "Map direction",
-  "diorama.settings.direction.north": "North",
-  "diorama.settings.direction.east": "East",
-  "diorama.settings.direction.south": "South",
-  "diorama.settings.direction.west": "West"
+	"diorama.settings.direction": "Map direction",
+	"diorama.settings.direction.north": "North",
+	"diorama.settings.direction.east": "East",
+	"diorama.settings.direction.south": "South",
+	"diorama.settings.direction.west": "West",
+	"diorama.settings.lighting": "Lighting",
+	"diorama.settings.lighting.world": "World time",
+	"diorama.settings.lighting.day": "Always day",
+	"diorama.settings.lighting.night": "Always night"
 }

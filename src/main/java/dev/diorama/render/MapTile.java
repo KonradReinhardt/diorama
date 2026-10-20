@@ -10,6 +10,13 @@ import org.jspecify.annotations.Nullable;
 /** A baked tile on the GPU, plus the coverage the fog reads. Render thread only. */
 public final class MapTile {
 	private @Nullable MapTexture texture;
+    private @Nullable MapTexture nightTexture;
+    public @Nullable MapTexture nightTexture() { return this.nightTexture; }
+    public long gpuBytes() {
+        long plane = TextureMemory.bytes(Projection.TILE_PIXELS, Mipmaps.LEVELS);
+        return (texture == null ? 0 : plane) + (nightTexture == null ? 0 : plane)
+            + (overlay == null ? 0 : TextureMemory.bytes(Projection.TILE_PIXELS, 1));
+    }
 	private byte @Nullable [] coverage;
 	/** {@link Overlays} bits per pixel from the bakes that recorded them, or null. */
 	private byte @Nullable [] info;
@@ -23,6 +30,7 @@ public final class MapTile {
 		if (image.isFull()) {
 			this.coverage = image.coverage();
 			this.info = image.info();
+            if (this.info == null && this.overlay != null) { this.overlay.close(); this.overlay = null; }
 			this.overlayShown = -1;
 			this.empty = isEmpty(this.coverage);
 			if (this.empty) {
@@ -30,9 +38,12 @@ public final class MapTile {
 				return;
 			}
 			this.ensureTexture(image);
+            if (this.nightTexture != null && image.nightMips() == null) { this.nightTexture.close(); this.nightTexture = null; }
+            if (image.nightMips() != null && this.nightTexture == null) this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
 			int size = Projection.TILE_PIXELS;
 			for (int level = 0; level < Mipmaps.LEVELS; level++) {
 				this.texture.write(level, 0, 0, size >> level, image.mips()[level]);
+                if (this.nightTexture != null) this.nightTexture.write(level, 0, 0, size >> level, image.nightMips()[level]);
 			}
 			return;
 		}
@@ -61,10 +72,18 @@ public final class MapTile {
 				this.texture.write(level, 0, 0, size >> level, new int[(size >> level) * (size >> level)]);
 			}
 		}
+        if (this.nightTexture == null && image.patches().stream().anyMatch(p -> p.nightMips() != null)) {
+            this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
+            for (int level = 0; level < Mipmaps.LEVELS; level++) {
+                int edge = Projection.TILE_PIXELS >> level;
+                this.nightTexture.write(level, 0, 0, edge, new int[edge * edge]);
+            }
+        }
 		for (TileImage.Patch patch : image.patches()) {
 			for (int level = 0; level < Mipmaps.LEVELS; level++) {
 				int edge = TileImage.BLOCK >> level;
 				this.texture.write(level, patch.blockX() * edge, patch.blockY() * edge, edge, patch.mips()[level]);
+                if (this.nightTexture != null) this.nightTexture.write(level, patch.blockX() * edge, patch.blockY() * edge, edge, patch.nightMips() == null ? new int[edge * edge] : patch.nightMips()[level]);
 			}
 			if (patch.info() != null) {
 				this.patchInfo(patch);
@@ -172,6 +191,7 @@ public final class MapTile {
 	}
 
 	void close() {
+        if (this.nightTexture != null) { this.nightTexture.close(); this.nightTexture = null; }
 		if (this.overlay != null) {
 			this.overlay.close();
 			this.overlay = null;

@@ -39,6 +39,12 @@ public interface MapCanvas {
 		);
 	}
 
+    /** Surface endpoints share coverage; older backends retain their daytime rendering. */
+    default void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
+        float x0, float y0, float x1, float y1, dev.diorama.EnvironmentLighting lighting) {
+        this.rect(day, sampling, x0, y0, x1, y1, 0, 0, 1, 1, -1);
+    }
+
 	/** An untextured quad in one colour, corners counter-clockwise (the other winding is culled). */
 	void solid(float[] corners, int argb);
 
@@ -53,7 +59,7 @@ public interface MapCanvas {
 
 	/**
 	 * The fog over a view: the known-area mask in sampler 0 (clamped), the noise in sampler 1
-	 * (repeating), and the shader's parameters packed into the vertex colour. Clipped to the view.
+	 * (repeating), and the shader's noise/daylight parameters packed into the vertex colour. Clipped to the view.
 	 */
 	void fog(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params);
 }

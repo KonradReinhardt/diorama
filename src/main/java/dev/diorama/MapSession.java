@@ -55,7 +55,8 @@ public final class MapSession {
 		this.level = level;
 		// The Nether's roof: its sky view looks down from just under it.
 		int roof = level.dimensionType().hasCeiling() ? level.getMinY() + level.dimensionType().logicalHeight() : MapLevel.NO_ROOF;
-		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key));
+		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key),
+            EnvironmentLighting.cycles(false, level.dimensionType().hasCeiling(), level.dimensionType().hasSkyLight(), level.dimensionType().hasFixedTime()));
 	}
 
 	/** {@code .minecraft/diorama/<world>/<dimension>}, or null outside a world. */
@@ -190,7 +191,7 @@ public final class MapSession {
 		}
 		int cx = pos.getX() >> 4;
 		int cz = pos.getZ() >> 4;
-		int surface = current.visibleFromSky(pos) ? MapLevel.CHANGED_SURFACE : 0;
+		int surface = MapLevel.CHANGED_BLOCKS | (current.visibleFromSky(pos) ? MapLevel.CHANGED_SURFACE : 0);
 		ChangeBounds box = new ChangeBounds(pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ(), surface);
 		current.schedule(cx, cz, CHANGE_DELAY_MS, box);
 		// A light source changing relights every neighbouring chunk, diagonals included. Other
@@ -210,21 +211,13 @@ public final class MapSession {
 		}
 	}
 
-	/**
-	 * The server sent new light for a chunk. Cave slices draw light, and so do spawn spots, so the
-	 * surface re-bakes too while they're on.
-	 */
-	/**
-	 * The client's light engine changed a section's light, whether from a server packet or its
-	 * own work (a torch placed, a wall opened, a roof closed). Cave slices draw light, and so do
-	 * spawn spots, so the surface re-bakes too while they're on.
-	 */
+    /** Light-engine and packet updates refresh both surface endpoints as well as cave lighting. */
 	public static void lightSectionChanged(ClientChunkCache source, SectionPos section) {
 		if (current != null && current.level.getChunkSource() == source) {
 			int x0 = section.minBlockX();
 			int y0 = section.minBlockY();
 			int z0 = section.minBlockZ();
-			int surface = current.map.spawnSpots() || current.map.roofless() ? MapLevel.CHANGED_SURFACE_LIGHT : 0;
+			int surface = MapLevel.CHANGED_SURFACE_LIGHT;
 			current.schedule(section.x(), section.z(), CHANGE_DELAY_MS, new ChangeBounds(x0, y0, z0, x0 + 15, y0 + 15, z0 + 15, surface));
 		}
 	}
@@ -233,7 +226,7 @@ public final class MapSession {
 		if (current != null && current.level == level) {
 			int x0 = chunkX << 4;
 			int z0 = chunkZ << 4;
-			int surface = current.map.spawnSpots() || current.map.roofless() ? MapLevel.CHANGED_SURFACE_LIGHT : 0;
+			int surface = MapLevel.CHANGED_SURFACE_LIGHT;
 			current.schedule(chunkX, chunkZ, CHANGE_DELAY_MS, new ChangeBounds(x0, level.getMinY(), z0, x0 + 15, level.getMaxY(), z0 + 15, surface));
 		}
 	}
@@ -292,6 +285,10 @@ public final class MapSession {
 	}
 
 	private int ticks;
+    private long snapshotCount;
+    private final long[] snapshotTimes = new long[1024];
+    public long snapshotCount() { return this.snapshotCount; }
+    public long[] snapshotTimes() { return java.util.Arrays.copyOf(this.snapshotTimes, (int) Math.min(this.snapshotCount, this.snapshotTimes.length)); }
 
 	/** Queues any loaded chunk the map hasn't seen, in case its load event was missed. */
 	private void sweepLoadedChunks(LocalPlayer player) {
@@ -354,7 +351,10 @@ public final class MapSession {
 			int cz = (int) key;
 			if (this.level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false) instanceof LevelChunk chunk) {
 				boolean known = this.map.chunk(cx, cz) != null;
-				this.map.put(ChunkSnapshot.take(chunk, this.level), known ? p.box : null, playerChunkX, playerChunkZ);
+                long start = System.nanoTime();
+                ChunkSnapshot snapshot = ChunkSnapshot.take(chunk, this.level);
+                this.snapshotTimes[(int) (this.snapshotCount++ % this.snapshotTimes.length)] = System.nanoTime() - start;
+				this.map.put(snapshot, known ? p.box : null, playerChunkX, playerChunkZ);
 				budget.completed();
 			}
 		}

@@ -72,4 +72,10 @@ Mod Menu is optional. To verify its entrypoint in development, use
 `DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.
 
 The fork's branch and validation workflow is documented in [CONTRIBUTING.md](CONTRIBUTING.md).
-The proposed next rendering feature is described in [Day/night lighting](docs/design/day-night-lighting.md); it is a design for review, not an implemented option.
+Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lighting, choose World time (default), Always day or Always night. The minimap and world map share this setting. Surface tiles blend their saved day/night colors as the world's sky and weather change; changing the clock does not rebuild terrain or reset exploration. Torches, lanterns and lava illuminate nearby mapped surfaces at night.
+
+Caves, roofed dimensions and the End retain their existing lighting. Decorative shadows keep a fixed direction; colored-light mods are not modeled. Earlier Fabric versions and NeoForge retain daytime surface rendering until their GPU backends are ported.
+
+Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share a 256 MiB budget, with up to two tile uploads per GUI frame on 26.3.
+
+`DIORAMA_TESTS=day-night ./gradlew --configure-on-demand :26.3:runClientGameTest` checks real block-light propagation in all four directions and both quality modes, captures lighting states and asserts zero jobs, writes, snapshots or fog-mask rebuilds during a time-only cycle. See [the design](docs/design/day-night-lighting.md) and [validation report](docs/testing/day-night-lighting.md).

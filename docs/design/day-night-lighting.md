@@ -1,6 +1,6 @@
 # Day/night lighting for Diorama
 
-Status: design for review, not implemented. Target the Fabric 26.3 build first.
+Status: implemented for Fabric 26.3 in `feat/day-night-lighting`. The sections below retain the approved design rationale; the final implementation and measurements are summarized in [the validation report](../testing/day-night-lighting.md). Earlier GUI backends deliberately keep daytime rendering and do not expose the lighting selector yet.
 
 ## Product behavior
 
@@ -10,7 +10,7 @@ The first release should keep the existing decorative sun/shadow direction. It c
 
 Caves and dimensions with a ceiling keep their existing block-light rendering initially. The End and other fixed-light dimensions need explicit dimension policy, rather than an Overworld clock applied everywhere. The mod continues to use only data available to the client and must honor server restrictions.
 
-## What the current code does
+## Original implementation before this change
 
 - `TileBaker.shade()` bakes the daytime sky, decorative sunlight, shadows, occlusion, color grading and emission directly into surface RGB pixels. A luminous block can already appear bright itself, but its light does not illuminate neighboring daytime surface pixels.
 - The cave/under-roof branch already reads `VoxelReader.blockLight()` and `skyLight()` and produces warm local light. Reuse its sampling rules, not its large readability floor, for the outdoor night channel.
@@ -83,7 +83,7 @@ Recommended migration:
 - Derive overview tiles from paired children, using linear-color downsampling and coverage-aware weighting. Mixed old/new children retain explicit light-data availability.
 - Avoid a one-shot rewrite of an entire explored world. Migration is incremental and cancellable; no deletion of the old map is part of enabling this option.
 
-This is a proposal, not a promise of a final on-disk format. Validate bundle size, generation matching and rollback with a fixture corpus before fixing the schema.
+The implemented OMT2 schema stores an identity/projection header, explicit night availability and a checksummed, compressed payload. It writes both endpoints atomically and retains the legacy OMT1 file. A shared job owns both endpoints; terrain/light revisions reject outdated partial results.
 
 ## Performance and memory gates
 
@@ -108,7 +108,7 @@ Record p50/p95 frame time, bake/patch latency, GPU bytes, snapshot cost, queue l
 4. **Persistence and LOD:** implement incremental legacy fallback, atomic bundles, mixed-data overview tiles, cold-world reload and byte-budget eviction. Do not ship a prototype that works only while all chunks are loaded.
 5. **Compatibility and release gate:** validate fixed-light dimensions, weather, negative coordinates, four map directions, Fast/Fancy, resource reloads and server restrictions. Extend to older Fabric and NeoForge only after 26.3 passes; document any temporary platform limitation.
 
-Each phase gets a separate feature branch/PR based on the integration branch. No implementation is included in this planning change.
+Implementation uses focused commits on `feat/day-night-lighting`, based on the integration branch. The original planning commit remains separately reviewable. Upstream contributions should still be extracted into focused submission branches.
 
 ## Acceptance tests
 
@@ -121,6 +121,6 @@ Each phase gets a separate feature branch/PR based on the integration branch. No
 - Change every display/quality setting, toggle fog rules and rotate through all four directions. No time or appearance change may reset world exploration.
 - Measure a complete time-only cycle: zero terrain re-bakes, zero lighting re-bakes, zero map writes, and no coverage-mask rebuild caused solely by the clock.
 
-## Decisions for review
+## Approved release decisions
 
 Recommended defaults are: follow world time, fixed decorative shadow direction for the first release, warm Minecraft block-light approximation without colored-light-mod support, incremental legacy fallback, and a measured GPU byte cap. Full animated solar shadows and colored light are separate features because the current client light snapshots do not supply those extra visibility/color fields.

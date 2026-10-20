@@ -5,32 +5,25 @@ import dev.diorama.Projection;
 import dev.diorama.bake.Mipmaps;
 import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
-import java.io.ByteArrayOutputStream;
+import dev.diorama.bake.TilePixels;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.Iterator;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 import org.jspecify.annotations.Nullable;
 
@@ -51,7 +44,8 @@ import org.jspecify.annotations.Nullable;
  * children changed, so zooming out shows everything explored without baking anything. Only the
  * writer builds them: a missing overview tile means nothing under it was ever mapped.
  *
- * <p>File format: {@code OMT1}, the edge length, then the ABGR pixels deflated.
+ * <p>Reads legacy {@code OMT1} and writes atomic, checksummed {@code OMT2} day/night bundles.
+ * Legacy files remain untouched for rollback. Night alpha measures light-data availability.
  */
 public final class TileStore {
 	private static final int MAGIC = 0x4F4D5431;
@@ -95,7 +89,7 @@ public final class TileStore {
 	 * Tiles changed since they were last written, kept until a write of exactly these pixels
 	 * succeeds. They're never evicted from the cache meanwhile. Guarded by {@code this}.
 	 */
-	private final Map<TileKey, int[]> unwritten = new HashMap<>();
+	private final Map<TileKey, TilePixels> unwritten = new HashMap<>();
 
 	/** Level-1 overview tiles above tiles written since the last rebuild. Guarded by {@code this}. */
 	private final Set<TileKey> staleOverviews = new HashSet<>();
@@ -114,14 +108,17 @@ public final class TileStore {
 	}
 
 	/** One level up from four children, each shrunk to a quarter; null if none exist. */
-	private int @Nullable [] shrinkChildren(TileKey key) {
+	private @Nullable TilePixels shrinkChildren(TileKey key) {
 		int size = Projection.TILE_PIXELS;
 		int half = size / 2;
 		int[] out = null;
+        int[] night = new int[size * size];
+        boolean hasNight = false;
 		for (int dy = 0; dy < 2; dy++) {
 			for (int dx = 0; dx < 2; dx++) {
 				TileKey child = new TileKey(key.layer(), key.tileU() * 2 + dx, key.tileV() * 2 + dy, key.lod() - 1);
-				int[] c = this.read(child);
+				TilePixels childPixels = this.readPixels(child);
+                int[] c = childPixels == null ? null : childPixels.day();
 				if (c == null) {
 					continue;
 				}
@@ -133,11 +130,15 @@ public final class TileStore {
 					for (int x = 0; x < half; x++) {
 						int i = row + 2 * x;
 						out[(dy * half + y) * size + dx * half + x] = Mipmaps.average(c[i], c[i + 1], c[i + size], c[i + size + 1]);
+                        if (childPixels.night() != null) {
+                            int[] n = childPixels.night(); hasNight = true;
+                            night[(dy * half + y) * size + dx * half + x] = Mipmaps.average(n[i], n[i + 1], n[i + size], n[i + size + 1]);
+                        }
 					}
 				}
 			}
 		}
-		return out;
+		return out == null ? null : new TilePixels(out, hasNight ? night : null);
 	}
 
 	/** A tile was written: the overview tiles above it are now out of date. */
@@ -163,7 +164,7 @@ public final class TileStore {
 		while (!level.isEmpty()) {
 			Set<TileKey> above = new HashSet<>();
 			for (TileKey key : level) {
-				int[] pixels = this.shrinkChildren(key);
+				TilePixels pixels = this.shrinkChildren(key);
 				if (pixels == null) {
 					continue;
 				}
@@ -202,6 +203,11 @@ public final class TileStore {
 	 * far. Not on the render thread: it can wait for the disk. Don't modify the array.
 	 */
 	public int @Nullable [] read(TileKey key) {
+        TilePixels pixels = readPixels(key);
+        return pixels == null ? null : pixels.day();
+    }
+
+    public @Nullable TilePixels readPixels(TileKey key) {
         this.previousClose.join();
 		synchronized (this.io) {
 			this.merge(key);
@@ -210,9 +216,9 @@ public final class TileStore {
 	}
 
 	/** The tile's pixels in memory, else on disk, leaving out bakes not merged yet. Hold {@link #io}. */
-	private int @Nullable [] saved(TileKey key) {
+	private @Nullable TilePixels saved(TileKey key) {
 		synchronized (this) {
-			int[] pending = this.unwritten.get(key);
+			TilePixels pending = this.unwritten.get(key);
 			if (pending != null) {
 				return pending;
 			}
@@ -220,7 +226,7 @@ public final class TileStore {
 				return this.cache.get(key);
 			}
 		}
-		int[] pixels = this.load(key);
+		TilePixels pixels = this.load(key);
 		synchronized (this) {
 			this.cache.put(key, pixels);
 		}
@@ -265,30 +271,39 @@ public final class TileStore {
 				images = List.copyOf(queue);
 			}
 			int size = Projection.TILE_PIXELS;
-			int[] saved = this.saved(key);
-			boolean changed = false;
-			for (TileImage image : images) {
-				int[] pixels;
-				if (image.isFull()) {
-					pixels = image.mips()[0].clone();
-				} else {
-					pixels = saved == null ? new int[size * size] : saved.clone();
-					for (TileImage.Patch patch : image.patches()) {
-						int[] block = patch.mips()[0];
-						int edge = TileImage.BLOCK;
-						for (int y = 0; y < edge; y++) {
-							System.arraycopy(block, y * edge, pixels, (patch.blockY() * edge + y) * size + patch.blockX() * edge, edge);
-						}
-					}
-				}
-				if (saved != null ? java.util.Arrays.equals(saved, pixels) : nothingKnown(pixels)) {
-					count(true);
-					continue;
-				}
-				count(false);
-				saved = pixels;
-				changed = true;
-			}
+            TilePixels saved = this.saved(key);
+            boolean changed = false;
+            for (TileImage image : images) {
+                int[] day;
+                int[] night;
+                if (image.isFull()) {
+                    day = image.mips()[0].clone();
+                    night = image.nightMips() == null ? null : image.nightMips()[0].clone();
+                } else {
+                    day = saved == null ? new int[size * size] : saved.day().clone();
+                    boolean hasNight = saved != null && saved.night() != null || image.patches().stream().anyMatch(p -> p.nightMips() != null);
+                    night = !hasNight ? null : saved != null && saved.night() != null ? saved.night().clone() : new int[size * size];
+                    for (TileImage.Patch patch : image.patches()) {
+                        int edge = TileImage.BLOCK;
+                        for (int y = 0; y < edge; y++) {
+                            int offset = (patch.blockY() * edge + y) * size + patch.blockX() * edge;
+                            System.arraycopy(patch.mips()[0], y * edge, day, offset, edge);
+                            if (night != null) {
+                                if (patch.nightMips() == null) java.util.Arrays.fill(night, offset, offset + edge, 0);
+                                else System.arraycopy(patch.nightMips()[0], y * edge, night, offset, edge);
+                            }
+                        }
+                    }
+                }
+                TilePixels pixels = new TilePixels(day, night);
+                if (saved != null ? saved.samePixels(pixels) : nothingKnown(day)) {
+                    count(true);
+                    continue;
+                }
+                count(false);
+                saved = pixels;
+                changed = true;
+            }
 			synchronized (this) {
 				// Bakes handed over meanwhile stay queued; their own merge comes next.
 				ArrayDeque<TileImage> queue = this.handedOver.get(key);
@@ -331,11 +346,11 @@ public final class TileStore {
 			for (TileKey key : handed) {
 				this.merge(key);
 			}
-			Map<TileKey, int[]> pending;
+			Map<TileKey, TilePixels> pending;
 			synchronized (this) {
 				pending = new HashMap<>(this.unwritten);
 			}
-			for (Map.Entry<TileKey, int[]> entry : pending.entrySet()) {
+			for (Map.Entry<TileKey, TilePixels> entry : pending.entrySet()) {
 				// Nothing to retry with once the world is closed; store() has logged the failure.
 				if (this.store(entry.getKey(), entry.getValue()) && entry.getKey().lod() == 0) {
 					synchronized (this) {
@@ -359,7 +374,7 @@ public final class TileStore {
 		if (this.closed) {
 			return;
 		}
-		int[] pixels;
+		TilePixels pixels;
 		synchronized (this) {
 			pixels = this.unwritten.get(key);
 		}
@@ -417,7 +432,12 @@ public final class TileStore {
 		return dir.resolve(key.tileU() + "_" + key.tileV() + ".omt");
 	}
 
-	private int @Nullable [] load(TileKey key) {
+	private @Nullable TilePixels load(TileKey key) {
+        Path bundle = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
+        if (Files.isRegularFile(bundle)) {
+            try { return TileBundle.read(bundle, key); }
+            catch (IOException | RuntimeException failure) { Diorama.LOGGER.warn("Invalid lighting bundle {}; trying legacy map", bundle, failure); }
+        }
 		Path file = this.file(key);
 		if (!Files.isRegularFile(file)) {
 			return null;
@@ -433,7 +453,7 @@ public final class TileStore {
 			}
 			int[] pixels = new int[size * size];
 			ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer().get(pixels);
-			return pixels;
+			return new TilePixels(pixels, null);
 		} catch (IOException e) {
 			Diorama.LOGGER.warn("Couldn't read saved tile {}", file, e);
 			return null;
@@ -444,27 +464,20 @@ public final class TileStore {
 	 * Writes to a temporary file and moves it over the old one, so a crash can't leave half a tile.
 	 * Returns whether it worked.
 	 */
-	private boolean store(TileKey key, int[] pixels) {
-		Path file = this.file(key);
-		try {
-			Files.createDirectories(file.getParent());
-			ByteBuffer buffer = ByteBuffer.allocate(pixels.length * 4).order(ByteOrder.LITTLE_ENDIAN);
-			buffer.asIntBuffer().put(pixels);
-			ByteArrayOutputStream bytes = new ByteArrayOutputStream(pixels.length);
-			try (DataOutputStream data = new DataOutputStream(bytes)) {
-				data.writeInt(MAGIC);
-				data.writeInt(Projection.TILE_PIXELS);
-				try (OutputStream deflate = new DeflaterOutputStream(data)) {
-					deflate.write(buffer.array());
-				}
-			}
-			Path temp = file.resolveSibling(file.getFileName() + ".tmp");
-			Files.write(temp, bytes.toByteArray());
-			Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-			return true;
-		} catch (IOException | RuntimeException e) {
-			Diorama.LOGGER.error("Couldn't save tile {}", file, e);
-			return false;
-		}
-	}
+    private boolean store(TileKey key, TilePixels pixels) {
+        Path file = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
+        try {
+            this.writtenBytes.addAndGet(TileBundle.write(file, key, pixels));
+            this.writes.incrementAndGet();
+            return true;
+        } catch (IOException | RuntimeException e) {
+            Diorama.LOGGER.error("Couldn't save tile {}", file, e);
+            return false;
+        }
+    }
+
+    private final java.util.concurrent.atomic.AtomicLong writes = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong writtenBytes = new java.util.concurrent.atomic.AtomicLong();
+    public long writes() { return this.writes.get(); }
+    public long writtenBytes() { return this.writtenBytes.get(); }
 }

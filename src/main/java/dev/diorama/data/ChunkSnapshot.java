@@ -134,6 +134,28 @@ public final class ChunkSnapshot {
 		return new ChunkSnapshot(chunk, level);
 	}
 
+    /** Ignore repeated light notifications whose captured values have not actually changed. */
+    public boolean sameLighting(ChunkSnapshot previous) {
+        if (this.minSectionY != previous.minSectionY || this.blockLight.length != previous.blockLight.length
+            || this.hasSkyLight != previous.hasSkyLight) return false;
+        for (int i = 0; i < this.blockLight.length; i++) {
+            if (!sameLight(this.blockLight[i], previous.blockLight[i]) || !sameLight(this.skyLight[i], previous.skyLight[i])) return false;
+        }
+        return true;
+    }
+
+    static boolean sameLight(@Nullable DataLayer a, @Nullable DataLayer b) {
+        if (a == b) return true;
+        // A missing sky section inherits from above; don't equate it to a stored uniform layer.
+        if (a == null || b == null) return false;
+        if (a.isDefinitelyHomogenous() && b.isDefinitelyHomogenous()) return a.get(0, 0, 0) == b.get(0, 0, 0);
+        if (!a.isDefinitelyHomogenous() && !b.isDefinitelyHomogenous()) return java.util.Arrays.equals(a.getData(), b.getData());
+        // Avoid expanding/mutating a shared homogeneous snapshot merely to compare it.
+        for (int y = 0; y < 16; y++) for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++)
+            if (a.get(x, y, z) != b.get(x, y, z)) return false;
+        return true;
+    }
+
 	public int sectionCount() {
 		return this.states.length;
 	}
