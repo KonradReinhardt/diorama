@@ -5,6 +5,17 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PairedMergeTest {
+    @Test void unloadedLegacyPixelsDoNotInventAnUpgradeWhileKnownBlackRemainsAvailable() {
+        int[] saved = new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS];
+        java.util.Arrays.fill(saved, 0xff123456);
+        int[] day = new int[saved.length], night = new int[saved.length];
+        TileBaker.merge(day, night, new TilePixels(saved, null), 0, 0, Projection.TILE_PIXELS);
+        assertArrayEquals(saved, day);
+        assertNull(TileBaker.nightMips(night, Projection.TILE_PIXELS));
+        night[0] = 0xff000000;
+        assertNotNull(TileBaker.nightMips(night, Projection.TILE_PIXELS));
+    }
+
     @Test void keepingSavedCoverageAlsoKeepsItsLightingOrExplicitLegacyAvailability() {
         int[] oldDay = new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS];
         int[] oldNight = new int[oldDay.length];

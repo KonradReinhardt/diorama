@@ -245,7 +245,7 @@ public final class TileBaker {
 			byte[] info = overlays == null ? null : new byte[size * size];
 			baker.bakePixels(0, 0, size, size, pixels, night, info);
 			merge(pixels, night, saved, 0, 0, size);
-			return TileImage.full(key, Mipmaps.build(pixels, size), coverage(pixels, size, size), info, night == null ? null : Mipmaps.build(night, size));
+			return TileImage.full(key, Mipmaps.build(pixels, size), coverage(pixels, size, size), info, nightMips(night, size));
 		}
 		int perRow = size / TileImage.BLOCK;
 		List<TileImage.Patch> patches = new ArrayList<>();
@@ -257,7 +257,7 @@ public final class TileBaker {
 			byte[] info = overlays == null ? null : new byte[TileImage.BLOCK * TileImage.BLOCK];
 			baker.bakePixels(bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK, TileImage.BLOCK, pixels, night, info);
 			merge(pixels, night, saved, bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK);
-			patches.add(new TileImage.Patch(bx, by, Mipmaps.build(pixels, TileImage.BLOCK), coverage(pixels, TileImage.BLOCK, TileImage.BLOCK), info, night == null ? null : Mipmaps.build(night, TileImage.BLOCK)));
+			patches.add(new TileImage.Patch(bx, by, Mipmaps.build(pixels, TileImage.BLOCK), coverage(pixels, TileImage.BLOCK, TileImage.BLOCK), info, nightMips(night, TileImage.BLOCK)));
 		}
 		if (VoxelReader.DEBUG && !baker.reader.missing.isEmpty()) {
 			StringBuilder sb = new StringBuilder();
@@ -280,7 +280,15 @@ public final class TileBaker {
     public static TileImage imagePaired(TileKey key, TilePixels pixels) {
         int size = Projection.TILE_PIXELS;
         return TileImage.full(key, Mipmaps.build(pixels.day(), size), coverage(pixels.day(), size, size), null,
-            pixels.night() == null ? null : Mipmaps.build(pixels.night(), size));
+            nightMips(pixels.night(), size));
+    }
+
+    /** An unavailable night plane stays legacy; darkness with known alpha is still valid data. */
+    static int @Nullable [][] nightMips(int @Nullable [] night, int edge) {
+        if (night != null) for (int pixel : night) {
+            if (pixel >>> 24 != 0) return Mipmaps.build(night, edge);
+        }
+        return null;
     }
 
 	/** Keeps the saved pixel wherever the fresh one is less known; square areas only. */
