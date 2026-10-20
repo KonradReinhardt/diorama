@@ -42,6 +42,8 @@ public final class MapScreen extends Screen {
 	private double centerU;
 	private double centerV;
 	private double zoom = 2.0;
+    private final SmoothZoom smoothZoom = new SmoothZoom(2);
+    private long lastZoomFrame;
 	private int layer;
 	private boolean following = true;
     private MapDirection direction = Projection.direction();
@@ -62,6 +64,7 @@ public final class MapScreen extends Screen {
 
 	@Override
 	protected void init() {
+        this.lastZoomFrame = System.nanoTime();
 		this.addRenderableWidget(Button.builder(Component.translatable("diorama.settings.button"), b ->
 			this.minecraft.gui.setScreen(new SettingsScreen(this))).bounds(this.width - 64, 0, 64, 14).build());
 	}
@@ -86,6 +89,12 @@ public final class MapScreen extends Screen {
             this.direction = Projection.direction();
             this.following = true;
         }
+		long zoomNow = System.nanoTime();
+        var zoomStep = this.smoothZoom.advance((zoomNow - this.lastZoomFrame) / 1e9, this.centerU, this.centerV, this.minZoom());
+        this.lastZoomFrame = zoomNow;
+        this.zoom = zoomStep.zoom();
+        this.centerU = zoomStep.centerU();
+        this.centerV = zoomStep.centerV();
 		Vec3 pos = player.getPosition(a);
 		double playerU = Projection.u(pos.x, pos.z);
 		double playerV = Projection.worldV(pos.x, pos.y, pos.z);
@@ -246,6 +255,7 @@ public final class MapScreen extends Screen {
 			this.dragged = true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT && this.dragged) {
+            this.smoothZoom.reset(this.zoom);
 			this.centerU -= dx / this.zoom;
 			this.centerV -= dy / this.zoom;
 			this.following = false;
@@ -256,19 +266,8 @@ public final class MapScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
-		double before = this.zoom;
-		double after = Math.max(this.minZoom(), Math.min(MAX_ZOOM, before * Math.pow(1.25, scrollY)));
-		if (after != before) {
-			// Keep the map point under the cursor where it is.
-			double mapU = this.centerU + (x - this.width / 2.0) / before;
-			double mapV = this.centerV + (y - this.height / 2.0) / before;
-			this.centerU = mapU - (x - this.width / 2.0) / after;
-			this.centerV = mapV - (y - this.height / 2.0) / after;
-			this.zoom = after;
-			if (this.following) {
-				this.following = false;
-			}
-		}
+        this.smoothZoom.scroll(scrollY, x - this.width / 2.0, y - this.height / 2.0, this.minZoom(), MAX_ZOOM);
+        if (this.smoothZoom.target() != this.zoom) this.following = false;
 		return true;
 	}
 
@@ -298,6 +297,7 @@ public final class MapScreen extends Screen {
 				return true;
 			}
 			case InputConstants.KEY_SPACE -> {
+                this.smoothZoom.reset(this.zoom);
 				this.following = true;
 				return true;
 			}
@@ -373,6 +373,7 @@ public final class MapScreen extends Screen {
 		this.centerU = u;
 		this.centerV = v;
 		this.zoom = zoom;
+        this.smoothZoom.reset(zoom);
 		this.layer = layer;
 		this.following = false;
 	}
