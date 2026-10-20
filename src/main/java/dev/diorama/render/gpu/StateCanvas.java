@@ -37,7 +37,7 @@ final class StateCanvas implements MapCanvas {
 		));
 	}
 
-    //? if >=26.3 {
+    //? if >=26.3 && fabric {
     @Override
     public void lit(MapTexture day, @org.jspecify.annotations.Nullable MapTexture night, Sampling sampling,
         float x0, float y0, float x1, float y1, dev.diorama.EnvironmentLighting lighting) {

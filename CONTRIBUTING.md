@@ -11,6 +11,10 @@
 - `feat/modmenu-config`: optional Fabric Mod Menu entrypoint and its client test.
 - `docs/day-night-lighting`: the original day/night rendering design.
 - `feat/day-night-lighting`: paired surface lighting, draw-time environment blending, incremental saved maps and regression fixtures.
+- `sync/upstream-0.2.1`: integration of upstream release `v0.2.1` (`d9f4a28`), including all NeoForge targets and the updated client-test shim.
+
+The fork's 0.3.0 builds include upstream 0.2.1. Dynamic surface lighting remains
+limited to Fabric 26.3; the newly added NeoForge targets use the daytime backend.
 
 New work starts on a topic branch based on `development`. Make focused commits and merge a topic only after its relevant checks pass. Do not force-push shared history or put generated JARs, caches or local instance configuration in commits.
 
@@ -30,6 +34,6 @@ The local Windows wrapper `D:\MinecraftModding\diorama-dev.cmd` selects the work
 
 The Mod Menu dependency is compile-only by default. The `dioramaModMenuTest` property adds Mod Menu and Placeholder API only to the 26.3 development runtime; they are not bundled in the release JAR.
 
-GitHub Actions declares a build matrix for all supported versions and three client-test jobs (map regressions, lighting and optional Mod Menu). Fork workflows may need to be enabled in GitHub before they run. A declared matrix is not evidence that every version has passed; inspect each run before preparing a release.
+GitHub Actions declares a build matrix for all 21 supported version/loader targets and three client-test jobs (map regressions, lighting and optional Mod Menu). Fork workflows may need to be enabled in GitHub before they run. A declared matrix is not evidence that every version has passed; inspect each run before preparing a release.
 
 See [the day/night design](docs/design/day-night-lighting.md) for the feature's scope, compatibility policy and performance gates, and [its validation report](docs/testing/day-night-lighting.md) for measured results.

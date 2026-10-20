@@ -8,7 +8,7 @@ public record EnvironmentLighting(float daylight, float rain) {
     public enum Mode { WORLD, DAY, NIGHT }
 
     public static boolean supported() {
-        //? if >=26.3 {
+        //? if >=26.3 && fabric {
         return true;
         //?} else {
         /*return false;
