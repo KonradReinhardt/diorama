@@ -35,10 +35,9 @@ redesenham os tiles salvos) e o compositor dia/noite continua só misturando os 
 
 ### Acabamento (`PaintedFinish`)
 
-Recebe o patch rastreado com 2 faces (8 px) de borda, começando numa borda de face, e devolve só
-o miolo:
+Recebe o patch rastreado com 12 px de borda e devolve só o miolo:
 
-1. **Tinta**: filtro de Kuwahara sobre as faces da grade (cada uma uma célula de 4×4 px), no
+1. **Tinta**: filtro de Kuwahara sobre as faces da grade (cada uma uma célula de 4×3 px), no
    albedo: o dab de uma face é a média da janela de 2×2 faces que menos varia, aplicado a 90%. Cada
    pixel muda pela razão entre o dab e o seu albedo, então a cor das faces derrete em manchas e a
    luz por texel (sombras) fica intacta; nada sai da grade. Dia e noite recebem o mesmo fator.
@@ -62,7 +61,7 @@ o miolo:
   (`PaintedFinishTest.aPatchMatchesTheSamePixelsOfAWholeArea`).
 - Alpha é preservado e pixels desconhecidos continuam desconhecidos: o estilo nunca aumenta a
   cobertura nem revela terreno (`keepsEveryAlphaSoCoverageNeverGrows`).
-- O alcance extra (8 px, dois blocos) fica dentro das margens já usadas por `TileInvalidation`
+- O alcance extra (12 px, três blocos) fica dentro das margens já usadas por `TileInvalidation`
   (a sombra e a oclusão de céu já pedem bem mais), então edições redesenham tudo o que afetam.
 - Trocar de estilo preserva exploração e tiles residentes (cenário `settings-refresh`).
 - Simples e Contornos não usam nada do acabamento pintado; os três estilos compartilham a grade e o

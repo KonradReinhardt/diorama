@@ -56,7 +56,7 @@ public record MapStyle(
 	 * darker, a lower sun casts longer shadows, shadows are deeper and cooler against warm
 	 * sunlight, high ground is a little brighter than low ground, and the camera looks a bit
 	 * lower so more block sides show: at 45 degrees, where a block's top and side are both whole
-	 * 4 by 4 pixel squares (see {@link Projection}).
+	 * 4 by 3 pixel faces (see {@link Projection}).
 	 */
 	public static final MapStyle DEFAULT = FLAT.withName("Default")
 		.withPitch(45)

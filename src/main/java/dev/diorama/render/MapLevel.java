@@ -307,19 +307,20 @@ public final class MapLevel implements ChunkSource {
 	 * different things and saved pixels are merged into fresh bakes. The camera angle moves where
 	 * pixels land. Under a roof, the view is a different picture, and with fog of war it may only
 	 * hold what the player has seen. Since the block grid ({@link Projection}) every folder name
-	 * says "grid": "surface", "surface-50" and "under-roof-50" hold maps from the projection
-	 * before it, and stay as they were.
+	 * says "grid3", for its 3-row faces: "surface", "surface-50" and "under-roof-50" hold maps from
+	 * the projection before the grid, and "surface-grid-45" from its first, 4-row version. They stay
+	 * as they were.
 	 */
 	private String storeName() {
 		if (this.roofless()) {
-			return "under-roof-grid-" + pitchName() + (this.fogOfWar ? "-fog" : "") + directionSuffix();
+			return "under-roof-grid3-" + pitchName() + (this.fogOfWar ? "-fog" : "") + directionSuffix();
 		}
 		return surfaceStoreName();
 	}
 
 	/** The folder of the surface map for the current camera, under a world's map folder. */
 	public static String surfaceStoreName() {
-		return "surface-grid-" + pitchName() + directionSuffix();
+		return "surface-grid3-" + pitchName() + directionSuffix();
 	}
 
 	private static long pitchName() {

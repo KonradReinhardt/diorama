@@ -19,16 +19,16 @@ class PaintedFinishTest {
             for (int i = 0; i < n; i++) {
                 int x = i % w, y = i / w;
                 boolean unknown = x + y < 6 || random.nextInt(40) == 0;
-                // One colour per 4 by 4 face, the way the map's grid draws blocks.
-                Random face = new Random(seed * 31 + (x / 4) * 7919L + (y / 4));
+                // One colour per 4 by 3 face, the way the map's grid draws blocks.
+                Random face = new Random(seed * 31 + (x / 4) * 7919L + Math.floorDiv(y + 1, 3));
                 day[i] = unknown ? 0 : 0xFF000000 | face.nextInt(0x1000000);
                 night[i] = unknown ? 0 : 0xFF000000 | (face.nextInt(0x1000000) & 0x3F3F3F);
                 for (int k = 0; k < 3; k++) albedo[i * 3 + k] = 0.05F + face.nextFloat() * 0.6F;
                 wet[i] = x > w / 2;
                 water[i] = (x - w / 2) * 0.4F;
                 sun[i] = face.nextBoolean();
-                behind[i] = y % 4 == 0 && (x / 4) % 3 == 0 ? 2.8F : 0;
-                front[i] = y % 4 == 3 && (x / 4) % 3 == 0 ? 2.8F : 0;
+                behind[i] = y % 3 == 0 && (x / 4) % 3 == 0 ? 2.8F : 0;
+                front[i] = y % 3 == 2 && (x / 4) % 3 == 0 ? 2.8F : 0;
             }
             return new Area(size, new PaintedFinish.Traced(day, night, wet, water, sun, albedo, behind, front));
         }
@@ -65,7 +65,7 @@ class PaintedFinishTest {
     @Test void aPatchMatchesTheSamePixelsOfAWholeArea() {
         Area whole = Area.random(64, 7);
         int[][] all = whole.finish(1_000, -2_000);
-        int x0 = 24, y0 = 8, size = 32;
+        int x0 = 24, y0 = 8, size = 32; // y0 is not a multiple of the 3-row faces
         int[][] patch = whole.crop(x0, y0, size).finish(1_000 + x0, -2_000 + y0);
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
@@ -86,11 +86,6 @@ class PaintedFinishTest {
                 if (traced >>> 24 == 0) assertEquals(traced, out[0][y * 48 + x]);
             }
         }
-    }
-
-    @Test void patchesOffTheBlockGridAreRefused() {
-        Area area = Area.random(32, 1);
-        assertThrows(IllegalArgumentException.class, () -> area.finish(2, 0));
     }
 
     @Test void waterWashesDeepenOutward() {

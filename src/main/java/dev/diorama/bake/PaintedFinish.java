@@ -6,8 +6,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Finishes a freshly traced patch of the painted look: what turns a lit render into a map painted
- * by hand. The map is a grid of block faces, each {@link #CELL} pixels square (see
- * {@link Projection}), and everything here keeps to it. In order:
+ * by hand. The map is a grid of block faces, each {@link #CELL_WIDTH} by {@link #CELL_HEIGHT}
+ * pixels (see {@link Projection}), and everything here keeps to it. In order:
  *
  * <ol>
  * <li>Paint: a Kuwahara filter over whole faces flattens neighbouring blocks into the dab of
@@ -27,12 +27,16 @@ import org.jspecify.annotations.Nullable;
  * cel-shaded light itself is worked out per ray in {@link TileBaker}.
  */
 public final class PaintedFinish {
-	/** Pixels across a block face on the map. */
-	static final int CELL = Projection.PIXELS_PER_UNIT;
+	/** Pixels across and down a block face on the map. Faces start at multiples of these in world pixels. */
+	static final int CELL_WIDTH = Projection.PIXELS_PER_UNIT;
+	static final int CELL_HEIGHT = Projection.TOP_ROWS;
 	/** Kuwahara reach in faces: the four windows touching a face are squares of {@code RADIUS + 1} faces. */
 	private static final int RADIUS = 1;
-	/** Traced pixels needed round the patch, in whole faces: a face's windows, then a neighbour's for the lines. */
-	public static final int BORDER = 2 * CELL;
+	/**
+	 * Traced pixels needed round the patch: a face cut by the patch edge, then two more faces each
+	 * way for its windows and its neighbour's. A multiple of both face sizes.
+	 */
+	public static final int BORDER = 12;
 	/** How far each face's colour moves to its dab: nearly all, so block textures melt into flat paint. */
 	private static final float DAB = 0.9F;
 
@@ -116,13 +120,10 @@ public final class PaintedFinish {
 	 * Finishes {@code width x height} pixels from a traced area {@link #BORDER} pixels larger on every
 	 * side. Unknown pixels (alpha 0) stay unknown and every alpha is kept, so coverage never grows.
 	 *
-	 * @param gx0 world pixel column of the traced area's first column, on a face boundary
-	 * @param gy0 world pixel row of the traced area's first row, on a face boundary
+	 * @param gx0 world pixel column of the traced area's first column
+	 * @param gy0 world pixel row of the traced area's first row
 	 */
 	static void apply(int width, int height, int gx0, int gy0, Traced traced, int[] out, int @Nullable [] nightOut) {
-		if (Math.floorMod(gx0, CELL) != 0 || Math.floorMod(gy0, CELL) != 0 || width % CELL != 0 || height % CELL != 0) {
-			throw new IllegalArgumentException("A painted patch must cover whole block faces");
-		}
 		int w = width + 2 * BORDER;
 		int h = height + 2 * BORDER;
 		int n = w * h;
@@ -140,11 +141,11 @@ public final class PaintedFinish {
 		}
 
 		// 1. Paint: each face's dab, then every land pixel's colour moved by the change in albedo.
-		Faces faces = new Faces(w, h, day, wet, traced.albedo());
+		Faces faces = new Faces(gx0, gy0, w, h, day, wet, traced.albedo());
 		float[] dab = faces.dabs();
 		float[] albedo = traced.albedo();
-		for (int y = CELL; y < h - CELL; y++) {
-			for (int x = CELL; x < w - CELL; x++) {
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
 				int i = y * w + x;
 				int c = faces.of(x, y);
 				if (day[i] >>> 24 == 0 || wet[i] || Float.isNaN(dab[c * 3])) {
@@ -279,9 +280,15 @@ public final class PaintedFinish {
 	/**
 	 * The land faces of a traced area: each one's mean albedo, and the Kuwahara dab it takes, the
 	 * mean of whichever of the four 2 by 2 face windows around it varies least. Water and unknown
-	 * pixels take no part; faces with too few land pixels have no colour (NaN).
+	 * pixels take no part; faces with too few land pixels have no colour (NaN). Faces are found by
+	 * world pixel, so they are the same faces whatever patch they are seen from; those the area's
+	 * edge cuts are averaged from the part it holds, and only ever read for faces far enough in.
 	 */
 	private static final class Faces {
+		private final int gx0;
+		private final int gy0;
+		private final int column0;
+		private final int row0;
 		private final int across;
 		private final int down;
 		/** Mean linear albedo per face, three floats each; NaN where the face has too little land. */
@@ -289,9 +296,13 @@ public final class PaintedFinish {
 		/** The dab per face once {@link #dabs} has run, three floats each; NaN where there is none. */
 		private float @Nullable [] dab;
 
-		Faces(int w, int h, int[] day, boolean[] wet, float[] albedo) {
-			this.across = w / CELL;
-			this.down = h / CELL;
+		Faces(int gx0, int gy0, int w, int h, int[] day, boolean[] wet, float[] albedo) {
+			this.gx0 = gx0;
+			this.gy0 = gy0;
+			this.column0 = Math.floorDiv(gx0, CELL_WIDTH);
+			this.row0 = Math.floorDiv(gy0, CELL_HEIGHT);
+			this.across = Math.floorDiv(gx0 + w - 1, CELL_WIDTH) - this.column0 + 1;
+			this.down = Math.floorDiv(gy0 + h - 1, CELL_HEIGHT) - this.row0 + 1;
 			int faces = this.across * this.down;
 			float[] sum = new float[faces * 3];
 			int[] count = new int[faces];
@@ -301,7 +312,7 @@ public final class PaintedFinish {
 					if (day[i] >>> 24 == 0 || wet[i]) {
 						continue;
 					}
-					int c = (y / CELL) * this.across + x / CELL;
+					int c = this.of(x, y);
 					sum[c * 3] += albedo[i * 3];
 					sum[c * 3 + 1] += albedo[i * 3 + 1];
 					sum[c * 3 + 2] += albedo[i * 3 + 2];
@@ -310,7 +321,7 @@ public final class PaintedFinish {
 			}
 			this.mean = new float[faces * 3];
 			for (int c = 0; c < faces; c++) {
-				boolean enough = count[c] * 2 >= CELL * CELL;
+				boolean enough = count[c] * 2 >= CELL_WIDTH * CELL_HEIGHT;
 				for (int k = 0; k < 3; k++) {
 					this.mean[c * 3 + k] = enough ? sum[c * 3 + k] / count[c] : Float.NaN;
 				}
@@ -319,7 +330,7 @@ public final class PaintedFinish {
 
 		/** The face holding pixel (x, y) of the traced area. */
 		int of(int x, int y) {
-			return (y / CELL) * this.across + x / CELL;
+			return (Math.floorDiv(this.gy0 + y, CELL_HEIGHT) - this.row0) * this.across + Math.floorDiv(this.gx0 + x, CELL_WIDTH) - this.column0;
 		}
 
 		/** Each face's dab, three floats each; NaN at the outer ring of faces and where the face has no colour. */

@@ -6,7 +6,7 @@ import dev.diorama.MapStyle;
 import dev.diorama.Projection;
 import org.junit.jupiter.api.Test;
 
-/** The map's projection puts every block edge on a pixel boundary, so each face is a 4 by 4 square. */
+/** The map's projection puts every block edge on a pixel boundary, so each face is 4 pixels wide and 3 tall. */
 class BlockGridTest {
     private static final double PITCH = MapStyle.DEFAULT.pitchDegrees();
     private static final double A = Projection.zScale(PITCH);
@@ -16,17 +16,17 @@ class BlockGridTest {
         return z * A - y * B;
     }
 
-    @Test void everyFaceIsFourPixelsSquare() {
+    @Test void everyFaceIsFourByThreePixels() {
         for (int y = -64; y < 320; y += 37) {
             for (int z = -3000; z < 3000; z += 113) {
                 // A top face spans z..z+1 at height y+1; a south face spans y..y+1 at z+1.
                 double topRows = (v(y + 1, z + 1) - v(y + 1, z)) * Projection.PIXELS_PER_UNIT;
                 double sideRows = (v(y, z + 1) - v(y + 1, z + 1)) * Projection.PIXELS_PER_UNIT;
-                assertEquals(4, topRows, 0);
-                assertEquals(4, sideRows, 0);
+                assertEquals(3, topRows, 1e-12);
+                assertEquals(3, sideRows, 1e-12);
                 // And every edge lands on a whole pixel.
                 double edge = v(y, z) * Projection.PIXELS_PER_UNIT;
-                assertEquals(Math.rint(edge), edge, 0);
+                assertEquals(Math.rint(edge), edge, 1e-6);
             }
         }
     }

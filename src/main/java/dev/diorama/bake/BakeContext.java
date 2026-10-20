@@ -13,7 +13,8 @@ public record BakeContext(MapStyle style, MapDirection direction, boolean fast) 
     /** Bump when bakes start drawing the same settings differently, so saved tiles are redrawn. */
     // 2: tiles baked before deep-ocean pixels were refreshed when their neighbours loaded.
     // 3: one ray per pixel on the block grid, and outlines from the faces' own geometry.
-    private static final int LOOK_REVISION = 3;
+    // 4: faces 3 rows tall instead of 4.
+    private static final int LOOK_REVISION = 4;
 
     /**
      * Identifies how baked pixels look: tiles saved under another value are redrawn when shown.
