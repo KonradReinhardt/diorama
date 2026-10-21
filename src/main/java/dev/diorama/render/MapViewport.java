@@ -458,7 +458,8 @@ public final class MapViewport {
 				shown.add(region);
 			}
 		}
-		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight, settings.regionStyle);
+		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight, settings.regionStyle,
+			Minecraft.getInstance().getWindow().getGuiScale());
 	}
 
 	/** Draws this region brighter from the next frame, or none. */

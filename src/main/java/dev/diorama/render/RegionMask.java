@@ -14,6 +14,10 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -32,9 +36,13 @@ import org.jspecify.annotations.Nullable;
  * </ul>
  * Texels just outside a region carry its dye and tag and a negative distance. Before 1.21.6 there
  * are no effect passes: a plain texture of fills and edges is built instead, drawn as a quad.
- * Render thread only.
+ *
+ * <p>The mask is built on a worker thread of its own, from the outlines projected on the render
+ * thread, and the map keeps drawing the last mask built until the next one is ready: a build
+ * takes a few milliseconds, too long for a frame. Distances are measured only as far as the
+ * bands drawn along edges reach at the view's zoom. Render thread only, but for the build.
  */
-final class RegionMask {
+public final class RegionMask {
 	/** Texels across. */
 	static final int SIZE = 512;
 	/** Finest texel, in map units: a map pixel. */
@@ -43,35 +51,51 @@ final class RegionMask {
 	private static final int SNAP_TEXELS = 64;
 	/** Map units around the view the mask covers too, so an edge just past the view still draws. */
 	private static final double MARGIN = 16;
-	/**
-	 * Texels from an edge whose distance is measured; farther ones read as this far. Enough for the
-	 * bands laid along an edge (the wide border band is eight art pixels), and as far as the green
-	 * byte holds.
-	 */
+	/** Texels from an edge at most whose distance is measured: as far as the green byte holds. */
 	static final int BAND = 31;
+	/** Art pixels from an edge the widest band drawn along it reaches (the wide border band, 8). */
+	private static final int BAND_ART_PIXELS = 9;
 	/** Distance steps per texel in the green byte. */
 	static final int STEPS = 4;
 	/** How much of a dye each fill lays down, for the plain texture before 1.21.6 (regions.fsh has its own). */
 	private static final float[] FILL_ALPHA = {0, 0.16F, 0.30F, 0.48F};
 
+	private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(task -> {
+		Thread thread = new Thread(task, "Diorama region mask");
+		thread.setDaemon(true);
+		return thread;
+	});
+	private static final AtomicLong BUILDS = new AtomicLong();
+	private static final AtomicLong BUILD_NANOS = new AtomicLong();
+
+	public static long builds() { return BUILDS.get(); }
+	public static long buildNanos() { return BUILD_NANOS.get(); }
+
 	private @Nullable MapTexture texture;
-	private final int[] pixels = new int[SIZE * SIZE];
-	/** Per texel, the region covering its middle: an index into {@link #drawn} plus one, or 0. */
-	private final short[] owner = new short[SIZE * SIZE];
+	/** The mask on the GPU, as it was built; null before the first. */
+	private @Nullable Built shown;
+	/** The build under way, and what it was asked for. */
+	private @Nullable CompletableFuture<Built> job;
+	private @Nullable Inputs asked;
+	/** Two sets of texels and owners: the worker fills the one not shown. */
+	private final int[][] pixels = {new int[SIZE * SIZE], new int[SIZE * SIZE]};
+	private final short[][] owners = {new short[SIZE * SIZE], new short[SIZE * SIZE]};
+	private int spare;
+	/** The worker's own scratch: distances inside and outside, and the region nearest outside. */
 	private final float[] inside = new float[SIZE * SIZE];
 	private final float[] outside = new float[SIZE * SIZE];
-	/** Per texel outside every region, the one whose edge is nearest within {@link #BAND}, as in {@link #owner}. */
 	private final short[] near = new short[SIZE * SIZE];
-	private List<MapRegion> drawn = List.of();
-	private @Nullable Inputs inputs;
-	private static long builds;
-	private static long buildNanos;
-
-	public static long builds() { return builds; }
-	public static long buildNanos() { return buildNanos; }
 
 	private record Inputs(long revision, long preview, List<UUID> shown, double originU, double originV, double texel,
-		MapDirection direction, int layer, @Nullable UUID highlight, RegionStyle style) {
+		MapDirection direction, int layer, @Nullable UUID highlight, RegionStyle style, int band) {
+	}
+
+	/** A region as the worker draws it: its rings in texels, and what its texels say. */
+	private record Item(MapRegion region, float[][] xs, float[][] ys, int dye, int fill, int rgb, boolean lit) {
+	}
+
+	/** A mask built: what for, its texels and owners, and the regions they index. */
+	private record Built(Inputs inputs, int[] pixels, short[] owner, List<MapRegion> drawn) {
 	}
 
 	/** What the region passes of a frame draw with: the texture and the view's part of it. */
@@ -79,120 +103,146 @@ final class RegionMask {
 	}
 
 	/**
-	 * Builds the mask for a view if anything it shows changed, and returns what to draw it with, or
-	 * null when no region is near the view. {@code revision} goes up whenever a region changes, and
-	 * {@code preview} whenever a region being edited, not yet kept, changes; on a cave slice the
-	 * outlines lie at the slice's height. They are drawn in {@code style}.
+	 * Asks for the mask for a view if anything it shows changed, and returns what to draw with now:
+	 * the last mask built, or null while there is none or no region is near the view.
+	 * {@code revision} goes up whenever a region changes, and {@code preview} whenever a region
+	 * being edited, not yet kept, changes; on a cave slice the outlines lie at the slice's height.
+	 * They are drawn in {@code style}.
 	 */
-	@Nullable Pass prepare(MapViewport.View view, List<MapRegion> regions, long revision, long preview, @Nullable UUID highlight, RegionStyle style) {
-		if (regions.isEmpty()) {
-			this.drawn = List.of();
-			return null;
+	@Nullable Pass prepare(MapViewport.View view, List<MapRegion> regions, long revision, long preview, @Nullable UUID highlight, RegionStyle style, double gui) {
+		CompletableFuture<Built> job = this.job;
+		if (job != null && job.isDone()) {
+			this.job = null;
+			Built built = job.join();
+			if (this.texture == null) {
+				this.texture = MapTexture.create("diorama region mask", SIZE, 1);
+			}
+			this.texture.write(0, 0, 0, SIZE, built.pixels());
+			this.spare = built.pixels() == this.pixels[0] ? 1 : 0;
+			this.shown = built;
 		}
 		double viewW = view.width() / view.zoom(), viewH = view.height() / view.zoom();
-		double texel = FINEST;
-		while (SIZE * texel < Math.max(viewW, viewH) + 2 * margin(texel) + SNAP_TEXELS * texel) {
-			texel *= 2;
+		if (!regions.isEmpty()) {
+			double texel = FINEST;
+			while (SIZE * texel < Math.max(viewW, viewH) + 2 * margin(texel) + SNAP_TEXELS * texel) {
+				texel *= 2;
+			}
+			double snap = SNAP_TEXELS * texel;
+			double originU = Math.floor((view.minU() - margin(texel)) / snap) * snap;
+			double originV = Math.floor((view.minV() - margin(texel)) / snap) * snap;
+			// Map units an art pixel spans, as regions.fsh measures it: a GUI pixel, never under a block.
+			double art = Math.max(1, Math.max(1, Math.round(gui)) / (view.zoom() * gui));
+			int band = (int) Math.min(BAND, Math.ceil(BAND_ART_PIXELS * art / texel) + 2);
+			List<UUID> ids = new ArrayList<>(regions.size());
+			for (MapRegion region : regions) {
+				ids.add(region.id);
+			}
+			Inputs inputs = new Inputs(revision, preview, ids, originU, originV, texel, Projection.direction(), view.layer(), highlight, style, band);
+			Built shown = this.shown;
+			if (this.job == null && (shown == null || !inputs.equals(shown.inputs())) && !inputs.equals(this.asked)) {
+				this.start(inputs, regions);
+			}
 		}
-		double snap = SNAP_TEXELS * texel;
-		double originU = Math.floor((view.minU() - margin(texel)) / snap) * snap;
-		double originV = Math.floor((view.minV() - margin(texel)) / snap) * snap;
-		List<UUID> shown = new ArrayList<>(regions.size());
-		for (MapRegion region : regions) {
-			shown.add(region.id);
-		}
-		Inputs inputs = new Inputs(revision, preview, shown, originU, originV, texel, Projection.direction(), view.layer(), highlight, style);
-		if (this.texture == null || !inputs.equals(this.inputs)) {
-			this.build(regions, originU, originV, texel, view.layer(), highlight, style);
-			this.inputs = inputs;
-		}
-		if (this.drawn.isEmpty()) {
+		Built shown = this.shown;
+		if (regions.isEmpty() || shown == null || shown.drawn().isEmpty() || this.texture == null) {
 			return null;
 		}
-		double span = SIZE * texel;
+		Inputs in = shown.inputs();
+		double span = SIZE * in.texel();
 		return new Pass(this.texture,
-			(float) ((view.minU() - originU) / span), (float) ((view.minV() - originV) / span),
-			(float) ((view.minU() + viewW - originU) / span), (float) ((view.minV() + viewH - originV) / span),
-			originU, originV, texel);
+			(float) ((view.minU() - in.originU()) / span), (float) ((view.minV() - in.originV()) / span),
+			(float) ((view.minU() + viewW - in.originU()) / span), (float) ((view.minV() + viewH - in.originV()) / span),
+			in.originU(), in.originV(), in.texel());
 	}
 
 	private static double margin(double texel) {
 		return Math.max(MARGIN, 4 * texel);
 	}
 
-	/** The region drawn at a map point in the last mask built, or null. */
+	/** The region drawn at a map point in the mask shown, or null. */
 	@Nullable MapRegion at(double u, double v) {
-		Inputs in = this.inputs;
-		if (in == null || this.drawn.isEmpty()) {
+		Built shown = this.shown;
+		if (shown == null || shown.drawn().isEmpty()) {
 			return null;
 		}
+		Inputs in = shown.inputs();
 		int i = (int) Math.floor((u - in.originU()) / in.texel()), j = (int) Math.floor((v - in.originV()) / in.texel());
 		if (i < 0 || j < 0 || i >= SIZE || j >= SIZE) {
 			return null;
 		}
-		int o = this.owner[j * SIZE + i];
-		return o == 0 ? null : this.drawn.get(o - 1);
+		int o = shown.owner()[j * SIZE + i];
+		return o == 0 ? null : shown.drawn().get(o - 1);
 	}
 
-	private void build(List<MapRegion> regions, double originU, double originV, double texel, int layer, @Nullable UUID highlight, RegionStyle style) {
-		long start = System.nanoTime();
-		if (this.texture == null) {
-			this.texture = MapTexture.create("diorama region mask", SIZE, 1);
-		}
-		boolean cave = layer != TileKey.SURFACE;
-		// Each region's rings in texels; those whose outline can't reach the mask are left out.
-		List<MapRegion> drawn = new ArrayList<>();
-		List<float[][][]> outlines = new ArrayList<>();
+	/**
+	 * Starts a build. What it needs from the regions is taken here, on the render thread (their
+	 * outlines projected, their dyes): the worker never reads a region, which the tools change.
+	 */
+	private void start(Inputs inputs, List<MapRegion> regions) {
+		boolean cave = inputs.layer() != TileKey.SURFACE;
 		List<MapRegion> bySize = new ArrayList<>(regions);
 		// Bigger first, so smaller ones are filled over them.
 		bySize.sort(Comparator.comparingDouble(MapRegion::area).reversed());
+		List<Item> items = new ArrayList<>();
 		for (MapRegion region : bySize) {
-			float[][][] outline = project(region, originU, originV, texel, cave ? layer : Integer.MIN_VALUE);
-			if (outline != null && drawn.size() < Short.MAX_VALUE) {
-				drawn.add(region);
-				outlines.add(outline);
+			float[][][] outline = project(region, inputs.originU(), inputs.originV(), inputs.texel(), cave ? inputs.layer() : Integer.MIN_VALUE, inputs.band());
+			if (outline != null && items.size() < Short.MAX_VALUE) {
+				items.add(new Item(region, outline[0], outline[1], region.dye.ordinal(), region.fill.ordinal(), region.dye.rgb, region.id.equals(inputs.highlight())));
 			}
 		}
-		this.drawn = drawn;
-		Arrays.fill(this.owner, (short) 0);
+		int[] pixels = this.pixels[this.spare];
+		short[] owner = this.owners[this.spare];
+		boolean effects = MapEffect.supported();
+		this.asked = inputs;
+		this.job = CompletableFuture.supplyAsync(() -> this.build(inputs, items, pixels, owner, effects), WORKER);
+	}
+
+	/** Builds a mask into {@code pixels} and {@code owner}, on the worker. */
+	private Built build(Inputs inputs, List<Item> items, int[] pixels, short[] owner, boolean effects) {
+		long start = System.nanoTime();
+		int band = inputs.band();
+		Arrays.fill(owner, (short) 0);
 		Arrays.fill(this.near, (short) 0);
-		Arrays.fill(this.inside, BAND);
-		Arrays.fill(this.outside, BAND);
-		for (int k = 0; k < drawn.size(); k++) {
+		Arrays.fill(this.inside, band);
+		Arrays.fill(this.outside, band);
+		for (int k = 0; k < items.size(); k++) {
 			short index = (short) (k + 1);
-			RegionGeometry.scan(outlines.get(k)[0], outlines.get(k)[1], SIZE, SIZE, (row, from, to) -> Arrays.fill(this.owner, row * SIZE + from, row * SIZE + to, index));
+			RegionGeometry.scan(items.get(k).xs(), items.get(k).ys(), SIZE, SIZE, (row, from, to) -> Arrays.fill(owner, row * SIZE + from, row * SIZE + to, index));
 		}
-		for (int k = 0; k < drawn.size(); k++) {
-			float[][] xs = outlines.get(k)[0], ys = outlines.get(k)[1];
+		for (int k = 0; k < items.size(); k++) {
+			float[][] xs = items.get(k).xs(), ys = items.get(k).ys();
 			for (int r = 0; r < xs.length; r++) {
 				float[] x = xs[r], y = ys[r];
 				for (int i = 0, j = x.length - 1; i < x.length; j = i++) {
-					this.edge(k + 1, x[j], y[j], x[i], y[i]);
+					this.edge(owner, band, k + 1, x[j], y[j], x[i], y[i]);
 				}
 			}
 		}
-		boolean effects = MapEffect.supported();
+		int alpha = 0xF0 | inputs.style().shaderIndex();
 		for (int t = 0; t < SIZE * SIZE; t++) {
-			int o = this.owner[t];
+			int o = owner[t];
 			int tagged = o != 0 ? o : this.near[t];
 			if (tagged == 0) {
-				this.pixels[t] = effects ? 0xFF000000 | distanceByte(-BAND) << 8 : 0;
+				pixels[t] = effects ? 0xFF000000 | distanceByte(-band) << 8 : 0;
 				continue;
 			}
-			MapRegion region = drawn.get(tagged - 1);
+			Item item = items.get(tagged - 1);
 			if (effects) {
-				int red = region.dye.ordinal() | region.fill.ordinal() << 4 | (region.id.equals(highlight) ? 64 : 0) | (o != 0 ? 128 : 0);
+				int red = item.dye() | item.fill() << 4 | (item.lit() ? 64 : 0) | (o != 0 ? 128 : 0);
 				int green = distanceByte(o != 0 ? this.inside[t] : -this.outside[t]);
 				int blue = (tagged - 1) % 255 + 1;
-				int alpha = 0xF0 | style.shaderIndex();
-				this.pixels[t] = alpha << 24 | blue << 16 | green << 8 | red;
+				pixels[t] = alpha << 24 | blue << 16 | green << 8 | red;
 			} else {
-				this.pixels[t] = o == 0 ? 0 : this.plain(t, o, region, region.id.equals(highlight));
+				pixels[t] = o == 0 ? 0 : plain(owner, t, o, item);
 			}
 		}
-		this.texture.write(0, 0, 0, SIZE, this.pixels);
-		builds++;
-		buildNanos += System.nanoTime() - start;
+		List<MapRegion> drawn = new ArrayList<>(items.size());
+		for (Item item : items) {
+			drawn.add(item.region());
+		}
+		BUILDS.incrementAndGet();
+		BUILD_NANOS.addAndGet(System.nanoTime() - start);
+		return new Built(inputs, pixels, owner, drawn);
 	}
 
 	/** The distance to an edge as the green byte; see the class comment. */
@@ -203,9 +253,9 @@ final class RegionMask {
 	/**
 	 * A region's rings in texels of the mask, {xs, ys}, each vertex projected at the height it was
 	 * drawn on, or at {@code height} unless that is {@link Integer#MIN_VALUE}; null when the outline
-	 * lies wholly beyond the mask.
+	 * lies wholly more than {@code band} texels beyond the mask.
 	 */
-	static float @Nullable [][][] project(MapRegion region, double originU, double originV, double texel, int height) {
+	static float @Nullable [][][] project(MapRegion region, double originU, double originV, double texel, int height, int band) {
 		int n = region.rings.size();
 		float[][] xs = new float[n][], ys = new float[n][];
 		float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY, maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY;
@@ -222,32 +272,32 @@ final class RegionMask {
 				maxY = Math.max(maxY, y[i]);
 			}
 		}
-		if (maxX < -BAND || maxY < -BAND || minX > SIZE + BAND || minY > SIZE + BAND) {
+		if (maxX < -band || maxY < -band || minX > SIZE + band || minY > SIZE + band) {
 			return null;
 		}
 		return new float[][][] {xs, ys};
 	}
 
 	/**
-	 * Measures the distance from texels within {@link #BAND} of an edge of region {@code k} to it.
+	 * Measures the distance from texels within {@code band} of an edge of region {@code k} to it.
 	 * It counts for texels of that region, and of regions under it (it is their edge where it covers
 	 * them), and, outside every region, for the nearest. Long edges go in pieces no longer than the
 	 * band, so only texels near the edge are looked at.
 	 */
-	private void edge(int k, float ax, float ay, float bx, float by) {
+	private void edge(short[] owner, int band, int k, float ax, float ay, float bx, float by) {
 		double length = Math.hypot(bx - ax, by - ay);
-		int pieces = Math.max(1, (int) Math.ceil(length / BAND));
+		int pieces = Math.max(1, (int) Math.ceil(length / band));
 		for (int p = 0; p < pieces; p++) {
 			double x0 = ax + (bx - ax) * p / (double) pieces, y0 = ay + (by - ay) * p / (double) pieces;
 			double x1 = ax + (bx - ax) * (p + 1) / (double) pieces, y1 = ay + (by - ay) * (p + 1) / (double) pieces;
-			int i0 = Math.max(0, (int) Math.floor(Math.min(x0, x1) - BAND)), i1 = Math.min(SIZE - 1, (int) Math.ceil(Math.max(x0, x1) + BAND));
-			int j0 = Math.max(0, (int) Math.floor(Math.min(y0, y1) - BAND)), j1 = Math.min(SIZE - 1, (int) Math.ceil(Math.max(y0, y1) + BAND));
+			int i0 = Math.max(0, (int) Math.floor(Math.min(x0, x1) - band)), i1 = Math.min(SIZE - 1, (int) Math.ceil(Math.max(x0, x1) + band));
+			int j0 = Math.max(0, (int) Math.floor(Math.min(y0, y1) - band)), j1 = Math.min(SIZE - 1, (int) Math.ceil(Math.max(y0, y1) + band));
 			for (int j = j0; j <= j1; j++) {
 				for (int i = i0; i <= i1; i++) {
 					double d = RegionGeometry.segmentDistance(i + 0.5, j + 0.5, x0, y0, x1, y1);
-					if (d >= BAND) continue;
+					if (d >= band) continue;
 					int t = j * SIZE + i;
-					int o = this.owner[t];
+					int o = owner[t];
 					if (o == 0) {
 						if (d < this.outside[t]) {
 							this.outside[t] = (float) d;
@@ -262,12 +312,12 @@ final class RegionMask {
 	}
 
 	/** A texel of the plain texture before 1.21.6, as ABGR: the fill, or the dye nearly solid along an edge. */
-	private int plain(int t, int o, MapRegion region, boolean lit) {
+	private static int plain(short[] owner, int t, int o, Item item) {
 		int i = t % SIZE, j = t / SIZE;
 		boolean edge = i == 0 || j == 0 || i == SIZE - 1 || j == SIZE - 1
-			|| this.owner[t - 1] != o || this.owner[t + 1] != o || this.owner[t - SIZE] != o || this.owner[t + SIZE] != o;
-		float alpha = edge ? 0.9F : Math.min(1, FILL_ALPHA[region.fill.ordinal()] + (lit ? 0.12F : 0));
-		int rgb = region.dye.rgb;
+			|| owner[t - 1] != o || owner[t + 1] != o || owner[t - SIZE] != o || owner[t + SIZE] != o;
+		float alpha = edge ? 0.9F : Math.min(1, FILL_ALPHA[item.fill()] + (item.lit() ? 0.12F : 0));
+		int rgb = item.rgb();
 		return Math.round(alpha * 255) << 24 | (rgb & 255) << 16 | (rgb & 0xFF00) | rgb >> 16 & 255;
 	}
 
@@ -276,7 +326,9 @@ final class RegionMask {
 			this.texture.close();
 			this.texture = null;
 		}
-		this.inputs = null;
-		this.drawn = List.of();
+		// A build under way finishes into arrays nothing reads any more.
+		this.job = null;
+		this.asked = null;
+		this.shown = null;
 	}
 }

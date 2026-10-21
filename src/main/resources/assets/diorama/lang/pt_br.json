@@ -246,7 +246,6 @@
 	"diorama.book.regions.dye": "Tinta",
 	"diorama.book.regions.on_map": "No mapa",
 	"diorama.book.regions.on_minimap": "No minimapa",
-	"diorama.book.regions.area": "%s blocos² · %s chunks",
 	"diorama.book.regions.edit": "Editar forma",
 	"diorama.book.regions.tools": "Desenho",
 	"diorama.book.regions.tools_hint": "Clique com o botão direito no mapa e escolha Desenhar uma região, ou defina uma tecla para Desenhar regiões. Laço (1), polígono (2), editar (3), borracha (4) e pincel de chunks (5); Shift soma à região de baixo, Alt recorta dela. Ctrl+Z e Ctrl+Y desfazem e refazem. Desenhando, o botão direito ou do meio arrasta o mapa.",

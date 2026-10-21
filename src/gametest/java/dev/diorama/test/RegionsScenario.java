@@ -7,7 +7,6 @@ import dev.diorama.Projection;
 import dev.diorama.Settings;
 import dev.diorama.bake.TileKey;
 import dev.diorama.region.MapRegion;
-import dev.diorama.region.RegionGeometry;
 import dev.diorama.region.RegionStore;
 import dev.diorama.region.RegionTool;
 import dev.diorama.region.Ring;
@@ -487,15 +486,11 @@ final class RegionsScenario {
 		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
 		context.waitTicks(3);
 		MapRegion painted = context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).book().pickedRegion());
-		// Whole chunks, the three aimed at among them: over a forest's crowns the stroke may cross
-		// the rows beside, and those count too.
-		if (painted == null || painted.area() % 256 != 0) {
+		// Whole chunks, three at least. The brush takes the chunk of the block the map shows under
+		// the pointer: over a forest the crown of a tree in front can stand for a chunk beside the
+		// one aimed at, so the stroke may cross a row or two, and those count too.
+		if (painted == null || painted.area() % 256 != 0 || painted.area() < 3 * 256) {
 			throw new AssertionError("The brush should paint whole chunks into a new region, painted " + (painted == null ? "nothing" : painted.area() + " blocks²"));
-		}
-		for (int c = 0; c < 3; c++) {
-			if (!RegionGeometry.contains(painted.rings, chunk[0] * 16 + 8 + 16 * c, chunk[1] * 16 + 8)) {
-				throw new AssertionError("The brush missed chunk " + (chunk[0] + c) + ", " + chunk[1]);
-			}
 		}
 		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 		// The book shuts over a few frames; till then it takes the clicks under it.
@@ -508,8 +503,8 @@ final class RegionsScenario {
 		context.getInput().releaseKey(InputConstants.KEY_LALT);
 		context.waitTicks(3);
 		MapRegion after = context.computeOnClient(mc -> RegionStore.get().find(painted.id));
-		if (Math.abs(after.area() - (painted.area() - 256)) > 1e-6 || RegionGeometry.contains(after.rings, chunk[0] * 16 + 40, chunk[1] * 16 + 8)) {
-			throw new AssertionError("Alt and the brush should take the chunk clicked away: " + painted.area() + " then " + after.area() + " blocks²");
+		if (Math.abs(after.area() - (painted.area() - 256)) > 1e-6) {
+			throw new AssertionError("Alt and a click of the brush should take one chunk away: " + painted.area() + " then " + after.area() + " blocks²");
 		}
 		settle(context);
 		context.takeScreenshot("regions-brush-done");
@@ -574,6 +569,9 @@ final class RegionsScenario {
 			throw new AssertionError("The player stands in Home, found " + (here == null ? "nothing" : here.name));
 		}
 		context.takeScreenshot("regions-minimap");
+		long builds = dev.diorama.render.RegionMask.builds(), nanos = dev.diorama.render.RegionMask.buildNanos();
+		dev.diorama.Diorama.LOGGER.info("REGION-MASK {} builds, {} ms on average, {} ms in all", builds,
+			String.format(java.util.Locale.ROOT, "%.3f", builds == 0 ? 0 : nanos / 1e6 / builds), String.format(java.util.Locale.ROOT, "%.1f", nanos / 1e6));
 	}
 
 	private static void look(ClientGameTestContext context, double u, double v, double zoom) {

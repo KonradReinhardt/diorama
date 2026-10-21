@@ -2,7 +2,7 @@
 
 # Mappa Mundi
 
-Mappa Mundi is a fork of [Diorama](https://github.com/SunkenInTime/diorama) by Dara Adedeji, painted like an old atlas: a book of settings over the world map, banner waypoints, painted and antique map styles, drifting clouds, coasts and day and night. Inside, the mod keeps Diorama's id and folders (`diorama`), so maps, waypoints and settings saved by Diorama carry over; install one or the other, not both.
+Mappa Mundi is a fork of [Diorama](https://github.com/SunkenInTime/diorama) by Dara Adedeji, painted like an old atlas: a book of settings over the world map, banner waypoints, regions drawn on the map, painted and antique map styles, drifting clouds, coasts and day and night. Inside, the mod keeps Diorama's id and folders (`diorama`), so maps, waypoints and settings saved by Diorama carry over; install one or the other, not both.
 
 It is a client-side mod for Minecraft, on Fabric for 1.21 to 26.3 and on NeoForge for 1.21 to 26.3, that draws your world as an angled voxel map, like a baked diorama, in a minimap and a fullscreen map you can pan and zoom.
 
@@ -16,6 +16,7 @@ Places the map has no data for sit under animated fog. Underground, the map swit
 - **Fullscreen map** with smooth, cursor-anchored wheel zoom, from close-up blocks out to about 10,000 blocks across. It opens with a short zoom in, and its menus are a pixel-art **book** over the map: colored ribbons at the right edge, each with an item icon from your resource pack, open its sections (Banners, Look, Layers, Radar). Settings that change the world map are changed there, with the map live around the book; only the minimap's own settings leave the map.
 - **Radar** for other players and mobs, each shown as its own face, framed red, yellow or green for hostile, neutral or passive, with markers for whether they're above or below you.
 - **Waypoints** on the map and as labels in the world, plus a marker wherever you die. Each waypoint is a pixel-art banner standing on its block, designed like at the loom: base dye, up to six pattern layers (sixteen if you lift the limit in the settings), every pattern the game has registered, including datapacks' and mods', undo and redo, and a button that copies the banner you're holding. Share one in chat from its edit screen; shared waypoints, including Xaero's, get an [Add] link in chat. Teleport to one if you're allowed to use `/tp`. Coming from Xaero's Minimap? The waypoint list offers to import its waypoints for the world you're in.
+- **Regions** drawn on the world map, like the territories of a strategy game: trace one with a lasso, click its corners or paint whole chunks, then name it, give it one of the sixteen dyes and a banner of its own. Regions show on the world map and the minimap with their names and banners, and the one you stand in shows under the minimap. See [Regions](#regions).
 - **Saved map.** Everything your client loads is saved per world and dimension, so the map is still there next time, and you can zoom out over everywhere you've been.
 - **The Nether** from above: the sky view starts under the bedrock roof and shows everything below it, lit by block light.
 - **Overlays** on the fullscreen map: chunk grid, slime chunks (singleplayer) and the spots where monsters can spawn.
@@ -27,6 +28,7 @@ Saved maps and waypoints of a singleplayer world live inside its save, in `saves
 
 - `M` opens the fullscreen map. Drag to pan, scroll to zoom, click a banner to open its page in the book. Right-click anywhere for a menu: plant a banner there (named in the book), copy its coordinates, or teleport there if the server lets you use `/tp` (on ground the map hasn't seen, `/spreadplayers` lands you on the surface).
 - In the fullscreen map, `C` toggles the cave slice, `PgUp`/`PgDn` move the slice by 4 blocks, `U` opens the book's banners, `Space` recenters on you, and `Esc` shuts the right-click menu, then the book, before the map.
+- In the fullscreen map, right-click and pick **Draw a region** (or bind a key to *Draw regions*) for the region tools: `1` lasso, `2` polygon, `3` edit, `4` eraser, `5` chunk brush; Shift as an outline closes adds it to the region it covers, Alt cuts it out; `Ctrl+Z`/`Ctrl+Y` undo and redo; the right or middle button drags the map meanwhile; `Esc` lets go of a stroke, then leaves the tools.
 - `B` adds a waypoint where you stand, and `U` opens the waypoint list.
 - `=` and `-` zoom the minimap. Map settings and hiding the minimap have keys too, unbound by default.
 
@@ -135,6 +137,8 @@ Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints tog
 
 `DIORAMA_TESTS=book-map ./gradlew --configure-on-demand :26.3:runClientGameTest` opens the world map and checks its zoom in, captures each section of the book, picks a look in the book (the map redraws behind it without leaving), tints the antique map without redrawing tiles, goes out through the minimap ribbon and back, opens a banner's page from the map, types its name without the map's keys firing, and checks the pages at 1280x720. See [the design](docs/design/book-map-ui.md). The book's sprite sheet is drawn by `docs/design/book-sprites.py`.
 
+`DIORAMA_TESTS=regions DIORAMA_RENDER_DISTANCE=8 ./gradlew --configure-on-demand :26.3:runClientGameTest` lays regions around the player and captures them in every style, with the border band and banners, then draws, names, edits, adds to, cuts, paints by chunks and erases regions by mouse and keys, uses the regions' pages of the book, and checks the region shown under the minimap. See [the design](docs/design/map-regions.md) and [validation report](docs/testing/map-regions.md).
+
 `DIORAMA_TESTS=day-night ./gradlew --configure-on-demand :26.3:runClientGameTest` checks real block-light propagation in all four directions and both quality modes, captures lighting states and asserts zero jobs, writes, snapshots or fog-mask rebuilds during a time-only cycle. See [the design](docs/design/day-night-lighting.md) and [validation report](docs/testing/day-night-lighting.md).
 
 ## Painted render style
@@ -203,3 +207,33 @@ Other contexts keep the parchment without prediction. Seed cartography can be
 switched off independently. Older versions retain the paper style and eased zoom.
 See the [implementation](docs/design/antique-fog.md) and
 [validation results](docs/testing/antique-fog.md).
+
+## Regions
+
+Right-click the world map and pick **Draw a region**, or bind a key to *Draw regions*, for a
+strip of tools at the bottom of the map: a **lasso** traced around the region, a **polygon**
+clicked corner by corner, an **edit** tool that drags a region's corners, adds one on a side,
+takes one away with a right click or moves the whole region, an **eraser**, and a **chunk brush**
+that paints whole chunks, handy for claims. Holding Shift as an outline closes adds it to the
+region it covers most, Alt cuts it out (holes too); with the brush, Alt takes chunks away. Every
+change can be undone with Ctrl+Z.
+
+A region just drawn opens in the book's purple **Regions** ribbon to be named. Its page sets its
+dye, fill and where it shows, and gives it a **banner**, designed at the loom, copied from the
+banner in your hand or from a waypoint. On the world map each region's name is written where it
+fits, with its banner planted over it; under the minimap, the region you stand in shows with its
+banner and name, and an optional notice names the region you walk into.
+
+How regions are drawn is chosen once, in the Regions ribbon's options, as pictures: **Marker**,
+**Political**, **Watercolor** (the default), **Wash**, **Engraving** and **Illuminated**, apart
+from the map's own render style. **Border band** (wide by default) lays each region's dye along
+the inside of its border, strongest at the edge and fading inwards, as strategy games draw
+territories; while it is on, the band is the region's only colour inside. Lines are one art pixel
+thick at every zoom, and borders run on, fainter, over unexplored land. From 1.21.6 on regions are
+a shader pass of their own over the tiles; older versions draw them in the Marker look.
+
+Regions are kept in world coordinates, each corner on the height of the ground it was drawn on
+(only explored ground lends a height), so they stay put in every map direction. They are saved in
+`regions.json` beside `waypoints.json`, client-side only. See [the design](docs/design/map-regions.md)
+and [validation results](docs/testing/map-regions.md).
+

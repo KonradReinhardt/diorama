@@ -1,8 +1,10 @@
 # Map regions — plan
 
-Status: plan written on 2026-10-21. Steps 1–7 implemented the same day on the `feature/map-regions`
-branch; the "How it turned out" sections at the end record where they departed from the plan.
-Step 8 is still to do.
+Status: plan written on 2026-10-21; all eight steps implemented the same day on the
+`feature/map-regions` branch. The plan below is kept as written; the "How it turned out" sections
+at the end record where the implementation departed from it, including changes the user asked for
+along the way (the region styles apart from the render style, the border band, the region under
+the minimap).
 
 ## Goal
 
@@ -255,9 +257,11 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
 
 ## Decisions to confirm
 
+The user took the recommended ones; the first was later replaced at their request (see step 6).
+
 - **Antique fog styles override the render style for regions.** Recommended, since with the antique
   map the whole map reads as a period map. The alternative is following only `renderStyle` and
-  tinting with sepia.
+  tinting with sepia. *Replaced: regions have a style of their own, picked in one place.*
 - **Borders over the fog, fill under it.** Recommended; the alternative hides regions in unexplored
   land entirely.
 - **Banner owned by the region** (a copy of a design) rather than a link to a waypoint. Recommended:
@@ -425,4 +429,20 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
 - Tests: `RegionShapesTest` (JUnit); `DIORAMA_TESTS=regions` adds to the lake with Shift, cuts a
   hole in Home with Alt, paints three chunks into a new region and takes one away with Alt
   (captures `regions-shapes`, `regions-brush-*`).
+
+## How it turned out (step 8)
+
+- README: regions in "What it does", the tools' keys, a Regions section, and the
+  `DIORAMA_TESTS=regions` scenario under Contributing. CHANGELOG: an Unreleased section.
+- Validation report: [docs/testing/map-regions.md](../testing/map-regions.md), with what was run
+  and the limits found.
+- A translation left unused by the reworked page was removed.
+- The final runs measured the mask's builds at 12.8 ms on average on the render thread, against the
+  plan's 2 ms: as the plan foresaw, they moved to a worker of its own (`RegionMask`: outlines
+  projected on the render thread, double-buffered texels and owners, the last mask drawn until the
+  next is ready), and distances are measured only as far as the bands reach at the view's zoom
+  (nine art pixels, at most 31 texels): 6.2 ms on average, on the worker.
+- The full settings screen's Regions section ran its column into Done at 427×240: the screen now
+  measures each column with its own headers and, where three columns don't fit, lays out four
+  (Regions beside Waypoints).
 

@@ -246,7 +246,6 @@
 	"diorama.book.regions.dye": "Dye",
 	"diorama.book.regions.on_map": "On the map",
 	"diorama.book.regions.on_minimap": "On the minimap",
-	"diorama.book.regions.area": "%s blocks² · %s chunks",
 	"diorama.book.regions.edit": "Edit shape",
 	"diorama.book.regions.tools": "Drawing",
 	"diorama.book.regions.tools_hint": "Right-click the map and pick Draw a region, or bind a key to Draw regions. Lasso (1), polygon (2), edit (3), eraser (4) and chunk brush (5); Shift adds to the region below, Alt cuts out of it. Ctrl+Z and Ctrl+Y undo and redo. While drawing, the right or middle button drags the map.",
