@@ -96,6 +96,7 @@ public final class SettingsCatalog {
 		out.add(toggle("diorama.settings.coordinates", Section.MINIMAP, "coordinates", () -> s.coordinates, v -> s.coordinates = v));
 		out.add(toggle("diorama.settings.biome", Section.MINIMAP, "biome", () -> s.biome, v -> s.biome = v));
 		out.add(toggle("diorama.settings.auto_caves", Section.MINIMAP, "autoCaves", () -> s.autoCaves, v -> s.autoCaves = v));
+		out.add(toggle("diorama.settings.regions_minimap", Section.MINIMAP, "minimapRegions", () -> s.minimapRegions, v -> s.minimapRegions = v));
 		out.add(shownIf(toggle("diorama.settings.minimap_clouds", Section.MINIMAP, "minimapClouds", () -> s.minimapClouds, v -> s.minimapClouds = v),
 			MapEffect::supported));
 
@@ -114,6 +115,7 @@ public final class SettingsCatalog {
 		out.add(toggle("diorama.settings.chunk_grid", Section.OVERLAYS, "chunkGrid", () -> s.chunkGrid, v -> s.chunkGrid = v));
 		out.add(toggle("diorama.settings.slime_chunks", Section.OVERLAYS, "slimeChunks", () -> s.slimeChunks, v -> s.slimeChunks = v));
 		out.add(choice("diorama.settings.spawn_spots", Section.OVERLAYS, "spawnSpots", Settings.SpawnSpots.values(), () -> s.spawnSpots, v -> s.spawnSpots = v));
+		out.add(toggle("diorama.settings.regions_map", Section.OVERLAYS, "mapRegions", () -> s.mapRegions, v -> s.mapRegions = v));
 
 		out.add(toggle("diorama.settings.animate_banners", Section.BANNERS, "animateBanners", () -> s.animateBanners, v -> s.animateBanners = v));
 		out.add(toggle("diorama.settings.sepia_banners", Section.BANNERS, "sepiaBanners", () -> s.sepiaBanners, v -> s.sepiaBanners = v));

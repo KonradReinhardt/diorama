@@ -9,7 +9,9 @@ public enum MapEffect {
 	/** Clouds and their shadows (clouds.fsh), over the fog's mask. */
 	CLOUDS,
 	/** Foam and ripples along the coasts (coast.fsh), over the coast mask. */
-	COAST;
+	COAST,
+	/** The regions the player drew (regions.fsh), over the region mask. */
+	REGIONS;
 
 	/** Whether this version can draw them. */
 	public static boolean supported() {

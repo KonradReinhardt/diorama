@@ -68,6 +68,10 @@ public final class Settings {
 	public boolean radarPassive = false;
 	public int radarRange = 32;
 
+	/** The regions the player drew, on the world map and on the minimap. */
+	public boolean mapRegions = true;
+	public boolean minimapRegions = true;
+
 	public boolean waypointsOnMap = true;
 	public boolean waypointsInWorld = true;
 	public boolean deathMarkers = true;

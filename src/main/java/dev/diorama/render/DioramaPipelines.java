@@ -66,6 +66,19 @@ public final class DioramaPipelines {
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.build()
 	);
+	public static final RenderPipeline REGIONS = register(
+		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/regions"))
+			.withBindGroupLayout(BindGroupLayouts.PROJECTION)
+			.withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/regions"))
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.build()
+	);
 	//? if fabric {
 	public static final RenderPipeline MAP_LIGHT = register(
 		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
@@ -118,6 +131,18 @@ public final class DioramaPipelines {
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.build()
 	);
+	public static final RenderPipeline REGIONS = register(
+		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/regions"))
+			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/regions"))
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.build()
+	);
 	*///?} else if >=26.1 {
 	/*public static final RenderPipeline FOG = register(
 		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
@@ -146,6 +171,17 @@ public final class DioramaPipelines {
 			.withLocation(Diorama.id("pipeline/coast"))
 			.withVertexShader(Diorama.id("core/fog"))
 			.withFragmentShader(Diorama.id("core/coast"))
+			.withSampler("Sampler0")
+			.withSampler("Sampler1")
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexFormat(DefaultVertexFormat.POSITION_TEX_COLOR, VertexFormat.Mode.QUADS)
+			.build()
+	);
+	public static final RenderPipeline REGIONS = register(
+		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/regions"))
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/regions"))
 			.withSampler("Sampler0")
 			.withSampler("Sampler1")
 			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
@@ -182,6 +218,18 @@ public final class DioramaPipelines {
 			.withLocation(Diorama.id("pipeline/coast"))
 			.withVertexShader(Diorama.id("core/fog"))
 			.withFragmentShader(Diorama.id("core/coast"))
+			.withSampler("Sampler0")
+			.withSampler("Sampler1")
+			.withBlend(BlendFunction.TRANSLUCENT)
+			.withVertexFormat(DefaultVertexFormat.POSITION_TEX_COLOR, VertexFormat.Mode.QUADS)
+			.withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+			.build()
+	);
+	public static final RenderPipeline REGIONS = register(
+		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/regions"))
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/regions"))
 			.withSampler("Sampler0")
 			.withSampler("Sampler1")
 			.withBlend(BlendFunction.TRANSLUCENT)
