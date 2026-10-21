@@ -196,7 +196,8 @@ public final class MapViewport {
 		return false;
 	}
 
-	private static List<TileKey> tilesIn(MapLevel level, View view) {
+	/** The tiles this view shows, at the level it draws them. */
+	public static List<TileKey> tilesIn(MapLevel level, View view) {
 		int lod = lodFor(level, view);
 		double units = (double) Projection.TILE_UNITS * (1 << lod);
 		double u0 = view.minU();
@@ -248,7 +249,7 @@ public final class MapViewport {
 				double dv = (tv + 0.5) * units - view.centerV();
 				boolean visible = tu >= tu0 && tu <= tu1 && tv >= tv0 && tv <= tv1;
 				// Tiles just outside the view bake too, so panning finds them ready.
-				MapTile tile = level.want(key, Math.sqrt(du * du + dv * dv) + (visible ? 0 : 100_000));
+				MapTile tile = level.want(key, Math.sqrt(du * du + dv * dv) + (visible ? 0 : MapLevel.OFF_SCREEN));
 				if (!visible || tile == null || tile.texture() == null) {
 					continue;
 				}

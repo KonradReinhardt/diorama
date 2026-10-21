@@ -7,7 +7,10 @@ import java.util.*;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 
-/** No frame may expose only part of an outline/depth revision, including a resident overview. */
+/**
+ * No frame may show only part of an outline/depth revision on screen: the tiles the map shows
+ * change together, the rest may follow later, and a resident overview comes with the last commit.
+ */
 final class AtomicAppearanceScenario {
     record Probe(TileKey key, MapTile tile, long uploads) {}
     static void run(ClientGameTestContext context, TestSingleplayerContext world) {
@@ -58,8 +61,18 @@ final class AtomicAppearanceScenario {
                         // A view can request a cache miss while the old map stays visible.
                         map.want(new TileKey(TileKey.SURFACE, 1000, -1000), 0);
                         if (map.submittedJobs() - jobs > 256) throw new AssertionError("Staged cache misses were baked repeatedly");
-                        for (Probe p : before) if (p.tile().uploadCount() != p.uploads())
-                            throw new AssertionError("A partial appearance revision reached the GPU: " + p.key());
+                        // Probes off screen may swap whenever; the ones on screen go all at once.
+                        var shown = new HashSet<>(MapViewport.tilesIn(map, ((MapScreen) mc.gui.screen()).view()));
+                        int onScreen = 0, swapped = 0;
+                        for (Probe p : before) {
+                            if (p.tile().uploadCount() > p.uploads() + 1)
+                                throw new AssertionError("A tile was uploaded twice for one setting: " + p.key());
+                            if (!shown.contains(p.key())) continue;
+                            onScreen++;
+                            if (p.tile().uploadCount() > p.uploads()) swapped++;
+                        }
+                        if (swapped > 0 && swapped < onScreen)
+                            throw new AssertionError("Only " + swapped + " of " + onScreen + " tiles on screen took the new look");
                         return false;
                     }
                     if (map.appearanceVersion() == revision) return false;

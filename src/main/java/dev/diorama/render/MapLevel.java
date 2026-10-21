@@ -42,6 +42,10 @@ public final class MapLevel implements ChunkSource {
 	private static final long QUIET_MS = 350;
 	/** ...but never longer than this. */
 	private static final long MAX_WAIT_MS = 1500;
+	/** Added to the priority of a tile a view asks for without drawing it, such as one just past its edge. */
+	public static final double OFF_SCREEN = 100_000;
+	/** Tiles no view shows that swap to a new look per frame; see {@link AppearanceRefresh}. */
+	private static final int OFF_SCREEN_SWAPS = 4;
 
 	private static final AtomicInteger THREAD_ID = new AtomicInteger();
 	private static final int BAKER_COUNT = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 3));
@@ -88,6 +92,8 @@ public final class MapLevel implements ChunkSource {
     private final Map<TileKey, TileFreshness.Version> jobVersions = new HashMap<>();
     private long submittedJobs;
     private @Nullable AppearanceRefresh appearanceRefresh;
+    /** Detailed tiles the views drew at the last update a frame came before; see {@link #swapStaged}. */
+    private Set<TileKey> onScreen = Set.of();
     private long appearanceVersion;
     public long appearanceVersion() { return appearanceVersion; }
     public boolean refreshingAppearance() { return appearanceRefresh != null; }
@@ -655,7 +661,8 @@ public final class MapLevel implements ChunkSource {
 				}
 				continue;
 			}
-            if (this.appearanceRefresh != null && (!background || this.appearanceRefresh.pending.contains(image.key()))) {
+            if (this.appearanceRefresh != null && !this.appearanceRefresh.swapped.contains(image.key())
+                && (!background || this.appearanceRefresh.pending.contains(image.key()))) {
                 // Hold the old map intact while this revision is prepared in the background.
                 if (image.key().lod() > 0 && (this.appearanceRefresh.overviewBarrier == null
                     || !this.appearanceRefresh.overviewBarrier.isDone())) {
@@ -783,35 +790,25 @@ public final class MapLevel implements ChunkSource {
         }
     }
 
-    /** One render-thread commit: a frame can see either the old appearance or the complete new one. */
+    /**
+     * Shows the new look as it is ready: all the tiles on screen in one frame, the rest a few per
+     * frame where no view sees them change, and last every overview together, after their barrier.
+     */
     private void finishAppearanceRefresh() {
         AppearanceRefresh refresh = this.appearanceRefresh;
-        if (refresh == null || !refresh.pending.isEmpty()) return;
+        if (refresh == null) return;
+        this.swapStaged(refresh);
+        if (!refresh.detailDone()) return;
         for (TileKey key : new HashSet<>(refresh.versions.keySet())) {
-            if (refresh.generations.get(key) != this.generation(key)
-                || !this.freshness.accepts(key, refresh.versions.get(key))) {
-                refresh.images.remove(key);
-                refresh.versions.remove(key);
-                refresh.generations.remove(key);
-                if (key.lod() == 0) refresh.pending.add(key);
-                refresh.overviewBarrier = null;
-                for (TileKey overview : refresh.overviews) {
-                    refresh.images.remove(overview);
-                    this.dirty.computeIfAbsent(overview, k -> new Dirty(0)).blocks.set(0);
-                }
-                this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
-            }
+            if (this.staleStaged(refresh, key)) this.requeueStaged(refresh, key);
         }
         if (!refresh.pending.isEmpty()) return;
         if (!refresh.overviews.isEmpty()) {
             if (refresh.overviewBarrier == null) {
                 if (this.inFlight.stream().anyMatch(key -> key.lod() > 0)) return;
-                // Publish children to the writer first, then derive every requested overview from them.
-                if (this.store != null) {
-                    for (TileImage image : refresh.images.values())
-                        if (!image.key().isCave() && image.key().lod() == 0) this.store.baked(image);
-                    refresh.overviewBarrier = this.store.refreshOverviews();
-                } else refresh.overviewBarrier = java.util.concurrent.CompletableFuture.completedFuture(null);
+                // Swapped children already went to the writer; derive every requested overview from them.
+                refresh.overviewBarrier = this.store != null ? this.store.refreshOverviews()
+                    : java.util.concurrent.CompletableFuture.completedFuture(null);
                 return;
             }
             if (!refresh.overviewBarrier.isDone()) return;
@@ -822,23 +819,77 @@ public final class MapLevel implements ChunkSource {
             }
             for (TileKey key : refresh.overviews) if (!refresh.images.containsKey(key)) return;
         }
-        // Updating existing textures avoids a second GPU cache. The bounded resident set is
+        // Updating existing textures avoids a second GPU cache. The bounded overview set is
         // uploaded together here, deliberately outside the incremental terrain-upload budget.
         long start = System.nanoTime();
         for (TileImage image : refresh.images.values()) {
             MapTile tile = this.tiles.get(image.key());
             if (tile == null) { tile = new MapTile(); this.tiles.put(image.key(), tile); }
             tile.upload(image);
-            if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {
-                this.store.baked(image);
-                this.persisted(image.key(), refresh.complete.contains(image.key()));
-            }
         }
         this.appearanceRefresh = null;
         this.appearanceVersion++;
         this.coverageVersion++;
-        Diorama.LOGGER.info("Committed appearance revision {}: {} tiles together in {} ms",
+        Diorama.LOGGER.info("Committed appearance revision {}: {} overviews together in {} ms",
             this.appearanceVersion, refresh.images.size(), (System.nanoTime() - start) / 1_000_000.0);
+    }
+
+    /**
+     * Uploads the staged detailed tiles {@link AppearanceRefresh#swappable} allows this frame. The
+     * tiles on screen go together, outside the incremental upload budget: a view's worth of
+     * textures, uploaded once per look change.
+     */
+    private void swapStaged(AppearanceRefresh refresh) {
+        // Ticks can run with no frame between them, and no view asking: the screen is unchanged.
+        Set<TileKey> onScreen = this.onScreen;
+        if (!this.wanted.isEmpty()) {
+            onScreen = new HashSet<>();
+            for (Map.Entry<TileKey, Double> entry : this.wanted.entrySet())
+                if (entry.getKey().lod() == 0 && entry.getValue() < OFF_SCREEN) onScreen.add(entry.getKey());
+            this.onScreen = onScreen;
+        }
+        List<TileKey> group = refresh.swappable(onScreen, OFF_SCREEN_SWAPS);
+        if (group.isEmpty()) return;
+        // A result older than the terrain or light under it goes back to the queue instead.
+        boolean stale = false;
+        for (TileKey key : group) if (this.staleStaged(refresh, key)) { this.requeueStaged(refresh, key); stale = true; }
+        if (stale) group = refresh.swappable(onScreen, OFF_SCREEN_SWAPS);
+        long start = System.nanoTime();
+        int shown = 0;
+        for (TileKey key : group) {
+            boolean complete = refresh.complete.contains(key);
+            TileImage image = refresh.swap(key);
+            MapTile tile = this.tiles.get(key);
+            if (tile == null) { tile = new MapTile(); this.tiles.put(key, tile); }
+            tile.upload(image);
+            if (onScreen.contains(key)) shown++;
+            if (this.store != null && !key.isCave()) {
+                this.store.baked(image);
+                this.persisted(key, complete);
+            }
+        }
+        this.coverageVersion++;
+        if (shown > 0) Diorama.LOGGER.info("Swapped the {} tiles on screen to the new look together in {} ms; {} still pending",
+            shown, (System.nanoTime() - start) / 1_000_000.0, refresh.pending.size());
+    }
+
+    /** Whether a staged result was baked under an older generation, terrain or light. */
+    private boolean staleStaged(AppearanceRefresh refresh, TileKey key) {
+        return refresh.generations.get(key) != this.generation(key) || !this.freshness.accepts(key, refresh.versions.get(key));
+    }
+
+    /** Bakes a stale staged result again; overviews then wait for it behind a new barrier. */
+    private void requeueStaged(AppearanceRefresh refresh, TileKey key) {
+        refresh.images.remove(key);
+        refresh.versions.remove(key);
+        refresh.generations.remove(key);
+        if (key.lod() == 0) refresh.pending.add(key);
+        refresh.overviewBarrier = null;
+        for (TileKey overview : refresh.overviews) {
+            refresh.images.remove(overview);
+            this.dirty.computeIfAbsent(overview, k -> new Dirty(0)).blocks.set(0);
+        }
+        this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
     }
 
 	/** Bakes one tile on a baker thread: all of it if {@code blocks} is null, else those blocks. */

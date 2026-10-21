@@ -76,9 +76,11 @@ steps go to the next whole number and the zoom glides between them; smaller pixe
 through mipmaps. Maps saved before the grid stay in their folders (`surface`, `surface-50`,
 `surface-grid-45`); the grid map is saved in `surface-grid3-45` and starts empty.
 
-Appearance changes such as the render style and depth shading prepare a complete
-revision in the background and replace resident tiles together. Exploration stays
-visible while it prepares, and distant overviews wait for their updated detail tiles.
+Appearance changes such as the render style and depth shading are prepared in the
+background, the tiles on screen first: those change together, in one frame, as soon as all
+of them are ready, and the other resident tiles follow a few at a time where no view shows
+them. Exploration stays visible while it prepares, and distant overviews wait for every
+updated detail tile and change together last.
 In singleplayer on 26.3, tiles whose chunks aren't loaded are redrawn from the chunks
 the world saved, nearest the open views first, including tiles under zoomed-out overviews.
 Only pixels already explored are redrawn; nothing unexplored appears. Each saved tile

@@ -3,13 +3,20 @@
 Appearance settings previously replaced each tile as its CPU bake completed.
 Preserving coverage alone did not prevent a screen with multiple different looks.
 
-`AppearanceRefresh` now stages a complete revision. Existing textures and coverage
-remain visible until every required result is ready, then one render-thread commit
-updates the resident set. Superseding settings discard the preceding staging set.
-Terrain/light freshness and visibility generations are checked again at commit.
+`AppearanceRefresh` stages the new revision without replacing any texture. Existing
+textures and coverage remain visible until their replacements are ready. The tiles on
+screen (those a view draws, not the ring it prefetches) swap together in one
+render-thread frame as soon as all of them are staged; resident tiles no view shows swap
+a few per frame as they arrive, since nobody sees them change. Superseding settings
+discard the preceding staging set. Terrain/light freshness and visibility generations are
+checked again right before each swap; a stale result goes back to the queue and holds the
+screen's group back. Once a tile has swapped, later bakes of it take the ordinary path.
+(Previously every resident tile waited for the slowest one; see
+`docs/design/painted-style.md` for the times.)
 
-Resident overview tiles wait for a writer barrier: merge and write detailed tiles,
-then rebuild their parent hierarchy. Loaded detail sources needed by a distant
+Resident overview tiles wait for a writer barrier: once every detailed tile has swapped
+(and was handed to the writer as it did), rebuild their parent hierarchy, then swap every
+overview together. Loaded detail sources needed by a distant
 overview are refreshed even if those sources have no GPU tiles. These disk-only
 results are handed to the writer without retaining extra GPU textures. Evicting a
 detail tile cannot remove an outstanding source required by a resident overview.
@@ -18,9 +25,9 @@ A foreground cache miss is treated as ready once staged. Repeated viewport reque
 must not bake it again while the revision waits for other tiles. Staged foreground
 tiles also remain participants in terrain invalidation before their first upload.
 
-The normal terrain path retains its two-tile upload budget. An explicit appearance
-revision uploads the bounded resident set together as a one-time exception; this
-avoids keeping a second GPU cache. CPU staging is temporary and proportional to
+The normal terrain path retains its upload budget. An explicit appearance revision
+uploads the tiles on screen, and later the overviews, together as a one-time exception;
+this avoids keeping a second GPU cache. CPU staging is temporary and proportional to
 resident image data. Very large resident sets can cause a longer individual commit;
 the small local fixture is not an upper-bound performance guarantee.
 
@@ -28,9 +35,10 @@ the small local fixture is not an upper-bound performance guarantee.
 
 `atomic-appearance` freezes the simulation, records several detailed tile identities
 and upload counters, and loads a level-3 overview. It changes outlines, depth shading
-and the chunk grid. While a revision is pending, no probe may receive an upload.
-Completion must increment exactly one appearance revision and update all probes
-together, retaining their identities and coverage. It repeatedly requests an absent
+and the chunk grid. While a revision is pending, the probes on screen must either all
+or none have their upload, and no probe may be uploaded twice. Completion must increment
+exactly one appearance revision and have updated every probe once, retaining their
+identities and coverage. It repeatedly requests an absent
 tile during the transaction and bounds submitted jobs to detect duplicate bakes.
 
 JUnit tests exercise out-of-order staging, eviction, overview-dependent children,
