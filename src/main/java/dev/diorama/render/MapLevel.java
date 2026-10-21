@@ -1105,7 +1105,11 @@ public final class MapLevel implements ChunkSource {
 
 	private static final AtomicInteger PARTIAL_COUNT = new AtomicInteger();
 
+	/** Every so many bakes, how many and how long they took, with {@code DIORAMA_DEBUG} on. */
 	private static void logBakeTime(long nanos, boolean full) {
+		if (!Diorama.DEBUG) {
+			return;
+		}
 		if (!full) {
 			if (PARTIAL_COUNT.incrementAndGet() % 50 == 0) {
 				Diorama.LOGGER.info("Re-baked {} partial tiles", PARTIAL_COUNT.get());

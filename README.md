@@ -4,7 +4,7 @@
 
 Diorama is a client-side mod for Minecraft, on Fabric for 1.21 to 26.3 and on NeoForge for 1.21 to 26.3, that draws your world as an angled voxel map, like a baked diorama, in a minimap and a fullscreen map you can pan and zoom.
 
-The map is ray traced from the chunk data your client already has. The camera looks north and down at 50°, so you see block tops and their south faces. Each pixel's ray walks the real blocks, so overhangs, bridges and tree canopies come out right. A second ray toward a low sun casts long shadows, more rays measure how much sky each spot can see so the ground under trees and overhangs darkens, and higher ground is a little brighter, so hills still read as hills when you zoom far out. Water gets darker with depth. A "Depth shading" setting turns all of this down to a flatter look. Tiles bake on background threads and only re-bake the parts an edit can affect.
+The map is ray traced from the chunk data your client already has. The camera looks down at 45°, north by default (East, South and West are in the settings), so you see block tops and the faces turned toward you. Each pixel's ray walks the real blocks, so overhangs, bridges and tree canopies come out right. A second ray toward a low sun casts long shadows, more rays measure how much sky each spot can see so the ground under trees and overhangs darkens, and higher ground is a little brighter, so hills still read as hills when you zoom far out. Water gets darker with depth. A "Depth shading" setting turns all of this down to a flatter look. Tiles bake on background threads and only re-bake the parts an edit can affect.
 
 Places the map has no data for sit under animated fog. Underground, the map switches to a cave slice that shows the first open space below a cut a few blocks above your head, lit by the game's own block light. If a server sends Xaero's fair-play chat code (`§f§a§i§r§x§a§e§r§o`), cave slices only show blocks you've had line of sight to.
 
@@ -122,12 +122,12 @@ When Mod Menu is installed on Fabric, Diorama's configure button opens the setti
 Mod Menu is optional. To verify its entrypoint in development, use
 `DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.
 
-The fork's branch and validation workflow is documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+The fork's branch and validation workflow is documented in [CONTRIBUTING.md](CONTRIBUTING.md), and what each release changed in [CHANGELOG.md](CHANGELOG.md).
 Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lighting, choose World time (default), Always day or Always night. The minimap and world map share this setting. Surface tiles blend their saved day/night colors as the world's sky and weather change; changing the clock does not rebuild terrain or reset exploration. Torches, lanterns and lava illuminate nearby mapped surfaces at night.
 
 Caves, roofed dimensions and the End retain their existing lighting. Decorative shadows keep a fixed direction; colored-light mods are not modeled. Earlier Fabric versions and NeoForge retain daytime surface rendering until their GPU backends are ported.
 
-Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share a 256 MiB budget, with up to three tile uploads per GUI frame on 26.3.
+Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints together; old pixels use a dimmed approximation until revisited. GPU map textures, mips and overlays share the 512 MB budget described above, with up to three tile uploads per GUI frame on 26.3.
 
 `DIORAMA_TESTS=banner-waypoints ./gradlew --configure-on-demand :26.3:runClientGameTest` places banner waypoints around the player and captures them on the fullscreen map (both sizes, gathered, on the edge, in sepia), on the minimap (also in its map-paper frame) and in the banner editor, asserting the layout, sharing through chat and editing with undo. See [the design](docs/design/banner-waypoints.md).
 
@@ -175,7 +175,7 @@ singleplayer on 26.3 maps saved before are redrawn in the background to gain it,
 coasts gain it as they are baked again. From 1.21.6 on. See [the design](docs/design/coast.md);
 `DIORAMA_TESTS=coast` captures it.
 
-## Antique map style (fork 0.4.0)
+## Antique map style
 
 Settings → Look → Fog style offers **Clouds** (the existing default), **Antique map** (sepia)
 and **Antique map (color)**. Both styles are pixel art: one GUI pixel per art pixel at every

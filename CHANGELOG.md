@@ -1,0 +1,29 @@
+# Changelog
+
+## 1.0.0
+
+The fork's first stable release, built for every supported target: Fabric 1.21–1.21.1, 1.21.2–1.21.3,
+1.21.4, 1.21.5, 1.21.6–1.21.8, 1.21.9–1.21.10, 1.21.11, 26.1–26.1.2, 26.2 and 26.3, and NeoForge 1.21,
+1.21.1, 1.21.3, 1.21.4, 1.21.5, 1.21.8, 1.21.10, 1.21.11, 26.1.2, 26.2 and 26.3.
+
+Since upstream 0.2.1:
+
+- **Map directions.** The camera can face north (default), east, south or west; each direction keeps its own saved map.
+- **Pixel-perfect block grid.** Every block face is 4×3 map pixels at a 45° pitch, one ray per pixel, outlines from the faces' geometry, and the world map rests on whole screen pixels.
+- **Render styles.** Plain, Outlined (default), Painted and Painted without outlines, computed while baking.
+- **Fog styles.** Clouds (default), Antique map and Antique map (color), both in 16× pixel art; in singleplayer 26.3 the unknown is sketched from the seed's biomes without generating chunks.
+- **Day and night lighting** on Fabric 26.3: surface tiles blend saved day and night colours with the world's time; torches and lava light the map at night.
+- **Banner waypoints.** Waypoints are pixel-art banners designed like at the loom, shared through chat and importable from Xaero's Minimap.
+- **A book over the world map.** Ribbons open its sections (Banners, Look, Layers, Radar); settings change live over the map. A right-click menu plants a banner, copies coordinates or teleports.
+- **Reveal a region** (creative or cheats, singleplayer 26.3): pick two corners and the integrated server loads or generates those chunks for the map.
+- **Drifting clouds** and **coast foam, ripples and waves**, drawn as shader passes from 1.21.6, never baked or saved.
+- **Storage.** Singleplayer maps and waypoints live in the save (`saves/<world>/diorama/`); older maps move there once. Big maps stay on disk without limit and within a 512 MB GPU budget.
+- **Appearance changes keep exploration.** Look changes are prepared in the background, the tiles on screen first; in singleplayer 26.3 unloaded tiles are redrawn from the world's saved chunks.
+- **Mod Menu** entry on Fabric (optional, not bundled).
+
+New in this release:
+
+- The pointer turns into a hand over everything that can be clicked (book controls, the right-click menu, banners on the map, dye swatches), "not allowed" over switched-off controls, a crosshair while picking a region's corner and a cross of arrows while dragging the map. The game only lets mods pick the pointer from 1.21.9.
+- Sounds the interface missed: clicking a banner on the map turns the book's page, the right-click menu opens with a soft paper sound, the book's page arrows and close mark turn a page, Esc and the waypoint key turn it as they shut or open the book, revealing a region starts with the spyglass and ends with the cartography table, the dye swatches click and the banner editor sounds like the loom.
+- Periodic bake statistics are logged only with `DIORAMA_DEBUG=1`.
+- Source indentation made consistent (tabs).
