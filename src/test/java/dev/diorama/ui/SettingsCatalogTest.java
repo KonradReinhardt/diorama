@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SettingsCatalogTest {
 	private static final Set<String> MINIMAP_ONLY = Set.of(
-		"minimap", "minimapSize", "minimapCorner", "minimapFrame", "minimapZoom", "compass", "coordinates", "biome", "autoCaves");
+		"minimap", "minimapSize", "minimapCorner", "minimapFrame", "minimapZoom", "compass", "coordinates", "biome", "autoCaves", "minimapClouds");
 
 	@Test
 	void everyPublicSettingAppearsOnce() {

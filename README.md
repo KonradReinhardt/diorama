@@ -153,6 +153,17 @@ and night. `DIORAMA_RENDER_DISTANCE` (default 12) lowers the loaded area for qui
 scenarios that only look near the player. See [the design](docs/design/painted-style.md) and
 [the block grid](docs/design/pixel-grid.md).
 
+## Drifting clouds
+
+Settings → Look → **Drifting clouds** (on by default) floats small pixel-art cumulus clouds over
+the explored world map, and **Clouds on the minimap** (off by default) does the same there. They are
+built of boxes and seen through the map's own oblique projection, like its blocks: white tops and
+pale blue faces under each step, with a square shadow on the ground. They gather over a few
+patches in clear weather and most of the map in rain, drift east with the wind and fade out when
+zoomed far out. They are their own shader pass over the tiles: nothing is baked or saved, and
+switching them never redraws the map. From 1.21.6 on. See [the design](docs/design/map-clouds.md);
+`DIORAMA_TESTS=clouds` captures them.
+
 ## Antique map style (fork 0.4.0)
 
 Settings → Look → Fog style offers **Clouds** (the existing default), **Antique map** (sepia)

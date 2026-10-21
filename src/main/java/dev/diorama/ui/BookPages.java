@@ -43,7 +43,7 @@ final class BookPages {
 		flow.breakPage();
 		flow.heading(Component.translatable("diorama.book.map"));
 		flow.setting(entry("fog_of_war"), null);
-		flow.setting(entry("rounded_fog"), null);
+		flow.setting(entry("clouds"), null);
 		flow.setting(entry("depth_shading"), null);
 		flow.setting(entry("quality"), null);
 		flow.setting(entry("lighting"), null);

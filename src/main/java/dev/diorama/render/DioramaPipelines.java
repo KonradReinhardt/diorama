@@ -40,6 +40,19 @@ public final class DioramaPipelines {
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.build()
 	);
+	public static final RenderPipeline CLOUDS = register(
+		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/clouds"))
+			.withBindGroupLayout(BindGroupLayouts.PROJECTION)
+			.withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/clouds"))
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.build()
+	);
 	//? if fabric {
 	public static final RenderPipeline MAP_LIGHT = register(
 		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
@@ -68,6 +81,18 @@ public final class DioramaPipelines {
 			.withPrimitiveTopology(PrimitiveTopology.QUADS)
 			.build()
 	);
+	public static final RenderPipeline CLOUDS = register(
+		RenderPipeline.builder(RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/clouds"))
+			.withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/clouds"))
+			.withBindGroupLayout(BindGroupLayouts.SAMPLER0_SAMPLER1)
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexBinding(0, DefaultVertexFormat.POSITION_TEX_COLOR)
+			.withPrimitiveTopology(PrimitiveTopology.QUADS)
+			.build()
+	);
 	*///?} else if >=26.1 {
 	/*public static final RenderPipeline FOG = register(
 		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
@@ -80,12 +105,35 @@ public final class DioramaPipelines {
 			.withVertexFormat(DefaultVertexFormat.POSITION_TEX_COLOR, VertexFormat.Mode.QUADS)
 			.build()
 	);
+	public static final RenderPipeline CLOUDS = register(
+		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/clouds"))
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/clouds"))
+			.withSampler("Sampler0")
+			.withSampler("Sampler1")
+			.withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+			.withVertexFormat(DefaultVertexFormat.POSITION_TEX_COLOR, VertexFormat.Mode.QUADS)
+			.build()
+	);
 	*///?} else {
 	/*public static final RenderPipeline FOG = register(
 		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
 			.withLocation(Diorama.id("pipeline/fog"))
 			.withVertexShader(Diorama.id("core/fog"))
 			.withFragmentShader(Diorama.id("core/fog"))
+			.withSampler("Sampler0")
+			.withSampler("Sampler1")
+			.withBlend(BlendFunction.TRANSLUCENT)
+			.withVertexFormat(DefaultVertexFormat.POSITION_TEX_COLOR, VertexFormat.Mode.QUADS)
+			.withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
+			.build()
+	);
+	public static final RenderPipeline CLOUDS = register(
+		RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET, RenderPipelines.GLOBALS_SNIPPET)
+			.withLocation(Diorama.id("pipeline/clouds"))
+			.withVertexShader(Diorama.id("core/fog"))
+			.withFragmentShader(Diorama.id("core/clouds"))
 			.withSampler("Sampler0")
 			.withSampler("Sampler1")
 			.withBlend(BlendFunction.TRANSLUCENT)

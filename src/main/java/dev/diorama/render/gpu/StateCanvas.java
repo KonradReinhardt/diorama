@@ -89,6 +89,19 @@ final class StateCanvas implements MapCanvas {
 		));
 	}
 
+	@Override
+	public void clouds(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params) {
+		this.graphics.guiRenderState.addGuiElement(QuadElement.rect(
+			DioramaPipelines.CLOUDS,
+			StateTexture.pair((StateTexture) mask, Sampling.CLAMP_LINEAR, (StateTexture) noise, Sampling.REPEAT_LINEAR),
+			new Matrix3x2f(this.graphics.pose()),
+			x, y, x + width, y + height,
+			u0, v0, u1, v1,
+			params,
+			new ScreenRectangle(x, y, width, height)
+		));
+	}
+
     @Override
     public void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1) {
         this.graphics.guiRenderState.addGuiElement(QuadElement.rect(DioramaPipelines.FOG,

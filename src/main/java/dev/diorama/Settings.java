@@ -58,6 +58,8 @@ public final class Settings {
 	public boolean coordinates = true;
 	public boolean biome = true;
 	public boolean autoCaves = true;
+	/** Clouds drift over the minimap too; off by default, as they would hide much of its small view. */
+	public boolean minimapClouds = false;
 
 	public boolean radarPlayers = true;
 	public boolean radarHostile = true;
@@ -84,7 +86,6 @@ public final class Settings {
 	public RenderStyle renderStyle = RenderStyle.OUTLINED;
 	/** The old outlines toggle, read once from an older config to pick {@link #renderStyle}; never written. */
 	private @org.jspecify.annotations.Nullable Boolean outlines;
-	public boolean roundedFog = true;
     /** Antique map draws its unknown ground in sepia inks; the colour variant tints biomes. */
     public enum FogStyle { CLOUDS, ANCIENT_MAP, ANCIENT_MAP_COLOR }
 
@@ -105,6 +106,11 @@ public final class Settings {
     public boolean antiqueTint() {
         return this.antiqueFog() && this.antiqueTintsExplored;
     }
+	/**
+	 * Pixel-art clouds drifting over the explored world map, casting shadows on the ground. Drawn
+	 * over the tiles as the map is composed, so they never redraw or change a tile.
+	 */
+	public boolean mapClouds = true;
 	/** The look with sky occlusion, deep shadows and a lower camera; off is the flatter look from before. */
 	public boolean depthShading = true;
 	public boolean alwaysFogOfWar = false;
@@ -153,8 +159,7 @@ public final class Settings {
 		MapStyle style = base.withName("Settings")
             // Shading changes lighting, not the camera or the explored map footprint.
             .withPitch(MapStyle.DEFAULT.pitchDegrees())
-			.withOutline(this.renderStyle == RenderStyle.OUTLINED ? MapStyle.DEFAULT.outline() : 0)
-			.withRoundedFog(this.roundedFog);
+			.withOutline(this.renderStyle == RenderStyle.OUTLINED ? MapStyle.DEFAULT.outline() : 0);
 		return switch (this.renderStyle) {
 			case PAINTED -> style.paint();
 			case PAINTED_NO_OUTLINES -> style.paint().withInk(false);

@@ -7,7 +7,6 @@ class BakeContextTest {
     @Test void qualityAndAppearancePreserveExplorationGeometry() {
         var before = new BakeContext(MapStyle.DEFAULT, MapDirection.NORTH, false);
         assertTrue(before.sameProjection(new BakeContext(MapStyle.DEFAULT.withOutline(0), MapDirection.NORTH, false)));
-        assertTrue(before.sameProjection(new BakeContext(MapStyle.DEFAULT.withRoundedFog(false), MapDirection.NORTH, false)));
         assertTrue(before.sameProjection(new BakeContext(MapStyle.DEFAULT, MapDirection.NORTH, true)));
         assertTrue(before.sameProjection(new BakeContext(MapStyle.DEFAULT.withLight(.1F, .2F), MapDirection.NORTH, false)));
     }

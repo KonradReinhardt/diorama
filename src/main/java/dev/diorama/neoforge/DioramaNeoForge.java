@@ -54,7 +54,10 @@ public final class DioramaNeoForge {
 			DioramaClient.KEY_MAPPINGS.forEach(event::register);
 		});
 		//? if >=1.21.6 {
-		modBus.addListener(RegisterRenderPipelinesEvent.class, event -> event.registerPipeline(DioramaPipelines.FOG));
+		modBus.addListener(RegisterRenderPipelinesEvent.class, event -> {
+			event.registerPipeline(DioramaPipelines.FOG);
+			event.registerPipeline(DioramaPipelines.CLOUDS);
+		});
 		//?}
 		// Above the whole vanilla HUD, in the same order as on Fabric: waypoint labels, then the
 		// minimap over them. Each layer already sits 200 deeper than the one before, which the Fabric

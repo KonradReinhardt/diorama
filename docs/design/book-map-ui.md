@@ -61,7 +61,7 @@ A imagem de referência define a estética, não os pixels: todos os sprites sã
 | Fita | Cor | Item (ícone) | Conteúdo |
 |---|---|---|---|
 | Estandartes | vermelho | `minecraft:red_banner` | lista de waypoints + opções de waypoints e estandartes |
-| Aparência | azul | `minecraft:filled_map` | render (Simples/Contornos/Pintado/Pintado sem contornos), estilo do fog, tingir explorado (mapa antigo), cartografia da seed, fog sempre, fog arredondado, sombreamento, qualidade, iluminação, direção |
+| Aparência | azul | `minecraft:filled_map` | render (Simples/Contornos/Pintado/Pintado sem contornos), estilo do fog, tingir explorado (mapa antigo), cartografia da seed, fog sempre, nuvens passageiras, sombreamento, qualidade, iluminação, direção |
 | Camadas | verde | `minecraft:lantern` | superfície/caverna, fatia Y (− / +), grade de chunks, slime chunks, pontos de spawn |
 | Radar | amarelo | `minecraft:spyglass` | jogadores, hostis, neutros, passivos (com as carinhas de `MobFaces`), alcance |
 | Minimapa | creme | `minecraft:compass` | sai para a tela de opções do minimapa (com um pequeno sinal de "sair" na fita) |
@@ -78,7 +78,7 @@ Regra: tudo o que muda o que o mapa mundi mostra fica no livro, inclusive o que 
 minimapa (radar, sobreposições, aparência, waypoints). Sai do mapa somente o que é exclusivo do
 minimapa:
 
-- **No livro**: `renderStyle`, `fogStyle`, `antiqueTintsExplored`, `seedPreview`, `alwaysFogOfWar`, `roundedFog`,
+- **No livro**: `renderStyle`, `fogStyle`, `antiqueTintsExplored`, `seedPreview`, `alwaysFogOfWar`, `mapClouds`,
   `depthShading`, `quality`, `lighting` (quando `EnvironmentLighting.supported()`), `mapDirection`,
   `chunkGrid`, `slimeChunks`, `spawnSpots`, `radar*`, `waypointsOnMap`, `waypointsInWorld`,
   `deathMarkers`, `animateBanners`, `sepiaBanners`, `extraBannerLayers`.
@@ -91,7 +91,7 @@ As mudanças valem ao vivo: o livro chama `Settings.save()` como hoje, e `MapSes
 juntando refresh de qualidade/aparência no próximo tick, preservando exploração e texturas
 residentes pelas barreiras existentes. Nenhum rebake extra por estar no livro. `quality` não
 redesenha mais o mapa (com a grade, um raio por pixel nos dois modos; só a névoa muda), e
-`antiqueTintsExplored`, `fogStyle`, `roundedFog` e `lighting` são só composição, então mudam na
+`antiqueTintsExplored`, `fogStyle`, `mapClouds` e `lighting` são só composição, então mudam na
 hora. `renderStyle` e `depthShading` redesenham o mapa inteiro em segundo plano a cada troca, então o
 livro só aplica no clique (nada de pré-visualizar ao passar o mouse) e o ciclo de Render não
 deve passar por valores intermediários: os espaços de Render escolhem o valor direto.

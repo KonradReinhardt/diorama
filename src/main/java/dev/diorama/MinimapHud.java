@@ -38,7 +38,7 @@ public final class MinimapHud implements HudElement {
 	 */
 	private static final long LAYER_HOLD_MS = 3000;
 
-	private final MapViewport viewport = new MapViewport();
+	private final MapViewport viewport = new MapViewport(true);
 	/** The slice on screen. Moving into another slice keeps this one until the next has baked. */
 	private int shownLayer;
 	private boolean showing;

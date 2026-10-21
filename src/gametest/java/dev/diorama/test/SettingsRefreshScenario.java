@@ -21,7 +21,7 @@ final class SettingsRefreshScenario {
         List<Consumer<Settings>> changes = List.of(
             s -> s.compass = !s.compass,
             s -> s.radarPlayers = !s.radarPlayers,
-            s -> s.roundedFog = !s.roundedFog,
+            s -> s.mapClouds = !s.mapClouds,
             s -> s.renderStyle = s.renderStyle == Settings.RenderStyle.PAINTED ? Settings.RenderStyle.OUTLINED : Settings.RenderStyle.PAINTED,
             s -> s.quality = s.quality == Settings.Quality.FANCY ? Settings.Quality.FAST : Settings.Quality.FANCY,
             s -> s.depthShading = !s.depthShading,

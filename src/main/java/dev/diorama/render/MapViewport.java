@@ -1,6 +1,5 @@
 package dev.diorama.render;
 
-import dev.diorama.MapStyle;
 import dev.diorama.Projection;
 import dev.diorama.Settings;
 import dev.diorama.MapSession;
@@ -58,9 +57,9 @@ public final class MapViewport {
 	/** The map the mask was built from. Weak, so a minimap left over after leaving a world doesn't keep its map. */
 	private WeakReference<MapLevel> maskLevel = new WeakReference<>(null);
 
-	private record MaskInputs(long coverageVersion, int layer, int lod, double originU, double originV, double texel, boolean rounded, int scaleSteps, boolean fast, boolean antique, long previewRevision, dev.diorama.MapDirection direction) {
+	private record MaskInputs(long coverageVersion, int layer, int lod, double originU, double originV, double texel, int scaleSteps, boolean fast, boolean antique, long previewRevision, dev.diorama.MapDirection direction) {
 		MaskInputs withCoverage(long version) {
-			return new MaskInputs(version, this.layer, this.lod, this.originU, this.originV, this.texel, this.rounded, this.scaleSteps, this.fast, this.antique, this.previewRevision, this.direction);
+			return new MaskInputs(version, this.layer, this.lod, this.originU, this.originV, this.texel, this.scaleSteps, this.fast, this.antique, this.previewRevision, this.direction);
 		}
 	}
 
@@ -87,6 +86,18 @@ public final class MapViewport {
 		}
 		this.maskInputs = null;
 		this.cartoInputs = null;
+	}
+
+	/** Whether this is the minimap's, which has its own clouds setting. */
+	private final boolean minimap;
+
+	/** The world map's. */
+	public MapViewport() {
+		this(false);
+	}
+
+	public MapViewport(boolean minimap) {
+		this.minimap = minimap;
 	}
 
 	/** Where and how big a map is drawn, and what part of the map it shows. */
@@ -163,6 +174,11 @@ public final class MapViewport {
         // partly known (the explored edge, tiles still loading) it shows instead of a flat colour.
         this.drawFog(graphics, view, fog, true);
         this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0, lighting);
+        if (this.cloudsShown(level, view)) {
+            // Their own pass over the tiles, never baked: the fog then closes over them.
+            MapCanvas.of(graphics).clouds(this.maskTexture, FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+                fog.u0(), fog.v0(), fog.u1(), fog.v1(), fog.clouds());
+        }
         this.drawFog(graphics, view, fog, false);
 		graphics.disableScissor();
 	}
@@ -353,8 +369,17 @@ public final class MapViewport {
 		}
 	}
 
-	/** What both fog passes of a frame draw with: the mask is built once, before the tiles. */
-	private record FogPass(boolean antique, float u0, float v0, float u1, float v1, int params) {
+	/** What both fog passes of a frame draw with: the mask is built once, before the tiles. The clouds read it too. */
+	private record FogPass(boolean antique, float u0, float v0, float u1, float v1, int params, int clouds) {
+	}
+
+	/** Whether clouds drift over this view: asked for, and over a surface under an open sky. */
+	private boolean cloudsShown(MapLevel level, View view) {
+		Settings settings = Settings.get();
+		var world = Minecraft.getInstance().level;
+		return (this.minimap ? settings.minimapClouds : settings.mapClouds) && MapClouds.supported()
+			&& view.layer() == TileKey.SURFACE && !level.roofless()
+			&& world != null && world.dimensionType().hasSkyLight() && !world.dimensionType().hasCeiling();
 	}
 
 	/** Matches fog.fsh's UNDERLAY_SHIFT: the pass under the tiles reads the mask shifted by this. */
@@ -420,7 +445,9 @@ public final class MapViewport {
         // Six bits each for the art pixel and reveal easing; no per-frame mask uploads.
         int params = (scaleCode * 16 | quality | progress >> 4) << 24 | (noiseU * 32 | pixelCode & 31) << 16
             | (noiseV * 32 | pixelCode >> 5 | (progress & 15) << 1) << 8 | fogCode;
-		return new FogPass(antique, mu0, mv0, mu1, mv1, params);
+		boolean sepia = Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP && Settings.get().antiqueTint();
+		int clouds = MapClouds.params(scaleCode, originU, originV, pixelCode, lighting.daylight(), lighting.rain(), Projection.direction(), sepia);
+		return new FogPass(antique, mu0, mv0, mu1, mv1, params, clouds);
 	}
 
 	private void drawFog(GuiGraphicsExtractor graphics, View view, FogPass fog, boolean underlay) {
@@ -450,12 +477,12 @@ public final class MapViewport {
 		}
 		int lod = lodFor(level, view);
 		boolean surface = view.layer() == TileKey.SURFACE;
-		// Caves keep the sharp mask: rounding would erode narrow explored tunnels away. For clouds,
-		// once a texel spans a chunk there are no chunk steps left to smooth, and rounding would
-		// only eat small explored areas. The antique map always rounds, so its outline keeps one
-		// shape at every zoom.
-		boolean rounded = MapStyle.get().roundedFog() && surface && (antique || texel < 16);
-		MaskInputs inputs = new MaskInputs(level.coverageVersion(), view.layer(), lod, originU, originV, texel, rounded, scaleSteps, fast, antique, preview == null ? -1 : preview.revision(), Projection.direction());
+		// The surface fog edge is rounded off so it follows a smooth line, not chunk steps. Caves keep
+		// the sharp mask: rounding would erode narrow explored tunnels away. For clouds, once a texel
+		// spans a chunk there are no chunk steps left to smooth, and rounding would only eat small
+		// explored areas. The antique map always rounds, so its outline keeps one shape at every zoom.
+		boolean rounded = surface && (antique || texel < 16);
+		MaskInputs inputs = new MaskInputs(level.coverageVersion(), view.layer(), lod, originU, originV, texel, scaleSteps, fast, antique, preview == null ? -1 : preview.revision(), Projection.direction());
 		long now = System.nanoTime();
 		if (this.maskLevel.get() == level && inputs.equals(this.maskInputs)) {
             if (this.settleFlags && this.reveal.progress(now) == 1) {

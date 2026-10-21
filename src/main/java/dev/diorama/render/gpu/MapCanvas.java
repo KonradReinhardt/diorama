@@ -71,6 +71,14 @@ public interface MapCanvas {
 	 */
 	void fog(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params);
 
+	/**
+	 * The clouds over a view (see {@link dev.diorama.render.MapClouds}): the fog's mask and noise,
+	 * the same texture coordinates, its own parameters in the vertex colour. Clipped to the view.
+	 * Before 1.21.6 there are none.
+	 */
+	default void clouds(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params) {
+	}
+
     /** Antique-style terrain (lightly desaturated) through the fog shader's tile mode, also on legacy renderers. */
     default void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1) {
         this.antiqueTile(terrain, paper, sampling, x0, y0, x1, y1, 0, 0, 1, 1);

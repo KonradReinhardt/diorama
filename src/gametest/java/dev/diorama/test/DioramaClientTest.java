@@ -112,6 +112,7 @@ public class DioramaClientTest implements FabricClientGameTest {
             if (tests.contains("style-swap")) StyleSwapScenario.run(context, world);
             if (tests.contains("day-night")) DayNightScenario.run(context, world);
             if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
+            if (tests.contains("clouds")) MapCloudsScenario.run(context, world);
 			if (tests.contains("styles")) {
 				styleTour(context, world);
 			}
@@ -2331,8 +2332,8 @@ public class DioramaClientTest implements FabricClientGameTest {
 		context.getInput().resizeWindow(1600, 900);
 		context.waitTicks(10);
 
-		// Rounded fog only reshapes the fog edge, so switching it keeps the baked map instead of
-		// blanking it and baking every tile again.
+		// The clouds are their own pass over the tiles, so switching them keeps the baked map
+		// instead of blanking it and baking every tile again.
 		context.setScreen(MapScreen::new);
 		lookAtPlayer(context, 1.0, TileKey.SURFACE);
 		settle(context, 60);
@@ -2341,23 +2342,19 @@ public class DioramaClientTest implements FabricClientGameTest {
 			throw new AssertionError("No baked tile under the player to check against");
 		}
 		context.runOnClient(mc -> {
-			Settings.get().roundedFog = false;
+			Settings.get().mapClouds = !Settings.get().mapClouds;
 			Settings.get().save();
 		});
 		context.waitTicks(5);
-		context.takeScreenshot("settings-07-sharp-fog");
+		context.takeScreenshot("settings-07-clouds-switched");
 		boolean kept = context.computeOnClient(mc -> playerTile() == before);
-		boolean applied = context.computeOnClient(mc -> !MapStyle.get().roundedFog());
 		context.runOnClient(mc -> {
-			Settings.get().roundedFog = true;
+			Settings.get().mapClouds = !Settings.get().mapClouds;
 			Settings.get().save();
 		});
 		context.setScreen(() -> null);
 		if (!kept) {
-			throw new AssertionError("Switching rounded fog threw away the baked map");
-		}
-		if (!applied) {
-			throw new AssertionError("Switching rounded fog didn't reach the map's fog");
+			throw new AssertionError("Switching the clouds threw away the baked map");
 		}
 	}
 
