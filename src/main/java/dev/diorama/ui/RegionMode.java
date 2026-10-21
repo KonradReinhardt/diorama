@@ -9,6 +9,7 @@ import dev.diorama.bake.MapPick;
 import dev.diorama.bake.TileKey;
 import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionGeometry;
+import dev.diorama.region.RegionShapes;
 import dev.diorama.region.RegionStore;
 import dev.diorama.region.RegionTool;
 import dev.diorama.region.Ring;
@@ -37,7 +38,10 @@ import org.jspecify.annotations.Nullable;
  * the ground the player traced it over; ground the map doesn't know, or that is under the fog,
  * lends no height (see {@link #height}). The edit tool works on one region at a time: its corners
  * are dragged, a click on a side adds one, a right click takes one away, and a drag inside moves
- * the whole region; the map shows the change as it is made, and it is kept on letting go.
+ * the whole region; the map shows the change as it is made, and it is kept on letting go. Shift
+ * as a lasso or polygon closes adds it to the region it covers most, Alt cuts it out of that one.
+ * The chunk brush paints whole chunks into the region the stroke starts in, or a new one; with
+ * Alt it takes them away.
  */
 public final class RegionMode {
 	/** What the mode needs from the map screen. */
@@ -80,6 +84,15 @@ public final class RegionMode {
 	/** Goes up with every change a drag makes, so the map draws it again. */
 	private long previewVersion;
 
+	/** Most chunks one stroke of the brush paints. */
+	private static final int MAX_CHUNKS = 4096;
+	/** The chunks the brush has painted this stroke, by {@link dev.diorama.data.ChunkSnapshot#key}. */
+	private final java.util.LinkedHashSet<Long> chunks = new java.util.LinkedHashSet<>();
+	/** The region the brush's stroke started in, which it paints into; null paints a new one. */
+	private @Nullable UUID brushInto;
+	private boolean brushErases;
+	private double lastBrushU, lastBrushV;
+
 	/** A corner, or a side from corner {@code vertex} to the next, of a region's ring. */
 	private record Hit(int ring, int vertex, boolean side) {
 	}
@@ -94,7 +107,7 @@ public final class RegionMode {
 
 	/** Whether a stroke or a drag is under way. */
 	public boolean drawing() {
-		return this.stroke.drawing() || this.working != null;
+		return this.stroke.drawing() || this.working != null || !this.chunks.isEmpty();
 	}
 
 	public static RegionTool.Tool tool() {
@@ -146,6 +159,7 @@ public final class RegionMode {
 	/** Lets the stroke or drag under way go (a right click, Escape): the region stays as it was. */
 	public void cancelStroke() {
 		this.stroke.cancel();
+		this.chunks.clear();
 		this.before = null;
 		this.working = null;
 		this.previewVersion++;
@@ -154,8 +168,8 @@ public final class RegionMode {
 	// ------------------------------------------------------------------------------------------
 	// Input, in GUI coordinates
 
-	/** The left button goes down on the map. */
-	public void press(double x, double y) {
+	/** The left button goes down on the map, with GLFW's modifier bits held. */
+	public void press(double x, double y, int modifiers) {
 		MapViewport.View view = this.host.view();
 		if (view == null) {
 			return;
@@ -164,6 +178,19 @@ public final class RegionMode {
 			this.stroke.begin(u(view, x), v(view, y));
 		} else if (tool == RegionTool.Tool.EDIT) {
 			this.grab(view, x, y);
+		} else if (tool == RegionTool.Tool.CHUNKS) {
+			// The region the ground under the pointer is in: a region drawn over hills can lie
+			// elsewhere on screen than the chunk it covers.
+			double[] at = this.worldAt(u(view, x), v(view, y));
+			RegionStore store = RegionStore.get();
+			String dimension = Waypoints.dimension();
+			MapRegion under = at == null || store == null || dimension == null ? null : store.containing(dimension, at[0], at[1], false);
+			this.brushInto = under == null ? null : under.id;
+			this.brushErases = (modifiers & ALT) != 0;
+			this.chunks.clear();
+			this.lastBrushU = u(view, x);
+			this.lastBrushV = v(view, y);
+			this.paint(this.lastBrushU, this.lastBrushV);
 		}
 	}
 
@@ -177,11 +204,23 @@ public final class RegionMode {
 			this.stroke.extend(u(view, x), v(view, y), view.zoom());
 		} else if (tool == RegionTool.Tool.EDIT && this.working != null) {
 			this.pull(view, x, y);
+		} else if (tool == RegionTool.Tool.CHUNKS && !this.chunks.isEmpty()) {
+			// Every few units along the way, so a quick stroke leaves no gaps.
+			double u = u(view, x), v = v(view, y);
+			int steps = (int) Math.ceil(Math.hypot(u - this.lastBrushU, v - this.lastBrushV) / 4);
+			for (int i = 1; i <= steps; i++) {
+				this.paint(this.lastBrushU + (u - this.lastBrushU) * i / steps, this.lastBrushV + (v - this.lastBrushV) * i / steps);
+			}
+			this.lastBrushU = u;
+			this.lastBrushV = v;
 		}
 	}
 
-	/** The left button comes up on the map; {@code moved} if it was dragged rather than clicked. */
-	public void release(double x, double y, boolean moved) {
+	/**
+	 * The left button comes up on the map; {@code moved} if it was dragged rather than clicked,
+	 * with GLFW's modifier bits held.
+	 */
+	public void release(double x, double y, boolean moved, int modifiers) {
 		MapViewport.View view = this.host.view();
 		if (view == null) {
 			return;
@@ -191,16 +230,17 @@ public final class RegionMode {
 				if (this.stroke.drawing()) {
 					this.stroke.extend(u(view, x), v(view, y), view.zoom());
 					double[][] outline = this.stroke.finish();
-					if (outline != null) this.create(outline);
+					if (outline != null) this.create(outline, modifiers);
 				}
 			}
 			case POLYGON -> {
 				if (!moved) {
 					double[][] outline = this.stroke.click(u(view, x), v(view, y), view.zoom(), System.nanoTime());
-					if (outline != null) this.create(outline);
+					if (outline != null) this.create(outline, modifiers);
 				}
 			}
 			case EDIT -> this.letGo();
+			case CHUNKS -> this.brushed();
 			case ERASER -> {
 				if (!moved && this.pointed != null) this.erase(this.pointed);
 			}
@@ -249,10 +289,11 @@ public final class RegionMode {
 			case InputConstants.KEY_2 -> this.pick(RegionTool.Tool.POLYGON);
 			case InputConstants.KEY_3 -> this.pick(RegionTool.Tool.EDIT);
 			case InputConstants.KEY_4 -> this.pick(RegionTool.Tool.ERASER);
+			case InputConstants.KEY_5 -> this.pick(RegionTool.Tool.CHUNKS);
 			case InputConstants.KEY_RETURN, InputConstants.KEY_NUMPADENTER -> {
 				if (tool != RegionTool.Tool.POLYGON || !this.stroke.drawing()) return false;
 				double[][] outline = this.stroke.close();
-				if (outline != null) this.create(outline);
+				if (outline != null) this.create(outline, modifiers);
 				else this.host.say(Component.translatable("diorama.regions.too_few"));
 			}
 			case InputConstants.KEY_BACKSPACE -> {
@@ -448,7 +489,10 @@ public final class RegionMode {
 	// ------------------------------------------------------------------------------------------
 	// Changes
 
-	private void create(double[][] outline) {
+	/** GLFW's modifier bits for Shift and Alt. */
+	private static final int SHIFT = 1, ALT = 4;
+
+	private void create(double[][] outline, int modifiers) {
 		MapSession session = MapSession.get();
 		BlockLooks looks = BlockLooks.get();
 		RegionStore store = RegionStore.get();
@@ -467,6 +511,18 @@ public final class RegionMode {
 			this.host.say(Component.translatable("diorama.regions.too_small"));
 			return;
 		}
+		boolean add = (modifiers & SHIFT) != 0, cut = (modifiers & ALT) != 0;
+		if (add || cut) {
+			MapRegion target = covered(store.in(dimension), ring);
+			if (target != null) {
+				this.reshape(store, target, List.of(ring), cut);
+				return;
+			}
+			if (cut) {
+				this.host.say(Component.translatable("diorama.regions.nothing_to_cut"));
+				return;
+			}
+		}
 		MapRegion region = new MapRegion();
 		region.name = Component.translatable("diorama.regions.default_name", store.in(dimension).size() + 1).getString();
 		region.dimension = dimension;
@@ -478,6 +534,130 @@ public final class RegionMode {
 			this.host.say(Component.translatable("diorama.regions.created", region.name));
 			this.host.created(region);
 		}
+	}
+
+	/** The shown region a new outline covers most, by how many of its corners and its middle lie inside; null if none. */
+	private static @Nullable MapRegion covered(List<MapRegion> regions, Ring ring) {
+		MapRegion best = null;
+		int bestCount = 0;
+		double[] middle = RegionGeometry.label(List.of(ring), 1);
+		for (MapRegion region : regions) {
+			if (!region.visible) continue;
+			int count = RegionGeometry.contains(region.rings, middle[0], middle[1]) ? 2 : 0;
+			for (int i = 0; i < ring.size(); i++) {
+				if (RegionGeometry.contains(region.rings, ring.x(i), ring.z(i))) count++;
+			}
+			if (count > bestCount) {
+				best = region;
+				bestCount = count;
+			}
+		}
+		return best;
+	}
+
+	/** {@code region} with {@code rings} added to it or cut out of it, kept as one step; cut away wholly, it goes. */
+	private void reshape(RegionStore store, MapRegion region, List<Ring> rings, boolean cut) {
+		List<Ring> combined = RegionShapes.combine(region.rings, rings, cut);
+		if (combined.isEmpty()) {
+			this.erase(region);
+			return;
+		}
+		MapRegion after = region.copy();
+		after.rings = new ArrayList<>(combined);
+		after.reshaped();
+		if (store.commit(region.copy(), after)) {
+			BookWidgets.play(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, cut ? 0.8F : 1.2F);
+			this.host.say(Component.translatable(cut ? "diorama.regions.cut" : "diorama.regions.added", region.name));
+		}
+	}
+
+	// ------------------------------------------------------------------------------------------
+	// The chunk brush
+
+	/** Paints the chunk under a map point, on the ground the map shows there. */
+	private void paint(double u, double v) {
+		double[] at = this.chunks.size() >= MAX_CHUNKS ? null : this.worldAt(u, v);
+		if (at != null) {
+			this.chunks.add(dev.diorama.data.ChunkSnapshot.key((int) Math.floor(at[0]) >> 4, (int) Math.floor(at[1]) >> 4));
+		}
+	}
+
+	/** The world point {x, z} on the ground a map point shows, or, where it is unknown, at the player's height. */
+	private double @Nullable [] worldAt(double u, double v) {
+		LocalPlayer player = Minecraft.getInstance().player;
+		if (MapSession.get() == null || player == null) {
+			return null;
+		}
+		int h = this.ground(u, v, player.getBlockY());
+		MapDirection d = Projection.direction();
+		double depth = Projection.zAt(v, h);
+		return new double[] {d.worldX(u, depth), d.worldZ(u, depth)};
+	}
+
+	/** The brush is let go: its chunks go into the region it started in, or out of it, or make a new one. */
+	private void brushed() {
+		java.util.Set<Long> painted = new java.util.LinkedHashSet<>(this.chunks);
+		this.chunks.clear();
+		RegionStore store = RegionStore.get();
+		String dimension = Waypoints.dimension();
+		if (painted.isEmpty() || store == null || dimension == null) {
+			return;
+		}
+		if (store.readOnly()) {
+			this.host.say(Component.translatable("diorama.regions.read_only"));
+			return;
+		}
+		List<Ring> squares = new ArrayList<>();
+		for (long key : painted) {
+			int cx = chunkX(key), cz = chunkZ(key);
+			int x0 = cx << 4, z0 = cz << 4;
+			int[] heights = {this.columnHeight(x0, z0), this.columnHeight(x0 + 16, z0), this.columnHeight(x0 + 16, z0 + 16), this.columnHeight(x0, z0 + 16)};
+			squares.add(RegionShapes.square(x0, z0, x0 + 16, z0 + 16, heights));
+		}
+		MapRegion into = this.brushInto == null ? null : store.find(this.brushInto);
+		if (into != null) {
+			this.reshape(store, into, squares, this.brushErases);
+			return;
+		}
+		if (this.brushErases) {
+			this.host.say(Component.translatable("diorama.regions.nothing_to_cut"));
+			return;
+		}
+		List<Ring> rings = RegionShapes.combine(List.of(), squares, false);
+		if (rings.isEmpty()) {
+			return;
+		}
+		MapRegion region = new MapRegion();
+		region.name = Component.translatable("diorama.regions.default_name", store.in(dimension).size() + 1).getString();
+		region.dimension = dimension;
+		region.dye = dye;
+		region.fill = fill;
+		region.rings.addAll(rings);
+		if (store.commit(null, region)) {
+			BookWidgets.play(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1.0F);
+			this.host.say(Component.translatable("diorama.regions.created", region.name));
+			this.host.created(region);
+		}
+	}
+
+	private static int chunkX(long key) {
+		return (int) (key >> 32);
+	}
+
+	private static int chunkZ(long key) {
+		return (int) key;
+	}
+
+	/**
+	 * The ground's height at a block column the map knows, standing on its top block; else the
+	 * player's, as a stroke over unknown ground takes.
+	 */
+	private int columnHeight(int x, int z) {
+		MapSession session = MapSession.get();
+		LocalPlayer player = Minecraft.getInstance().player;
+		int fallback = player == null ? 64 : player.getBlockY();
+		dev.diorama.data.ChunkSnapshot snapshot = session == null ? null : session.map().chunk(x >> 4, z >> 4);
+		return snapshot == null ? fallback : snapshot.surface(x, z) + 1;
 	}
 
 	private void erase(MapRegion region) {
@@ -560,6 +740,10 @@ public final class RegionMode {
 			this.handles(graphics, view, mouseX, mouseY);
 			return;
 		}
+		if (tool == RegionTool.Tool.CHUNKS) {
+			this.brush(graphics, view);
+			return;
+		}
 		int n = this.stroke.count();
 		if (n == 0) {
 			return;
@@ -613,6 +797,28 @@ public final class RegionMode {
 		if (hover != null && hover.side() && this.working == null) {
 			// Where a click on the side adds a corner.
 			square(graphics, mouseX, mouseY, 2, 0xFFFCE3C0);
+		}
+	}
+
+	/**
+	 * The chunks the brush has painted, each a wash of the dye, or of red ink where it takes them
+	 * away, on the ground at its middle; the map's cameras face along the axes, so each is a
+	 * rectangle on screen.
+	 */
+	private void brush(GuiGraphicsExtractor graphics, MapViewport.View view) {
+		int wash = (this.brushErases ? 0x70B02020 : 0x70000000 | dye.rgb);
+		int edge = this.brushErases ? 0xFFB02020 : dye.argb();
+		for (long key : this.chunks) {
+			int x0 = chunkX(key) << 4, z0 = chunkZ(key) << 4;
+			int y = this.columnHeight(x0 + 8, z0 + 8);
+			float ax = view.screenX(Projection.u(x0, z0)), bx = view.screenX(Projection.u(x0 + 16, z0 + 16));
+			float ay = view.screenY(Projection.worldV(x0, y, z0)), by = view.screenY(Projection.worldV(x0 + 16, y, z0 + 16));
+			int l = Math.round(Math.min(ax, bx)), t = Math.round(Math.min(ay, by)), r = Math.round(Math.max(ax, bx)), b = Math.round(Math.max(ay, by));
+			graphics.fill(l, t, r, b, wash);
+			graphics.fill(l, t, r, t + 1, edge);
+			graphics.fill(l, b - 1, r, b, edge);
+			graphics.fill(l, t, l + 1, b, edge);
+			graphics.fill(r - 1, t, r, b, edge);
 		}
 	}
 
@@ -688,7 +894,7 @@ public final class RegionMode {
 		this.panelW = w;
 		this.panelH = h;
 		int x = this.panelX + PAD, y = this.panelY + 3;
-		String[] icons = {"lead", "tripwire_hook", "brush", "sponge"};
+		String[] icons = {"lead", "tripwire_hook", "brush", "sponge", "map"};
 		for (int i = 0; i < tools.length; i++) {
 			RegionTool.Tool t = tools[i];
 			String name = t.name().toLowerCase(java.util.Locale.ROOT);

@@ -15,8 +15,8 @@ import org.jspecify.annotations.Nullable;
  * </ul>
  */
 public final class RegionTool {
-	/** The tools, in the order of their keys, 1 to 4. */
-	public enum Tool { LASSO, POLYGON, EDIT, ERASER }
+	/** The tools, in the order of their keys, 1 to 5. */
+	public enum Tool { LASSO, POLYGON, EDIT, ERASER, CHUNKS }
 
 	/** GUI pixels from a corner, or a side, within which the edit tool takes it. */
 	public static final double GRAB_REACH = 4;

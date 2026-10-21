@@ -73,6 +73,8 @@ public final class Settings {
 	public boolean minimapRegions = true;
 	/** Regions' names written on the world map, where they fit. */
 	public boolean regionLabels = true;
+	/** A line over the hotbar as the player walks into a region. */
+	public boolean regionEnterNotice = false;
 	/** How every region is drawn; apart from the render style, which it doesn't follow. */
 	public dev.diorama.region.RegionStyle regionStyle = dev.diorama.region.RegionStyle.WATERCOLOR;
 	/**
@@ -89,6 +91,11 @@ public final class Settings {
 	public boolean animateBanners = true;
 	/** On the sepia antique map, banners take its ink too; by default they keep their dyes to stand out. */
 	public boolean sepiaBanners = false;
+
+	/** Whether banners are drawn in sepia: waypoints' and regions' alike, on the sepia antique map. */
+	public boolean bannersInSepia() {
+		return this.sepiaBanners && this.fogStyle == FogStyle.ANCIENT_MAP;
+	}
 	/** Lifts the loom's six-layer limit to {@link dev.diorama.waypoint.BannerDesign#MAX_LAYERS}. */
 	public boolean extraBannerLayers = false;
 

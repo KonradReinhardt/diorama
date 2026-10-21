@@ -7,6 +7,7 @@ import dev.diorama.Projection;
 import dev.diorama.Settings;
 import dev.diorama.bake.TileKey;
 import dev.diorama.region.MapRegion;
+import dev.diorama.region.RegionGeometry;
 import dev.diorama.region.RegionStore;
 import dev.diorama.region.RegionTool;
 import dev.diorama.region.Ring;
@@ -287,6 +288,7 @@ final class RegionsScenario {
 		context.takeScreenshot("regions-polygon-drawn");
 
 		edit(context, player);
+		shapes(context, player);
 
 		// The eraser: key 4, point at Farms, then click it.
 		context.getInput().pressKey(InputConstants.KEY_4);
@@ -420,6 +422,97 @@ final class RegionsScenario {
 		if (Math.abs(back - area) > 1e-6) {
 			throw new AssertionError("Ctrl+Z three times should give Home its shape back: " + area + " then " + back);
 		}
+	}
+
+	/** A circle dragged with the lasso, with a modifier key held from before the press to after the release. */
+	private static void lasso(ClientGameTestContext context, double cu, double cv, double radius, int modifier) {
+		context.getInput().pressKey(InputConstants.KEY_1);
+		if (modifier != 0) context.getInput().holdKey(modifier);
+		double[] start = onScreen(context, cu + radius, cv);
+		context.getInput().setCursorPos(start[0], start[1]);
+		context.getInput().holdMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		for (int i = 1; i <= 32; i++) {
+			double angle = 2 * Math.PI * i / 32;
+			double[] at = onScreen(context, cu + radius * Math.cos(angle), cv + radius * Math.sin(angle));
+			context.getInput().setCursorPos(at[0], at[1]);
+			context.waitTick();
+		}
+		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		if (modifier != 0) context.getInput().releaseKey(modifier);
+		context.waitTicks(3);
+	}
+
+	private static MapRegion named(ClientGameTestContext context, String name) {
+		return context.computeOnClient(mc -> RegionMode.here().stream().filter(r -> r.name.equals(name)).findFirst().orElse(null));
+	}
+
+	/**
+	 * Shapes made from others: a lasso with Shift adds to the lake, one with Alt cuts a hole in
+	 * Home; the chunk brush paints a new region of three chunks, then takes one away with Alt.
+	 */
+	private static void shapes(ClientGameTestContext context, double[] player) {
+		int count = context.computeOnClient(mc -> RegionMode.here().size());
+		double lake = named(context, "Lake").area();
+		lasso(context, player[0] + 75, player[1] - 40, 10, InputConstants.KEY_LSHIFT);
+		if (context.computeOnClient(mc -> RegionMode.here().size()) != count || named(context, "Lake").area() <= lake) {
+			throw new AssertionError("A lasso closed with Shift should grow the lake, not draw a region of its own");
+		}
+		double home = named(context, "Home").area();
+		lasso(context, player[0] - 34, player[1] - 16, 4, InputConstants.KEY_LALT);
+		double cut = named(context, "Home").area();
+		if (cut >= home || named(context, "Home").rings.size() < 3) {
+			throw new AssertionError("A lasso closed with Alt inside Home should cut a hole in it: " + home + " then " + cut);
+		}
+		settle(context);
+		context.takeScreenshot("regions-shapes");
+
+		// The brush: three chunks in a row over empty ground, a new region to name.
+		int[] chunk = context.computeOnClient(mc -> new int[] {(mc.player.getBlockX() >> 4) - 5, (mc.player.getBlockZ() >> 4) + 3});
+		context.getInput().pressKey(InputConstants.KEY_5);
+		// Each point over the ground it stands for, as the map shows it: the top block, leaves and all.
+		double[][] path = new double[9][];
+		for (int i = 0; i <= 8; i++) {
+			int x = chunk[0] * 16 + 8 + 4 * i, z = chunk[1] * 16 + 8;
+			int y = context.computeOnClient(mc -> mc.level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z));
+			path[i] = onScreen(context, Projection.u(x + 0.5, z + 0.5), Projection.worldV(x + 0.5, y, z + 0.5));
+		}
+		double[] to = path[8];
+		context.getInput().setCursorPos(path[0][0], path[0][1]);
+		context.getInput().holdMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		for (int i = 1; i <= 8; i++) {
+			context.getInput().setCursorPos(path[i][0], path[i][1]);
+			context.waitTick();
+		}
+		context.takeScreenshot("regions-brush-painting");
+		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(3);
+		MapRegion painted = context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).book().pickedRegion());
+		// Whole chunks, the three aimed at among them: over a forest's crowns the stroke may cross
+		// the rows beside, and those count too.
+		if (painted == null || painted.area() % 256 != 0) {
+			throw new AssertionError("The brush should paint whole chunks into a new region, painted " + (painted == null ? "nothing" : painted.area() + " blocks²"));
+		}
+		for (int c = 0; c < 3; c++) {
+			if (!RegionGeometry.contains(painted.rings, chunk[0] * 16 + 8 + 16 * c, chunk[1] * 16 + 8)) {
+				throw new AssertionError("The brush missed chunk " + (chunk[0] + c) + ", " + chunk[1]);
+			}
+		}
+		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+		// The book shuts over a few frames; till then it takes the clicks under it.
+		context.waitTicks(20);
+		// Alt and the brush over its last chunk take it away.
+		context.getInput().pressKey(InputConstants.KEY_5);
+		context.getInput().holdKey(InputConstants.KEY_LALT);
+		context.getInput().setCursorPos(to[0], to[1]);
+		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.getInput().releaseKey(InputConstants.KEY_LALT);
+		context.waitTicks(3);
+		MapRegion after = context.computeOnClient(mc -> RegionStore.get().find(painted.id));
+		if (Math.abs(after.area() - (painted.area() - 256)) > 1e-6 || RegionGeometry.contains(after.rings, chunk[0] * 16 + 40, chunk[1] * 16 + 8)) {
+			throw new AssertionError("Alt and the brush should take the chunk clicked away: " + painted.area() + " then " + after.area() + " blocks²");
+		}
+		settle(context);
+		context.takeScreenshot("regions-brush-done");
 	}
 
 	/** Clicking a region on the map opens it in the book: a new dye, a new name, then deleted with a second click. */

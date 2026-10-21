@@ -123,6 +123,7 @@ public final class SettingsCatalog {
 
 		out.add(toggle("diorama.settings.regions_map", Section.REGIONS, "mapRegions", () -> s.mapRegions, v -> s.mapRegions = v));
 		out.add(toggle("diorama.settings.region_labels", Section.REGIONS, "regionLabels", () -> s.regionLabels, v -> s.regionLabels = v));
+		out.add(toggle("diorama.settings.region_notice", Section.REGIONS, "regionEnterNotice", () -> s.regionEnterNotice, v -> s.regionEnterNotice = v));
 		out.add(tooltip(choice("diorama.settings.region_style", Section.REGIONS, "regionStyle", dev.diorama.region.RegionStyle.values(), () -> s.regionStyle, v -> s.regionStyle = v)));
 		out.add(tooltip(choice("diorama.settings.region_band", Section.REGIONS, "regionBand", Settings.RegionBand.values(), () -> s.regionBand, v -> s.regionBand = v)));
 

@@ -165,7 +165,7 @@ public final class MinimapHud implements HudElement {
 		}
 		int bannerX = infoRight ? x + banner.width() / 2 : x + size - banner.width() / 2 - 1;
 		BannerAtlas.shared().draw(graphics, region.design(), banner, bannerX, textY + banner.footY(), 1,
-			BannerAtlas.frameNow(Settings.get().animateBanners), false, -1);
+			BannerAtlas.frameNow(Settings.get().animateBanners), Settings.get().bannersInSepia(), -1);
 		int nameX = infoRight ? x + banner.width() + 3 : x + size - banner.width() - 3 - font.width(name);
 		graphics.text(font, name, nameX, textY + 6, 0xFFFFFFFF, true);
 	}

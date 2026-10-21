@@ -1,8 +1,8 @@
 # Map regions — plan
 
-Status: plan written on 2026-10-21. Steps 1–6 implemented the same day on the `feature/map-regions`
+Status: plan written on 2026-10-21. Steps 1–7 implemented the same day on the `feature/map-regions`
 branch; the "How it turned out" sections at the end record where they departed from the plan.
-Steps 7 and 8 are still to do.
+Step 8 is still to do.
 
 ## Goal
 
@@ -398,4 +398,31 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
 - Tests: `RegionLookTest` reworked; `DIORAMA_TESTS=regions` captures `regions-look-<style>`,
   `regions-banner-map`, `regions-banner-far`, `regions-book-home`, `regions-book-banner` and the
   minimap with Home under it.
+
+## How it turned out (step 7)
+
+- Adding and cutting (`RegionShapes.combine`): both outlines filled into a grid of half-block
+  cells (coarser past 16M cells), combined, and traced back: edges between cells in and out,
+  chained into loops turning right where cells touch only at a corner, straight runs merged,
+  simplified to max(half a block, ¾ of a cell). A traced corner takes the height of the nearest
+  corner of either outline. `RegionGeometry.area` now tests a point just inside each ring, not its
+  first corner, which another ring may share.
+- Shift as a lasso or polygon closes adds it to the shown region it covers most (by its corners
+  and its middle), Alt cuts it out; cut away wholly, the region is erased; with Alt over no
+  region, a note says so. Neither opens the book. `MapScreen` tracks Alt as it does Ctrl and Shift.
+- The chunk brush (key 5, an empty map icon): a drag paints whole chunks, every few map units
+  along the way, under the ground the map shows; into the region the stroke starts in, or, over
+  no region, a new one (which opens the book to be named); with Alt it takes them out of the
+  region it starts in. At most 4096 chunks a stroke. Chunk corners stand on the map's own
+  snapshots of those columns (`ChunkSnapshot.surface` + 1), else the player's height. The chunks
+  show while painting as washes of the dye (red with Alt).
+- "Entering <region>" (`RegionNotice`, `regionEnterNotice`, off by default): over the hotbar in the
+  region's dye, checked every half second, by the smallest region the player stands in
+  (`sendOverlayMessage` from 26.1, `displayClientMessage` before).
+- At the user's request, the sepia banners option is one rule for waypoints and regions alike
+  (`Settings.bannersInSepia()`, on the sepia antique map), for region banners on the map and under
+  the minimap; on the map they also turn sepia under the Engraving style.
+- Tests: `RegionShapesTest` (JUnit); `DIORAMA_TESTS=regions` adds to the lake with Shift, cuts a
+  hole in Home with Alt, paints three chunks into a new region and takes one away with Alt
+  (captures `regions-shapes`, `regions-brush-*`).
 

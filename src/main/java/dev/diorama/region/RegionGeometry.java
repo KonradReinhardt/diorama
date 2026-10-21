@@ -72,9 +72,14 @@ public final class RegionGeometry {
 		double total = 0;
 		for (Ring ring : rings) {
 			if (ring.size() < 3) continue;
+			// A point just inside the ring, not a corner, which another ring may share.
+			double area = signedArea(ring);
+			double dx = ring.x(1) - ring.x(0), dz = ring.z(1) - ring.z(0), length = Math.hypot(dx, dz);
+			double step = length == 0 ? 0 : 1e-3 * Math.signum(area) / length;
+			double px = (ring.x(0) + ring.x(1)) / 2.0 - dz * step, pz = (ring.z(0) + ring.z(1)) / 2.0 + dx * step;
 			int depth = 0;
 			for (Ring other : rings) {
-				if (other != ring && inside(other, ring.x(0), ring.z(0))) depth++;
+				if (other != ring && inside(other, px, pz)) depth++;
 			}
 			total += (depth % 2 == 0 ? 1 : -1) * Math.abs(signedArea(ring));
 		}

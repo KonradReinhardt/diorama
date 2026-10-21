@@ -69,6 +69,7 @@ public final class DioramaClient {
 	/** Called at the end of every client tick. */
 	public static void tick(Minecraft mc) {
 		MapSession.tick(mc);
+		dev.diorama.ui.RegionNotice.tick(mc);
 		while (OPEN_MAP.consumeClick()) {
 			if (mc.gui.screen() == null && mc.level != null && ServerRules.minimapAllowed()) {
 				mc.gui.setScreen(new MapScreen());

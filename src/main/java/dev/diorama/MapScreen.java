@@ -390,15 +390,22 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 	}
 	*///?}
 
-	/** Ctrl and Shift as this screen saw them pressed, beside the event's own modifier bits. */
-	private boolean control, shift;
+	/** Ctrl, Shift and Alt as this screen saw them pressed, beside the event's own modifier bits. */
+	private boolean control, shift, alt;
 
 	private void modifier(int key, boolean down) {
 		if (key == InputConstants.KEY_LCONTROL || key == InputConstants.KEY_RCONTROL) {
 			this.control = down;
 		} else if (key == InputConstants.KEY_LSHIFT || key == InputConstants.KEY_RSHIFT) {
 			this.shift = down;
+		} else if (key == InputConstants.KEY_LALT || key == InputConstants.KEY_RALT) {
+			this.alt = down;
 		}
+	}
+
+	/** The modifiers held, as GLFW's bits. */
+	private int held() {
+		return (this.shift ? 1 : 0) | (this.control ? 2 : 0) | (this.alt ? 4 : 0);
 	}
 
 	/** A press; {@code widgetTook} if a widget (the settings button) took it. */
@@ -420,7 +427,7 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 		this.dragged = false;
 		this.panning = false;
 		if (!this.pressOnBook && this.regions.active() && button == InputConstants.MOUSE_BUTTON_LEFT) {
-			this.regions.press(x, y);
+			this.regions.press(x, y, this.held());
 		}
 		return true;
 	}
@@ -440,7 +447,7 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 		if (this.regions.active()) {
 			// The left button draws; a right click lets the stroke under way go.
 			if (button == InputConstants.MOUSE_BUTTON_LEFT) {
-				this.regions.release(x, y, moved);
+				this.regions.release(x, y, moved, this.held());
 				return true;
 			}
 			if (button == InputConstants.MOUSE_BUTTON_RIGHT && !moved && this.regions.drawing()) {
@@ -793,7 +800,7 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 			}
 			return true;
 		}
-		if (this.regions.active() && this.regions.key(key, modifiers | (this.control ? 2 : 0) | (this.shift ? 1 : 0))) {
+		if (this.regions.active() && this.regions.key(key, modifiers | this.held())) {
 			return true;
 		}
 		LocalPlayer player = this.minecraft.player;

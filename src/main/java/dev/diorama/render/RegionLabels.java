@@ -44,7 +44,8 @@ public final class RegionLabels {
 		byArea.sort(Comparator.comparingDouble(MapRegion::area).reversed());
 		List<int[]> placed = new ArrayList<>();
 		boolean capitals = look == RegionStyle.ENGRAVING || look == RegionStyle.ILLUMINATED;
-		boolean sepia = settings.sepiaBanners && look == RegionStyle.ENGRAVING;
+		// As waypoints' on the sepia antique map, and under the engraved style, which is sepia itself.
+		boolean sepia = settings.bannersInSepia() || settings.sepiaBanners && look == RegionStyle.ENGRAVING;
 		int frame = BannerAtlas.frameNow(settings.animateBanners);
 		for (MapRegion region : byArea) {
 			String text = capitals ? region.name.toUpperCase(Locale.ROOT) : region.name;
@@ -118,7 +119,7 @@ public final class RegionLabels {
 	}
 
 	/** A dye bright enough to read over the map: the dark ones are lightened. */
-	static int readable(int argb) {
+	public static int readable(int argb) {
 		int r = (argb >> 16) & 255, g = (argb >> 8) & 255, b = argb & 255;
 		if (0.299 * r + 0.587 * g + 0.114 * b >= 70) {
 			return argb;
