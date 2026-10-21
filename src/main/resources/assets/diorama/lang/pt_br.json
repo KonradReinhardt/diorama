@@ -270,7 +270,7 @@
 	"diorama.settings.region_style.antique": "Mapa antigo",
 	"diorama.settings.region_style.antique_color": "Mapa antigo (cor)",
 	"diorama.settings.region_band": "Faixa na borda",
-	"diorama.settings.region_band.tooltip": "Uma faixa da cor de cada região por dentro da borda, mais forte junto dela e sumindo para o interior, como jogos de estratégia desenham territórios.",
+	"diorama.settings.region_band.tooltip": "Uma faixa da cor de cada região por dentro da borda, mais forte junto dela e sumindo para o interior, como jogos de estratégia desenham territórios. Ligada, o interior não tem outra cor.",
 	"diorama.settings.region_band.off": "Desligada",
 	"diorama.settings.region_band.narrow": "Estreita",
 	"diorama.settings.region_band.wide": "Larga",

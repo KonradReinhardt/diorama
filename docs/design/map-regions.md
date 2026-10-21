@@ -353,8 +353,11 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
     "Style" on the region's page). The mask carries each texel's resolved style in its alpha, so
     regions of different styles sit side by side; the pass's parameters no longer carry a look.
   - Also at the user's request, a border band as strategy games draw territories (`regionBand`:
-    off, narrow 4 art pixels, wide 8; off by default): the dye strongest at the border, fading
-    inwards with the square of the distance, laid over whatever style.
+    off, narrow 4 art pixels, wide 8): the dye strongest at the border (72% narrow, 68% wide),
+    fading inwards with the distance to the power 1.6, laid over whatever style. After seeing it in
+    game the user asked for it on by default (wide) and for the band to be the only colour inside
+    while it is on, so the region's fill is left out then; the styles' own edge work (the outlined
+    band, the painted pooling, the antique band) stays.
   - So bands fit, the mask measures distances up to 31 texels (quarters of a texel in green).
   - The antique style's band is always in sepia; the colour one keeps the dye.
   - Painted: the pen line is broken where a noise is low and wavers one art pixel inwards where

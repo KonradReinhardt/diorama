@@ -75,9 +75,12 @@ public final class Settings {
 	public boolean regionLabels = true;
 	/** How regions are drawn, unless a region has a style of its own; AUTO follows the render style. */
 	public dev.diorama.region.RegionStyle regionStyle = dev.diorama.region.RegionStyle.AUTO;
-	/** A band of each region's dye along the inside of its border, fading inwards, as strategy games draw territories. */
+	/**
+	 * A band of each region's dye along the inside of its border, fading inwards, as strategy
+	 * games draw territories; while it is on, it is the only colour inside (the fill is left out).
+	 */
 	public enum RegionBand { OFF, NARROW, WIDE }
-	public RegionBand regionBand = RegionBand.OFF;
+	public RegionBand regionBand = RegionBand.WIDE;
 
 	public boolean waypointsOnMap = true;
 	public boolean waypointsInWorld = true;
@@ -232,7 +235,7 @@ public final class Settings {
 		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.WORLD;
 		if (settings.fogStyle == null) settings.fogStyle = FogStyle.CLOUDS;
 		if (settings.regionStyle == null) settings.regionStyle = dev.diorama.region.RegionStyle.AUTO;
-		if (settings.regionBand == null) settings.regionBand = RegionBand.OFF;
+		if (settings.regionBand == null) settings.regionBand = RegionBand.WIDE;
 		if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;

@@ -104,6 +104,8 @@ final class RegionsScenario {
 			context.runOnClient(mc -> {
 				Settings.get().renderStyle = (Settings.RenderStyle) l[0];
 				Settings.get().fogStyle = (Settings.FogStyle) l[1];
+				// The fills as each style lays them: the border band, on by default, would replace them.
+				Settings.get().regionBand = Settings.RegionBand.OFF;
 				Settings.get().save();
 			});
 			look(context, player[0], player[1], 2);

@@ -7,7 +7,7 @@
 // art pixels: a line along each region's edge, and its inside washed with its dye, in the region's
 // style (RegionStyle): plain, outlined, painted with or without ink, or an old map's dash-dot border
 // and hand-tinted band. Optionally a band of the dye along the inside of every border, fading
-// inwards, as strategy games draw territories. Drawn over the tiles and the coast, under the fog; then once more over the fog, the lines
+// inwards, as strategy games draw territories; then the band alone colours the inside. Drawn over the tiles and the coast, under the fog; then once more over the fog, the lines
 // alone and fainter, so borders run on across unexplored land while fills never cover it. Never
 // baked into the tiles. The mask holds, per texel, the region's dye and the distance to its edge,
 // measured exactly, so read smoothed between texels the edge falls between them, and lines stay
@@ -104,7 +104,7 @@ const vec3 OLD_INK = vec3(0.235, 0.145, 0.075);
 const int PLAIN = 0, OUTLINED = 1, PAINTED = 2, PAINTED_NO_INK = 3, ANTIQUE = 4, ANTIQUE_COLOR = 5;
 // The border band's width in art pixels, off, narrow and wide, and how much dye it lays at the border.
 const float BAND_WIDTH[3] = float[3](0.0, 4.0, 8.0);
-const float BAND_ALPHA[3] = float[3](0.0, 0.6, 0.55);
+const float BAND_ALPHA[3] = float[3](0.0, 0.72, 0.68);
 
 vec2 origin;
 float unitsPerUv;
@@ -230,7 +230,8 @@ void main() {
     int bits = int(cell.r * 255.0 + 0.5);
     int look = int(cell.a * 255.0 + 0.5) & 7;
     vec3 dye = DYES[bits & 15];
-    float fill = FILLS[(bits >> 4) & 3];
+    // With the border band on, the band is the region's colour: the inside keeps none.
+    float fill = bandKind > 0 ? 0.0 : FILLS[(bits >> 4) & 3];
     float lit = ((bits >> 6) & 1) != 0 ? 0.12 : 0.0;
     vec2 step = blockGrid ? vec2(1.0, ROW) : vec2(art);
     // The line along the edge: one art pixel inside it wherever another region, or none, is beside.
@@ -294,7 +295,7 @@ void main() {
     if (bandKind > 0 && !linesOnly && !edge) {
         // The border band, laid over the style: the dye strongest at the border, fading inwards.
         float t = 1.0 - clamp(d / BAND_WIDTH[bandKind], 0.0, 1.0);
-        float glow = t * t * BAND_ALPHA[bandKind];
+        float glow = pow(t, 1.6) * BAND_ALPHA[bandKind];
         vec3 band = look == ANTIQUE ? sepia(0.3 + 0.6 * luma(dye)) : readable(dye);
         float alpha = glow + color.a * (1.0 - glow);
         if (alpha > 0.0) color = vec4((band * glow + color.rgb * color.a * (1.0 - glow)) / alpha, alpha);

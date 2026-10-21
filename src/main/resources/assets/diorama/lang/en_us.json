@@ -270,7 +270,7 @@
 	"diorama.settings.region_style.antique": "Antique map",
 	"diorama.settings.region_style.antique_color": "Antique map (color)",
 	"diorama.settings.region_band": "Border band",
-	"diorama.settings.region_band.tooltip": "A band of each region's dye along the inside of its border, strongest at the border and fading inwards, as strategy games draw territories.",
+	"diorama.settings.region_band.tooltip": "A band of each region's dye along the inside of its border, strongest at the border and fading inwards, as strategy games draw territories. While it is on, the inside has no other colour.",
 	"diorama.settings.region_band.off": "Off",
 	"diorama.settings.region_band.narrow": "Narrow",
 	"diorama.settings.region_band.wide": "Wide",
