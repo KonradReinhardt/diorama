@@ -96,6 +96,33 @@ class RegionGeometryTest {
 		assertArrayEquals(new int[] {64, 64, 64}, none);
 	}
 
+	@Test void editingARingKeepsTheOthersVertices() {
+		Ring ring = square(0, 0, 10, 10, 64);
+		Ring moved = ring.with(2, 20, 10, 70);
+		assertEquals(20, moved.x(2));
+		assertEquals(70, moved.y(2));
+		assertEquals(10, ring.x(2), "the ring itself never changes");
+		Ring more = ring.inserting(1, 12, 5, 66);
+		assertEquals(5, more.size());
+		assertEquals(12, more.x(2));
+		assertEquals(10, more.x(3));
+		assertEquals(10, more.z(3), "the vertex after the new one follows it");
+		Ring fewer = more.without(2);
+		assertNotNull(fewer);
+		assertEquals(100, Math.abs(RegionGeometry.signedArea(fewer)), 1e-9);
+		assertNull(square(0, 0, 1, 1, 64).without(0).without(0), "a ring keeps three corners");
+		Ring shifted = ring.moved(5, -2, i -> 80);
+		assertEquals(5, shifted.x(0));
+		assertEquals(-2, shifted.z(0));
+		assertEquals(80, shifted.y(3));
+	}
+
+	@Test void distanceIsZeroInside() {
+		List<Ring> rings = List.of(square(0, 0, 10, 10, 64));
+		assertEquals(0, RegionGeometry.distance(rings, 5, 5));
+		assertEquals(3, RegionGeometry.distance(rings, 13, 5), 1e-9);
+	}
+
 	@Test void slipsOfTheMouseAreNotRegions() {
 		assertNull(RegionGeometry.fromMap(new double[] {0, 1, 1}, new double[] {0, 0, 1}, (a, b) -> 64, 64, MapDirection.NORTH));
 	}

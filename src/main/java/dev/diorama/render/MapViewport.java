@@ -97,8 +97,11 @@ public final class MapViewport {
 	private final CoastMask coast = new CoastMask();
 	/** The regions over this view, for the regions effect. */
 	private final RegionMask regions = new RegionMask();
-	/** The region drawn brighter: the one the eraser points at. */
+	/** The region drawn brighter: the one the eraser points at, the one being edited, the one the book shows. */
 	private java.util.@Nullable UUID highlight;
+	/** A region being edited, drawn instead of the one kept with its id, and how many changes it has had. */
+	private @Nullable MapRegion preview;
+	private long previewVersion;
 
 	/** The world map's. */
 	public MapViewport() {
@@ -438,17 +441,27 @@ public final class MapViewport {
 			return null;
 		}
 		List<MapRegion> shown = new ArrayList<>();
+		MapRegion preview = this.preview;
 		for (MapRegion region : store.in(dimension)) {
+			if (preview != null && preview.id.equals(region.id)) {
+				region = preview;
+			}
 			if (region.visible && (!this.minimap || region.onMinimap)) {
 				shown.add(region);
 			}
 		}
-		return this.regions.prepare(view, shown, store.revision(), this.highlight);
+		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight);
 	}
 
 	/** Draws this region brighter from the next frame, or none. */
 	public void highlight(java.util.@Nullable UUID region) {
 		this.highlight = region;
+	}
+
+	/** Draws {@code region} in place of the region kept with its id, until it is null again; {@code version} goes up as it changes. */
+	public void preview(@Nullable MapRegion region, long version) {
+		this.preview = region;
+		this.previewVersion = version;
 	}
 
 	/** The region drawn at a map point last frame, or null. */

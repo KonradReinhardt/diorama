@@ -134,6 +134,19 @@ final class BookPages {
 		flow.paragraph(Component.translatable("diorama.book.radar.hint"));
 	}
 
+	static void regionOptions(PageFlow flow) {
+		flow.title(Component.translatable("diorama.book.options"));
+		flow.heading(Component.translatable("diorama.settings.regions"));
+		for (Entry e : SettingsCatalog.in(Settings.get(), SettingsCatalog.Section.REGIONS)) {
+			flow.setting(e, null);
+		}
+		// The minimap's own, offered here too beside the world map's.
+		flow.setting(entry("regions_minimap"), null);
+		flow.breakPage();
+		flow.heading(Component.translatable("diorama.book.regions.tools"));
+		flow.paragraph(Component.translatable("diorama.book.regions.tools_hint"));
+	}
+
 	static void bannerOptions(PageFlow flow) {
 		flow.title(Component.translatable("diorama.book.options"));
 		flow.heading(Component.translatable("diorama.settings.waypoints"));

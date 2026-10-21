@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Every setting as a button that cycles its value, built from {@link SettingsCatalog}: in three
- * columns, Minimap, Radar with Overlays and Banners, and Waypoints with Look; or, given sections,
+ * columns, Minimap, Radar with Overlays, Banners and Regions, and Waypoints with Look; or, given sections,
  * only those, in one column (the world map's book sends the minimap's settings here).
  */
 public final class SettingsScreen extends Screen {
@@ -21,7 +21,7 @@ public final class SettingsScreen extends Screen {
 	/** The full screen's columns, left to right. */
 	private static final Section[][] COLUMNS = {
 		{Section.MINIMAP},
-		{Section.RADAR, Section.OVERLAYS, Section.BANNERS},
+		{Section.RADAR, Section.OVERLAYS, Section.BANNERS, Section.REGIONS},
 		{Section.WAYPOINTS, Section.LOOK},
 	};
 

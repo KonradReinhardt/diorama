@@ -110,6 +110,11 @@ public final class RegionGeometry {
 		return Math.sqrt(ex * ex + ey * ey);
 	}
 
+	/** How far a point is from a region, in blocks: 0 inside it. */
+	public static double distance(List<Ring> rings, double x, double z) {
+		return Math.max(0, -signedDistance(rings, x, z));
+	}
+
 	/** Distance from a point to the nearest edge of any ring, positive inside and negative outside. */
 	static double signedDistance(List<Ring> rings, double x, double z) {
 		double best = Double.POSITIVE_INFINITY;

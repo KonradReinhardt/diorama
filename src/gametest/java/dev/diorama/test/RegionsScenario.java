@@ -11,6 +11,7 @@ import dev.diorama.region.RegionStore;
 import dev.diorama.region.RegionTool;
 import dev.diorama.region.Ring;
 import dev.diorama.render.MapViewport;
+import dev.diorama.ui.MapBook;
 import dev.diorama.ui.RegionMode;
 import dev.diorama.waypoint.BannerDesign;
 import dev.diorama.waypoint.Waypoints;
@@ -20,6 +21,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.levelgen.Heightmap;
 
@@ -27,7 +29,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
  * Regions drawn on the map (docs/design/map-regions.md): a few regions laid on the ground around
  * the player (one with a hole, one C-shaped, two that meet, one with no fill) captured at several
  * zooms and on the minimap; then the tools by the mouse and keys as a player would use them: the
- * lasso, undo and redo, the polygon, the eraser. Opt-in with {@code DIORAMA_TESTS=regions}.
+ * lasso and naming in the book, undo and redo, the polygon, the edit tool, the eraser, and the
+ * regions section of the book. Opt-in with {@code DIORAMA_TESTS=regions}.
  */
 final class RegionsScenario {
 	private RegionsScenario() {
@@ -58,6 +61,7 @@ final class RegionsScenario {
 				throw new AssertionError("The map should find Home just north-west of the player, found " + (pointed == null ? "nothing" : pointed.name));
 			}
 			tools(context, player);
+			book(context, player);
 			minimap(context);
 		} finally {
 			context.runOnClient(mc -> {
@@ -168,23 +172,24 @@ final class RegionsScenario {
 		if (Math.abs(lassoed.area() - expected) > 0.15 * expected) {
 			throw new AssertionError("The lasso's region covers " + lassoed.area() + " blocks², not about " + expected);
 		}
+		// The book opens on the new region with its name to write; Escape shuts it and drawing goes on.
+		named(context, "Lake", lassoed);
 		settle(context);
 		context.takeScreenshot("regions-lasso-drawn");
 
-		// Ctrl+Z takes it back, Ctrl+Y brings it again.
-		context.getInput().holdKey(InputConstants.KEY_LCONTROL);
-		context.getInput().pressKey(InputConstants.KEY_Z);
-		context.getInput().releaseKey(InputConstants.KEY_LCONTROL);
-		context.waitTicks(2);
+		// Ctrl+Z takes the name back, then the region; Ctrl+Y brings both again.
+		ctrl(context, InputConstants.KEY_Z);
+		if (!context.computeOnClient(mc -> RegionStore.get().find(lassoed.id).name).equals(lassoed.name)) {
+			throw new AssertionError("Ctrl+Z should take the new name back first");
+		}
+		ctrl(context, InputConstants.KEY_Z);
 		if (context.computeOnClient(mc -> RegionMode.here().size()) != before) {
 			throw new AssertionError("Ctrl+Z should take the lasso's region back");
 		}
-		context.getInput().holdKey(InputConstants.KEY_LCONTROL);
-		context.getInput().pressKey(InputConstants.KEY_Y);
-		context.getInput().releaseKey(InputConstants.KEY_LCONTROL);
-		context.waitTicks(2);
-		if (context.computeOnClient(mc -> RegionMode.here().size()) != before + 1) {
-			throw new AssertionError("Ctrl+Y should bring the lasso's region back");
+		ctrl(context, InputConstants.KEY_Y);
+		ctrl(context, InputConstants.KEY_Y);
+		if (!"Lake".equals(context.computeOnClient(mc -> RegionStore.get().find(lassoed.id) == null ? null : RegionStore.get().find(lassoed.id).name))) {
+			throw new AssertionError("Ctrl+Y should bring the lasso's region back, named");
 		}
 
 		// The polygon: key 2, four corners, then the first again.
@@ -206,11 +211,15 @@ final class RegionsScenario {
 		if (context.computeOnClient(mc -> RegionMode.here().size()) != before + 2) {
 			throw new AssertionError("Clicking the first corner should close the polygon into a region");
 		}
+		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+		context.waitTicks(3);
 		settle(context);
 		context.takeScreenshot("regions-polygon-drawn");
 
-		// The eraser: key 3, point at Farms, then click it.
-		context.getInput().pressKey(InputConstants.KEY_3);
+		edit(context, player);
+
+		// The eraser: key 4, point at Farms, then click it.
+		context.getInput().pressKey(InputConstants.KEY_4);
 		double[] farms = onScreen(context, player[0] + 25, player[1] - 15);
 		context.getInput().setCursorPos(farms[0], farms[1]);
 		settle(context);
@@ -227,6 +236,154 @@ final class RegionsScenario {
 		if (context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).regions().active())) {
 			throw new AssertionError("Escape should leave the region tools");
 		}
+	}
+
+	/** The book open on a region just drawn: writes its name, shuts the book, and drawing must go on. */
+	private static void named(ClientGameTestContext context, String name, MapRegion region) {
+		context.waitTicks(3);
+		boolean naming = context.computeOnClient(mc -> {
+			MapScreen screen = (MapScreen) mc.gui.screen();
+			MapRegion picked = screen.book().pickedRegion();
+			return screen.book().isOpen() && screen.book().section() == MapBook.Section.REGIONS && picked != null && picked.id.equals(region.id)
+				&& screen.getFocused() instanceof EditBox;
+		});
+		if (!naming) {
+			throw new AssertionError("Drawing a region should open the book on it, its name to write");
+		}
+		context.takeScreenshot("regions-naming");
+		// As the book's own scenario does: simulated keys carry no Ctrl for Ctrl+A.
+		context.runOnClient(mc -> ((EditBox) mc.gui.screen().getFocused()).setValue(""));
+		context.getInput().typeChars(name);
+		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+		context.waitTicks(20);
+		String written = context.computeOnClient(mc -> RegionStore.get().find(region.id).name);
+		if (!name.equals(written)) {
+			throw new AssertionError("The name written should be " + name + ", is " + written);
+		}
+		if (!context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).regions().active())) {
+			throw new AssertionError("Shutting the book should go back to drawing");
+		}
+	}
+
+	/**
+	 * The edit tool on Home: a click picks it, a corner dragged out grows it, a right click on a
+	 * corner takes it away, a drag inside moves it, and Ctrl+Z takes each back.
+	 */
+	private static void edit(ClientGameTestContext context, double[] player) {
+		context.getInput().pressKey(InputConstants.KEY_3);
+		double[] inside = onScreen(context, player[0] - 30, player[1] - 8);
+		context.getInput().setCursorPos(inside[0], inside[1]);
+		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(3);
+		MapRegion home = context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).regions().target());
+		if (home == null || !home.name.equals("Home")) {
+			throw new AssertionError("A click with the edit tool should pick Home, picked " + (home == null ? "nothing" : home.name));
+		}
+		settle(context);
+		context.takeScreenshot("regions-edit-picked");
+		double area = home.area();
+		int corners = home.rings.get(0).size();
+
+		// The first corner of the outer ring, dragged 12 GUI pixels north-west.
+		double[] corner = context.computeOnClient(mc -> {
+			MapViewport.View view = ((MapScreen) mc.gui.screen()).view();
+			Ring ring = home.rings.get(0);
+			double scale = mc.getWindow().getGuiScale();
+			return new double[] {view.screenX(Projection.u(ring.x(0), ring.z(0))) * scale,
+				view.screenY(Projection.worldV(ring.x(0), ring.y(0), ring.z(0))) * scale, scale};
+		});
+		context.getInput().setCursorPos(corner[0], corner[1]);
+		context.getInput().holdMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		for (int step = 1; step <= 6; step++) {
+			context.getInput().setCursorPos(corner[0] - 2 * step * corner[2], corner[1] - 2 * step * corner[2]);
+			context.waitTick();
+		}
+		context.takeScreenshot("regions-edit-dragging");
+		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(3);
+		double grown = context.computeOnClient(mc -> RegionStore.get().find(home.id).area());
+		if (grown <= area) {
+			throw new AssertionError("Dragging a corner out should grow Home: " + area + " then " + grown);
+		}
+
+		// A right click on that corner takes it away.
+		double[] moved = context.computeOnClient(mc -> {
+			MapViewport.View view = ((MapScreen) mc.gui.screen()).view();
+			Ring ring = RegionStore.get().find(home.id).rings.get(0);
+			double scale = mc.getWindow().getGuiScale();
+			return new double[] {view.screenX(Projection.u(ring.x(0), ring.z(0))) * scale, view.screenY(Projection.worldV(ring.x(0), ring.y(0), ring.z(0))) * scale};
+		});
+		context.getInput().setCursorPos(moved[0], moved[1]);
+		context.waitTicks(2);
+		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
+		context.waitTicks(3);
+		int left = context.computeOnClient(mc -> RegionStore.get().find(home.id).rings.get(0).size());
+		if (left != corners - 1) {
+			throw new AssertionError("A right click on a corner should take it away: " + corners + " then " + left);
+		}
+
+		// A drag inside moves the whole region east.
+		double minX = context.computeOnClient(mc -> RegionStore.get().find(home.id).bounds()[0]);
+		context.getInput().setCursorPos(inside[0], inside[1]);
+		context.getInput().holdMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		for (int step = 1; step <= 5; step++) {
+			context.getInput().setCursorPos(inside[0] + 4 * step * corner[2], inside[1]);
+			context.waitTick();
+		}
+		context.getInput().releaseMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(3);
+		double movedX = context.computeOnClient(mc -> RegionStore.get().find(home.id).bounds()[0]);
+		MapViewport.View view = context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).view());
+		double expected = 20 / view.zoom();
+		if (Math.abs(movedX - minX - expected) > 1.5) {
+			throw new AssertionError("Dragging inside should move Home " + expected + " blocks east, moved " + (movedX - minX));
+		}
+		settle(context);
+		context.takeScreenshot("regions-edit-moved");
+
+		// Three steps back: the move, the corner taken away, the corner dragged.
+		for (int i = 0; i < 3; i++) {
+			ctrl(context, InputConstants.KEY_Z);
+		}
+		double back = context.computeOnClient(mc -> RegionStore.get().find(home.id).area());
+		if (Math.abs(back - area) > 1e-6) {
+			throw new AssertionError("Ctrl+Z three times should give Home its shape back: " + area + " then " + back);
+		}
+	}
+
+	/** Clicking a region on the map opens it in the book: a new dye, a new name, then deleted with a second click. */
+	private static void book(ClientGameTestContext context, double[] player) {
+		double[] bay = onScreen(context, player[0] - 20, player[1] + 18);
+		context.getInput().setCursorPos(bay[0], bay[1]);
+		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+		context.waitTicks(3);
+		MapRegion picked = context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).book().pickedRegion());
+		if (picked == null || !picked.name.equals("Bay")) {
+			throw new AssertionError("Clicking the bay on the map should open it in the book, opened " + (picked == null ? "nothing" : picked.name));
+		}
+		BookMapScenario.settle(context);
+		context.takeScreenshot("regions-book");
+		clickWidget(context, Component.translatable("color.minecraft.purple").getString());
+		if (context.computeOnClient(mc -> RegionStore.get().find(picked.id).dye) != BannerDesign.Dye.PURPLE) {
+			throw new AssertionError("Clicking a dye on the page should dye the region");
+		}
+		clickWidget(context, Component.translatable("diorama.book.delete").getString());
+		clickWidget(context, Component.translatable("diorama.book.confirm").getString());
+		if (context.computeOnClient(mc -> RegionStore.get().find(picked.id)) != null) {
+			throw new AssertionError("Delete, then confirm, should delete the region");
+		}
+		clickWidget(context, Component.translatable("diorama.book.options").getString());
+		BookMapScenario.settle(context);
+		context.takeScreenshot("regions-book-options");
+		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+		context.waitTicks(3);
+	}
+
+	private static void ctrl(ClientGameTestContext context, int key) {
+		context.getInput().holdKey(InputConstants.KEY_LCONTROL);
+		context.getInput().pressKey(key);
+		context.getInput().releaseKey(InputConstants.KEY_LCONTROL);
+		context.waitTicks(2);
 	}
 
 	private static void minimap(ClientGameTestContext context) {

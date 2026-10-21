@@ -35,4 +35,63 @@ public final class Ring {
 	public int y(int i) {
 		return this.y[i];
 	}
+
+	/** This ring with vertex {@code i} moved to (x, z) on ground {@code y} high. */
+	public Ring with(int i, float x, float z, int y) {
+		Ring out = new Ring(this.x, this.z, this.y);
+		out.x[i] = x;
+		out.z[i] = z;
+		out.y[i] = clamp(y);
+		return out;
+	}
+
+	/** This ring with a vertex put in after vertex {@code i}, on the side to the next one. */
+	public Ring inserting(int i, float x, float z, int y) {
+		int n = this.size();
+		float[] nx = new float[n + 1], nz = new float[n + 1];
+		short[] ny = new short[n + 1];
+		System.arraycopy(this.x, 0, nx, 0, i + 1);
+		System.arraycopy(this.z, 0, nz, 0, i + 1);
+		System.arraycopy(this.y, 0, ny, 0, i + 1);
+		nx[i + 1] = x;
+		nz[i + 1] = z;
+		ny[i + 1] = clamp(y);
+		System.arraycopy(this.x, i + 1, nx, i + 2, n - i - 1);
+		System.arraycopy(this.z, i + 1, nz, i + 2, n - i - 1);
+		System.arraycopy(this.y, i + 1, ny, i + 2, n - i - 1);
+		return new Ring(nx, nz, ny);
+	}
+
+	/** This ring without vertex {@code i}, or null if fewer than three would be left. */
+	public @org.jspecify.annotations.Nullable Ring without(int i) {
+		int n = this.size();
+		if (n <= 3) {
+			return null;
+		}
+		float[] nx = new float[n - 1], nz = new float[n - 1];
+		short[] ny = new short[n - 1];
+		for (int j = 0, k = 0; j < n; j++) {
+			if (j == i) continue;
+			nx[k] = this.x[j];
+			nz[k] = this.z[j];
+			ny[k] = this.y[j];
+			k++;
+		}
+		return new Ring(nx, nz, ny);
+	}
+
+	/** This ring moved {@code dx}, {@code dz} blocks, on the heights {@code heights} gives each moved vertex. */
+	public Ring moved(float dx, float dz, java.util.function.IntUnaryOperator heights) {
+		Ring out = new Ring(this.x, this.z, this.y);
+		for (int i = 0; i < out.size(); i++) {
+			out.x[i] += dx;
+			out.z[i] += dz;
+			out.y[i] = clamp(heights.applyAsInt(i));
+		}
+		return out;
+	}
+
+	private static short clamp(int y) {
+		return (short) Math.max(Short.MIN_VALUE, Math.min(Short.MAX_VALUE, y));
+	}
 }

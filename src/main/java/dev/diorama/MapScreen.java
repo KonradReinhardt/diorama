@@ -13,6 +13,7 @@ import dev.diorama.ui.MapBook;
 import dev.diorama.ui.MapMenu;
 import dev.diorama.ui.OpeningZoom;
 import dev.diorama.ui.RegionMode;
+import dev.diorama.region.MapRegion;
 import dev.diorama.waypoint.Waypoint;
 import dev.diorama.waypoint.WaypointOverlay;
 import dev.diorama.waypoint.WaypointStore;
@@ -74,6 +75,8 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 	private final MapBook book = new MapBook(this);
 	/** Drawing regions, while it is on. */
 	private final RegionMode regions = new RegionMode(this);
+	/** The book opened to name a region just drawn: shutting it goes back to drawing. */
+	private boolean backToRegions;
 	private final OpeningZoom opening = new OpeningZoom();
 	/** init() has run once: later runs (a resize, coming back from a screen) don't zoom in again. */
 	private boolean opened;
@@ -192,12 +195,17 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, drawnZoom, this.layer);
 		if (!this.smoothZoom.moving() && !this.opening.running(zoomNow) && this.panTarget == null) view = view.pixelPerfect();
 		// Regions are drawn on the surface, with the book shut.
+		if (this.backToRegions && !this.book.isOpen()) {
+			this.backToRegions = false;
+			this.regions.enter();
+		}
 		if (this.regions.active() && (this.book.isOpen() || this.layer != TileKey.SURFACE)) {
 			this.regions.leave();
 		}
 		// Nothing on the map under the book, a ribbon or the region tools is pointed at.
 		boolean onMap = !this.book.covers(mouseX, mouseY) && !this.book.onRibbon(mouseX, mouseY) && !this.regions.covers(mouseX, mouseY);
-		this.regions.frame(this.viewport, mouseX, mouseY, onMap);
+		this.regions.frame(this.viewport, mouseX, mouseY, onMap,
+			this.book.isOpen() && this.book.section() == MapBook.Section.REGIONS ? this.book.pickedRegion() : null);
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		this.drawReveal(graphics, view, player, mouseX, mouseY);
 		this.regions.draw(graphics, view, mouseX, mouseY);
@@ -228,6 +236,11 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 			graphics.setTooltipForNextFrame(this.font, WaypointOverlay.describe(hoveredPin.waypoint(), player), mouseX, mouseY);
 		} else if (hovered != null) {
 			graphics.setTooltipForNextFrame(this.font, Radar.describe(hovered, player), mouseX, mouseY);
+		} else if (onMap && !this.regions.active() && !this.book.isOpen()) {
+			MapRegion region = this.regionUnder(mouseX, mouseY);
+			if (region != null) {
+				graphics.setTooltipForNextFrame(this.font, Component.literal(region.name), mouseX, mouseY);
+			}
 		}
 
 		if (!this.book.isOpen()) {
@@ -431,6 +444,9 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 				this.regions.cancelStroke();
 				return true;
 			}
+			if (button == InputConstants.MOUSE_BUTTON_RIGHT && !moved && this.regions.rightClick(x, y)) {
+				return true;
+			}
 		}
 		if (moved) {
 			return true;
@@ -453,6 +469,12 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 			if (pin != null) {
 				BookWidgets.pageTurn(this.minecraft.getSoundManager());
 				this.book.showWaypoint(pin.waypoint());
+				return true;
+			}
+			MapRegion region = this.regionUnder(x, y);
+			if (region != null) {
+				BookWidgets.pageTurn(this.minecraft.getSoundManager());
+				this.book.showRegion(region);
 			}
 			return true;
 		}
@@ -892,6 +914,56 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 			this.book.close();
 		}
 		this.regions.enter();
+	}
+
+	@Override
+	public void drawRegions(@Nullable MapRegion region) {
+		if (this.book.isOpen()) {
+			this.book.close();
+		}
+		if (region == null) {
+			this.regions.pick(dev.diorama.region.RegionTool.Tool.LASSO);
+			this.regions.enter();
+		} else {
+			this.regions.edit(region);
+		}
+	}
+
+	@Override
+	public void created(MapRegion region) {
+		// Left first, so the widgets are built once, with the name field taking the keyboard.
+		this.regions.leave();
+		this.backToRegions = true;
+		this.book.newRegion(region);
+	}
+
+	/** Glides the view to a region's label point, on the ground under it, and stops following the player. */
+	@Override
+	public void centerOn(MapRegion region) {
+		double[] at = dev.diorama.region.RegionGeometry.label(region.rings, 1);
+		double height = 0;
+		int count = 0;
+		for (dev.diorama.region.Ring ring : region.rings) {
+			for (int i = 0; i < ring.size(); i++) {
+				height += ring.y(i);
+				count++;
+			}
+		}
+		height = count == 0 ? 64 : height / count;
+		this.following = false;
+		this.smoothZoom.reset(this.zoom);
+		this.panTarget = new double[] {Projection.u(at[0], at[1]), Projection.worldV(at[0], height, at[1])};
+	}
+
+	/** The region drawn under a screen point, or null. */
+	private @Nullable MapRegion regionUnder(double screenX, double screenY) {
+		MapViewport.View view = this.lastView;
+		if (view == null) {
+			return null;
+		}
+		double u = view.centerU() + (screenX - view.x() - view.width() / 2.0) / view.zoom();
+		double v = view.centerV() + (screenY - view.y() - view.height() / 2.0) / view.zoom();
+		return this.viewport.regionAt(u, v);
 	}
 
 	/** For tests: the region tools. */

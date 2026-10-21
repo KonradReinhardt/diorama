@@ -27,6 +27,7 @@ public final class SettingsCatalog {
 		OVERLAYS("diorama.settings.overlays"),
 		BANNERS("diorama.settings.banners"),
 		WAYPOINTS("diorama.settings.waypoints"),
+		REGIONS("diorama.settings.regions"),
 		LOOK("diorama.settings.look");
 
 		public final String key;
@@ -115,11 +116,12 @@ public final class SettingsCatalog {
 		out.add(toggle("diorama.settings.chunk_grid", Section.OVERLAYS, "chunkGrid", () -> s.chunkGrid, v -> s.chunkGrid = v));
 		out.add(toggle("diorama.settings.slime_chunks", Section.OVERLAYS, "slimeChunks", () -> s.slimeChunks, v -> s.slimeChunks = v));
 		out.add(choice("diorama.settings.spawn_spots", Section.OVERLAYS, "spawnSpots", Settings.SpawnSpots.values(), () -> s.spawnSpots, v -> s.spawnSpots = v));
-		out.add(toggle("diorama.settings.regions_map", Section.OVERLAYS, "mapRegions", () -> s.mapRegions, v -> s.mapRegions = v));
 
 		out.add(toggle("diorama.settings.animate_banners", Section.BANNERS, "animateBanners", () -> s.animateBanners, v -> s.animateBanners = v));
 		out.add(toggle("diorama.settings.sepia_banners", Section.BANNERS, "sepiaBanners", () -> s.sepiaBanners, v -> s.sepiaBanners = v));
 		out.add(tooltip(toggle("diorama.settings.extra_banner_layers", Section.BANNERS, "extraBannerLayers", () -> s.extraBannerLayers, v -> s.extraBannerLayers = v)));
+
+		out.add(toggle("diorama.settings.regions_map", Section.REGIONS, "mapRegions", () -> s.mapRegions, v -> s.mapRegions = v));
 
 		out.add(toggle("diorama.settings.waypoints_map", Section.WAYPOINTS, "waypointsOnMap", () -> s.waypointsOnMap, v -> s.waypointsOnMap = v));
 		out.add(toggle("diorama.settings.waypoints_world", Section.WAYPOINTS, "waypointsInWorld", () -> s.waypointsInWorld, v -> s.waypointsInWorld = v));

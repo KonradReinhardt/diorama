@@ -1,8 +1,8 @@
 # Map regions — plan
 
-Status: plan written on 2026-10-21. Steps 1–3 implemented the same day on the `feature/map-regions`
-branch; the "How it turned out" section at the end records where they departed from the plan.
-Steps 4–8 are still to do.
+Status: plan written on 2026-10-21. Steps 1–4 implemented the same day on the `feature/map-regions`
+branch; the "How it turned out" sections at the end record where they departed from the plan.
+Steps 5–8 are still to do.
 
 ## Goal
 
@@ -311,3 +311,35 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
 - Tests: `RegionGeometryTest`, `RegionStoreTest`, `RegionToolTest` (JUnit) and
   `DIORAMA_TESTS=regions` (captures `regions-zoom-*`, `regions-lasso-*`, `regions-polygon-*`,
   `regions-eraser-pointing`, `regions-erased`, `regions-minimap`).
+
+## How it turned out (step 4)
+
+- `MapBook.Section.REGIONS` (purple, feather) between Banners and Look, with List (feather) and
+  Options (cartography table) tabs. `RegionsPage`: rows on the left page (dye square, name, area),
+  nearest the player first, paged with the book's arrows, and "New region"; the right page has the
+  name written in place, the 16 dyes (`DyeSwatch`, shared with the toolbar), fill, on the map, on
+  the minimap, the area in blocks² and chunks, Centre, Edit shape and Delete (a second click
+  confirms). Banners and labels on the page wait for steps 5 and 6.
+- Every change from the page is one step of the store's history, so Ctrl+Z on the map takes it
+  back; the name is written as one step when the region is left (another region picked, the
+  section changed, the book shut).
+- Options: a `SettingsCatalog.Section.REGIONS` with `mapRegions` (moved from Layers), the
+  minimap's `minimapRegions` offered beside it, and a paragraph on the tools. The settings screen
+  lists Regions under Banners.
+- A region just drawn opens the book on it with its name field taking the keyboard, as planned;
+  shutting that book goes back to drawing, so several regions can be drawn in a row.
+- The edit tool (key 3; the eraser moved to 4, sponge icon; edit is the brush): a click picks the
+  region; its corners show as small paper squares (where they crowd closer than 6 px only some are
+  drawn, all can be taken); a corner dragged follows the ground under the pointer; a click on a
+  side adds a corner there; a right click takes one away (the last three of a ring stay, or the
+  ring goes if the region has others); a drag inside moves the whole region along the ground, each
+  corner settling on the ground under it as it is let go. The map draws the change as it is made
+  (`MapViewport.preview`), and it is kept as one step on letting go. Coordinates stay on the
+  half-block grid.
+- Clicking a region on the map, outside region mode, opens it in the book (labels are step 5); the
+  pointer over one shows its name. The region the book shows, the edit tool's and the eraser's is
+  drawn brighter.
+- `DIORAMA_TESTS=regions` now also names the lasso's region in the book, undoes and redoes it, edits
+  Home (corner, removal, move, three undos) and uses the book (click on the map, dye, delete,
+  Options): captures `regions-naming`, `regions-edit-*`, `regions-book`, `regions-book-options`.
+

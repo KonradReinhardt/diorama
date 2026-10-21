@@ -15,7 +15,11 @@ import org.jspecify.annotations.Nullable;
  * </ul>
  */
 public final class RegionTool {
-	public enum Tool { LASSO, POLYGON, ERASER }
+	/** The tools, in the order of their keys, 1 to 4. */
+	public enum Tool { LASSO, POLYGON, EDIT, ERASER }
+
+	/** GUI pixels from a corner, or a side, within which the edit tool takes it. */
+	public static final double GRAB_REACH = 4;
 
 	/** GUI pixels the mouse moves before the lasso takes another point. */
 	public static final double LASSO_STEP = 2;
