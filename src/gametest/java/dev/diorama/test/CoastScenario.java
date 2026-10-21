@@ -164,6 +164,17 @@ final class CoastScenario {
 					context.waitTicks(20);
 				}
 			}
+			// Far out the map draws overviews, shrunk from the saved tiles with their surface planes:
+			// the coast stays, as a line along it and ripples further apart.
+			context.waitTicks(200);
+			for (double zoom : new double[] {0.25, 0.1}) {
+				// Overviews of ground never explored are never ready: wait a while instead.
+				context.runOnClient(mc -> {
+					if (mc.gui.screen() instanceof MapScreen screen) screen.lookAt(u, v, zoom, TileKey.SURFACE);
+				});
+				context.waitTicks(60);
+				context.takeScreenshot("coast-sea-" + zoom);
+			}
 		} finally {
 			server.runCommand("fill " + (x - 35) + " " + (y - 1) + " " + (z - 35) + " " + (x + 35) + " " + (y + 1) + " " + (z + 35) + " air");
 		}

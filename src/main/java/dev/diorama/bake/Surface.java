@@ -27,6 +27,22 @@ public final class Surface {
 		return (byte) (KNOWN | (water ? WATER : 0));
 	}
 
+	/**
+	 * The bits of an overview pixel from the four it shrinks: known if any is, water if most known
+	 * ones are, shore if any is, so a coast never vanishes as the map zooms out.
+	 */
+	public static byte shrink(byte a, byte b, byte c, byte d) {
+		int known = 0, water = 0, shore = 0;
+		for (byte bits : new byte[] {a, b, c, d}) {
+			if ((bits & KNOWN) == 0) continue;
+			known++;
+			if ((bits & WATER) != 0) water++;
+			if ((bits & SHORE) != 0) shore++;
+		}
+		if (known == 0) return 0;
+		return (byte) (KNOWN | (2 * water > known ? WATER : 0) | (shore > 0 ? SHORE : 0));
+	}
+
 	/** Whether any pixel of the plane is known. */
 	public static boolean anyKnown(byte @Nullable [] plane) {
 		if (plane != null) for (byte b : plane) if ((b & KNOWN) != 0) return true;

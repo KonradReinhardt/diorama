@@ -52,4 +52,18 @@ class CoastMaskTest {
 		double lake = CoastMask.openSea(3, CoastMask.OPEN + 4);
 		assertTrue(lake > 0 && lake < 1, "a lake with a small open middle gets some waves");
 	}
+
+	@Test void distancesAreFinestNearTheShore() {
+		for (double texel : new double[] {0.25, 1, 8, 64}) {
+			double reach = CoastMask.reach(texel);
+			for (double d : new double[] {0, 0.5, 1, 3, 16, reach / 2, reach}) {
+				double red = CoastMask.encode(d, texel) / 255.0;
+				double back = red * red * reach;
+				// Within one step of the byte, which near the shore is a sliver of a block.
+				double step = 2 * Math.sqrt(d / reach) * reach / 255 + reach / (255.0 * 255.0);
+				assertEquals(d, back, step + 1e-9, texel + " " + d);
+			}
+			assertTrue(CoastMask.reach(texel) >= 32, "waves start 16 blocks out");
+		}
+	}
 }

@@ -9,8 +9,8 @@ redraws a tile.
 
 **Coast foam and ripples** (`mapCoast`, Look, on by default), in the world map's book, the settings
 screen and Mod Menu. It needs the render pipelines of 1.21.6 and later (`MapEffect.supported()`).
-Only detailed surface tiles carry what it needs, so it shows on the surface layer, zoomed in far
-enough that the map draws detailed tiles, and fades out once an art pixel spans several blocks.
+It shows on the surface layer at every zoom: zoomed out, the overview tiles carry what it needs
+too, so the coast stays, as a line along the shore with ripples further apart.
 
 ## Look
 
@@ -23,18 +23,21 @@ line a set distance from the shore is foreshortened like the blocks are.
 The look holds together at every zoom. Every line is one art pixel thick: the shader samples the
 distance at the next art pixel across and down, and draws a line where it is within half of that
 change, so how many blocks a pixel spans never makes lines thicker or thinner. Foam is at least a
-pixel wide. Ripples that would crowd closer than three pixels thin out, every other one fading away
-smoothly as the zoom goes out (and again), and the breaking of foam into clumps, which would only
-shimmer once a pixel spans more than a block, fades out too.
+pixel wide, and only drawn on water: a mask texel spanning several blocks says which of its four
+by four parts are water, so foam never covers land. Ripples that would crowd closer than three
+pixels thin out, every other one fading away smoothly as the zoom goes out (and again), reaching
+further out as they spread; the breaking of foam into clumps, which would only shimmer once a
+pixel spans more than a block, fades out, and so do ocean waves once they would be smaller than a
+pixel. Far out the coast is a pixel line of foam with ripples around it.
 
-- **Foam**: white along the water's edge, 0.35 to 0.9 blocks wide, swelling and drawing back every
+- **Foam**: white along the water's edge, 0.3 to 0.7 blocks wide, swelling and drawing back every
   four seconds. Each stretch of coast keeps its own beat (world-anchored noise), so the swell rolls
   along the shore. Up close it breaks into clumps here and there.
 - **Ripples** on calm water (rivers, ponds, sheltered water): pale dashed lines, 3.5 blocks apart,
   rolling toward the shore at 0.7 blocks a second from 11 blocks out, fainter further out.
 - **Ocean waves** on open sea: every 7.5 seconds a wave rises 16 blocks out, a broken white crest
   with the lighter water of its back a pixel seaward, growing as it rolls in. Near the shore it
-  breaks: the foam surges up to 2.7 blocks wide and draws back, leaving a few bubbles. Waves arrive
+  breaks: the foam surges up to 1.8 blocks wide and draws back, leaving a few bubbles. Waves arrive
   at slightly different times along the coast, and their crests break in different places, so they
   roll along it. Ripples give way to them as the water opens up.
 - By night everything dims toward a moonlit blue; with the sepia antique map (and its tint of the
@@ -63,7 +66,13 @@ The store saves it beside each detailed tile's OMT2 bundle, as `<u>_<v>.omts` (`
 the tile's key, the CRC of the day plane it was baked with, and the deflated plane, written
 atomically after the bundle. The bundle itself is unchanged, so builds that don't know surfaces
 read maps as before. A bundle such a build writes later no longer matches the CRC, and its stale
-plane is ignored rather than trusted; nothing is deleted. Overviews record none.
+plane is ignored rather than trusted; nothing is deleted.
+
+Overviews get theirs as they are shrunk from the tiles below (`TileStore.shrinkChildren`,
+`Surface.shrink`): an overview pixel is known if any of its four is, water if most of the known
+ones are, and shore if any is, so a coast never vanishes as the map zooms out. It is saved beside
+the overview the same way. An overview saved before overviews had planes is shrunk again from its
+tiles once a session, and only written if that changed it.
 
 `BakeContext.LOOK_REVISION` went to 5 for the plane and 6 for shores, so in singleplayer on 26.3
 tiles saved before are redrawn from the world's saved chunks in the background, nearest the views
@@ -71,18 +80,21 @@ first, and gain their plane (only pixels already explored are redrawn). Elsewher
 older versions) a tile gains it when it is baked again, as the player passes by; until then its
 coasts show no effect.
 
-On the client, `MapTile` keeps the plane as three bitsets (known, water, shore): 96 KB a tile,
+On the client, `MapTile` keeps the plane as three bitsets (known, water, shore): 96 KB a tile or
+overview,
 and, worked out when first asked, whether each square of 2 to 32 pixels holds any shore
 (`MapTile.shoreWithin`), about a third more of the shore bitset.
 
 ## Drawing
 
-`CoastMask`, one per view, covers it with 512 x 512 texels (a texel from a map pixel up to 8
-units, a power of two, its origin snapping every 64 texels). For each texel it asks the detailed
-tiles on the GPU whether there is water under its middle, and whether any pixel inside it is
-shore: a shore is a pixel thin, and a texel of several pixels that only looked at its middle
-missed most of it, which made the coast change shape with the zoom. Texels line up with the
-tiles' squares of pixels, so that is one lookup in `MapTile.shoreWithin`.
+`CoastMask`, one per view, covers it with 512 x 512 texels, reading the tiles of the level of
+detail the view draws (the detailed ones, or overviews zoomed out): a texel is a power of two of
+their pixels, its origin snapping every 64 texels. For each texel it asks the tiles on the GPU
+whether there is water under its middle, and whether any pixel inside it is shore: a shore is a
+pixel thin, and a texel of several pixels that only looked at its middle missed most of it, which
+made the coast change shape with the zoom. Texels line up with the tiles' squares of pixels, so
+that is one lookup in `MapTile.shoreWithin`. A texel holding shore is then looked at in four by four
+parts, each water only if its middle is and no shore lies in it.
 
 Two exact Euclidean distance transforms follow (rows then columns, each the lower envelope of
 parabolas, linear in the texels; a texel is `texel` blocks across and `texel / 0.75` deep): the
@@ -90,15 +102,18 @@ distance from each texel to the nearest shore, then the distance to open water, 
 blocks from any shore. By an ocean the two add up to about 10; in a lake with a small open middle,
 to more; in a river, which has no open water, to far more: `CoastMask.openSea` turns that into how
 much the water is open sea. Unexplored ground and land that only hides water are never shore.
-Red holds the distance to the shore in eighths of a block (up to 32), green open sea, blue water.
+Red holds the distance to the shore as the square root of its share of 32 blocks, or 32 texels when
+a texel is more than a block (`CoastMask.encode`), so it is finest near the shore and still reaches
+the ripples of a zoomed out view; green open sea; blue and alpha which of the texel's sixteen parts
+are water.
 The mask is built again when the view's origin or texel changes, and at most every 100 ms as tiles
 arrive.
 
 `MapViewport.draw` draws the coast after the tiles and before the clouds and the fog, as one quad
 through `DioramaPipelines.COAST` (`fog.vsh` with `coast.fsh`) via `MapCanvas.effect`: the coast
 mask in sampler 0, the fog's noise in sampler 1, and `MapViewport.coastParams` in the vertex
-colour: the texel size, sepia, daylight, the mask origin modulo 256 units across and 768 down (in
-fours), and the art pixel with its phase.
+colour: the texel size, daylight, the mask origin modulo 256 units across and 768 down (in fours),
+sepia, and the art pixel with its phase.
 
 ## Testing
 
@@ -107,5 +122,6 @@ finds a shore near the player, asserts the bake recorded the water there, and ca
 over a few frames, at the usual zoom, further out, and with the effect off. It then builds, high
 in the air, a tower on an island in a pool (its top must be land but not shore), and a stretch of
 open sea with a sand beach and a small island (the beach's edge must be shore), captured at four
-zooms a second apart. `SurfacePlaneTest` covers saving and reading the plane, patches, and a bundle
-rewritten by another build; `CoastMaskTest` the exact distances and the open sea.
+zooms a second apart, and then far out over overviews. `SurfacePlaneTest` covers saving and reading the plane, patches, and a bundle
+rewritten by another build, and overviews shrinking their tiles' planes; `CoastMaskTest` the
+exact distances, how they are stored, and the open sea.

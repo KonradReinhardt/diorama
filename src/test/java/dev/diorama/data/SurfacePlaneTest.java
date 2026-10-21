@@ -68,4 +68,33 @@ class SurfacePlaneTest {
 		TileBundle.write(folder.resolve("0_0.omt2"), key, new TilePixels(other, null));
 		assertNull(new TileStore(folder).readPixels(key).surface());
 	}
+
+	@Test void overviewsShrinkTheirTilesPlanes() {
+		var key = new TileKey(TileKey.SURFACE, 0, 0);
+		TileStore store = new TileStore(folder);
+		try {
+			int[] pixels = new int[LENGTH];
+			Arrays.fill(pixels, 0xFF336699);
+			byte[] plane = new byte[LENGTH];
+			Arrays.fill(plane, Surface.of(true));
+			// One shore pixel in the tile's corner: its overview pixel must still be shore.
+			plane[0] = (byte) (Surface.KNOWN | Surface.SHORE);
+			store.baked(TileImage.full(key, new int[][] {pixels}, new byte[0], null, null, plane));
+			store.refreshOverviews().join();
+			TilePixels overview = store.readPixels(key.parent());
+			assertNotNull(overview.surface());
+			assertEquals(Surface.KNOWN | Surface.WATER | Surface.SHORE, overview.surface()[0]);
+			assertEquals(Surface.of(true), overview.surface()[1]);
+		} finally { store.close(); }
+		assertNotNull(new TileStore(folder).readPixels(key.parent()).surface(), "saved beside the overview too");
+	}
+
+	@Test void shrinkingTakesTheMostOfTheKnownAndAnyShore() {
+		byte water = Surface.of(true), land = Surface.of(false), shore = (byte) (Surface.KNOWN | Surface.SHORE);
+		assertEquals(0, Surface.shrink((byte) 0, (byte) 0, (byte) 0, (byte) 0));
+		assertEquals(water, Surface.shrink(water, water, water, land));
+		assertEquals(land, Surface.shrink(water, water, land, land));
+		assertEquals(water, Surface.shrink(water, (byte) 0, (byte) 0, (byte) 0));
+		assertEquals((byte) (Surface.KNOWN | Surface.SHORE), Surface.shrink(shore, land, land, land));
+	}
 }

@@ -3,6 +3,7 @@ package dev.diorama.data;
 import dev.diorama.Diorama;
 import dev.diorama.Projection;
 import dev.diorama.bake.Mipmaps;
+import dev.diorama.bake.Surface;
 import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
 import dev.diorama.bake.TilePixels;
@@ -114,6 +115,7 @@ public final class TileStore {
 		int[] out = null;
         int[] night = new int[size * size];
         boolean hasNight = false;
+        byte[] surface = null;
 		for (int dy = 0; dy < 2; dy++) {
 			for (int dx = 0; dx < 2; dx++) {
 				TileKey child = new TileKey(key.layer(), key.tileU() * 2 + dx, key.tileV() * 2 + dy, key.lod() - 1);
@@ -134,11 +136,34 @@ public final class TileStore {
                             int[] n = childPixels.night(); hasNight = true;
                             night[(dy * half + y) * size + dx * half + x] = Mipmaps.average(n[i], n[i + 1], n[i + size], n[i + size + 1]);
                         }
+                        byte[] s = childPixels.surface();
+                        if (s != null) {
+                            if (surface == null) surface = new byte[size * size];
+                            surface[(dy * half + y) * size + dx * half + x] = Surface.shrink(s[i], s[i + 1], s[i + size], s[i + size + 1]);
+                        }
 					}
 				}
 			}
 		}
-		return out == null ? null : new TilePixels(out, hasNight ? night : null);
+		return out == null ? null : new TilePixels(out, hasNight ? night : null, surface);
+	}
+
+	/** Overviews rebuilt this session because they were saved without a surface plane. */
+	private final Set<TileKey> surfaceRebuilt = new HashSet<>();
+
+	/**
+	 * An overview saved before overviews had surface planes, so the coast can't be drawn on it:
+	 * shrinks it again from its tiles, once a session, which then carry theirs up.
+	 */
+	private synchronized void overviewWithoutSurface(TileKey key) {
+		if (!this.surfaceRebuilt.add(key)) {
+			return;
+		}
+		this.staleOverviews.add(key);
+		if (!this.rebuildScheduled && !this.closed) {
+			this.rebuildScheduled = true;
+			WRITER.schedule(this::rebuildOverviews, OVERVIEW_DELAY_SECONDS, TimeUnit.SECONDS);
+		}
 	}
 
 	/** A tile was written: the overview tiles above it are now out of date. */
@@ -178,6 +203,14 @@ public final class TileStore {
 			for (TileKey key : level) {
 				TilePixels pixels = this.shrinkChildren(key);
 				if (pixels == null) {
+					continue;
+				}
+				TilePixels before;
+				synchronized (this.io) {
+					before = this.saved(key);
+				}
+				if (pixels.samePixels(before)) {
+					// Shrunk again for its surface plane and came out the same: nothing to write.
 					continue;
 				}
 				// Under io too, so a read loading this tile from disk can't cache the old pixels over these.
@@ -488,7 +521,9 @@ public final class TileStore {
         if (Files.isRegularFile(bundle)) {
             try {
                 TilePixels pixels = TileBundle.read(bundle, key);
-                return key.lod() == 0 ? pixels.withSurface(SurfaceFile.read(this.surfaceFile(key), key, pixels.day())) : pixels;
+                byte[] surface = SurfaceFile.read(this.surfaceFile(key), key, pixels.day());
+                if (surface == null && key.lod() > 0) this.overviewWithoutSurface(key);
+                return pixels.withSurface(surface);
             }
             catch (IOException | RuntimeException failure) { Diorama.LOGGER.warn("Invalid lighting bundle {}; trying legacy map", bundle, failure); }
         }
@@ -523,7 +558,7 @@ public final class TileStore {
         try {
             this.writtenBytes.addAndGet(TileBundle.write(file, key, pixels));
             // After the bundle, which a crash between the two leaves without a matching plane.
-            if (key.lod() == 0) SurfaceFile.write(this.surfaceFile(key), key, pixels.day(), pixels.surface());
+            SurfaceFile.write(this.surfaceFile(key), key, pixels.day(), pixels.surface());
             this.writes.incrementAndGet();
             return true;
         } catch (IOException | RuntimeException e) {

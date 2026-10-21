@@ -382,9 +382,9 @@ public final class MapViewport {
 	}
 
 	/**
-	 * The coast pass's vertex colour: the mask's texel size, sepia and daylight in alpha, the mask
-	 * origin modulo coast.fsh's noise periods (256 units across, 768 down) in fours in red and
-	 * green, the art pixel and its phase in blue.
+	 * The coast pass's vertex colour: the mask's texel size (log2 of map pixels, bits 4-7) and
+	 * daylight in alpha, the mask origin modulo coast.fsh's noise periods (256 units across, 768
+	 * down) in fours in red and green, sepia in red's bit 6, the art pixel and its phase in blue.
 	 */
 	static int coastParams(CoastMask.Pass coast, int pixelCode, dev.diorama.EnvironmentLighting lighting) {
 		int texel = Integer.numberOfTrailingZeros((int) Math.round(coast.texel() / CoastMask.FINEST));
@@ -392,7 +392,7 @@ public final class MapViewport {
 		int u = (int) (Math.floorMod((long) coast.originU(), 256L) / 4);
 		int v = (int) (Math.floorMod((long) coast.originV(), 768L) / 4);
 		int day = Math.round(Math.max(0, Math.min(1, lighting.daylight())) * 15);
-		return (texel << 5 | (sepia ? 16 : 0) | day) << 24 | u << 16 | v << 8 | pixelCode & 63;
+		return (texel << 4 | day) << 24 | (u | (sepia ? 64 : 0)) << 16 | v << 8 | pixelCode & 63;
 	}
 
 	/** Whether clouds drift over this view: asked for, and over a surface under an open sky. */
