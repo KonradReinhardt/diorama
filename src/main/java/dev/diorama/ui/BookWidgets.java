@@ -63,8 +63,8 @@ public final class BookWidgets {
 		Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.ARMOR_EQUIP_LEATHER, pitch));
 	}
 
-	/** Plays a page turning, as the book's ribbons and arrows do. */
-	static void pageTurn(SoundManager sounds) {
+	/** Plays a page turning, as the book's ribbons and arrows do, and the map as it opens and shuts. */
+	public static void pageTurn(SoundManager sounds) {
 		sounds.play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
 	}
 

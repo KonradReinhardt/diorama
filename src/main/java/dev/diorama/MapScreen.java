@@ -102,6 +102,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			this.zoom = this.wholeStep(this.zoom);
 			this.smoothZoom.reset(this.zoom);
 			this.opening.start(this.lastZoomFrame);
+			BookWidgets.pageTurn(this.minecraft.getSoundManager());
 			if (helpUntil == 0) {
 				helpUntil = System.currentTimeMillis() + 6000;
 			}
@@ -565,6 +566,13 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	@Override
 	public boolean isPauseScreen() {
 		return false;
+	}
+
+	/** Shut by the player (or by the server's rules), with the book's page sound; not when a settings screen replaces it. */
+	@Override
+	public void onClose() {
+		BookWidgets.pageTurn(this.minecraft.getSoundManager());
+		super.onClose();
 	}
 
 	@Override
