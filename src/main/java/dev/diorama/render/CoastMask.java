@@ -11,10 +11,11 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Where a view's water meets the land, for the coast effect (coast.fsh): a texture over the view
- * whose red holds, for each water texel, how far the nearest known land is, in blocks, green
- * marks water and blue land. Built from the surface bits of the detailed tiles on the GPU (see
- * {@link MapTile#surface}), so ground whose surface was never recorded is neither, and draws no
- * coast. Distances are measured on the water's own plane, across the map in u and down it in
+ * whose red holds, for each water texel, how far the nearest shore is, in blocks, green marks
+ * water and blue shore. Built from the surface bits of the detailed tiles on the GPU (see
+ * {@link MapTile#surface}). Only land that meets the water is shore: land standing high over water
+ * it hides (a tower) is not, nor is ground whose surface was never recorded, and neither draws
+ * a coast. Distances are measured on the water's own plane, across the map in u and down it in
  * depth (a block of depth is three quarters of a map unit), so lines a set distance from the shore
  * follow the map's perspective. Render thread only.
  */
@@ -129,7 +130,7 @@ final class CoastMask {
 				if (tile != null && tile.hasSurface()) {
 					int px = Math.min(Projection.TILE_PIXELS - 1, (int) ((u - tu * units) * Projection.PIXELS_PER_UNIT));
 					int bits = tile.surface(px, py);
-					k = (bits & Surface.KNOWN) == 0 ? UNKNOWN : (bits & Surface.WATER) != 0 ? WATER : LAND;
+					k = (bits & Surface.WATER) != 0 ? WATER : (bits & Surface.SHORE) != 0 ? LAND : UNKNOWN;
 				}
 				this.kind[j * SIZE + i] = k;
 			}

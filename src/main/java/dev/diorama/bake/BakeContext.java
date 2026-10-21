@@ -15,7 +15,8 @@ public record BakeContext(MapStyle style, MapDirection direction, boolean fast) 
     // 3: one ray per pixel on the block grid, and outlines from the faces' own geometry.
     // 4: faces 3 rows tall instead of 4.
     // 5: tiles record which pixels show a water surface, for the coast (Surface).
-    private static final int LOOK_REVISION = 5;
+    // 6: and which land meets the water, so tall land hiding water draws no foam.
+    private static final int LOOK_REVISION = 6;
 
     /**
      * Identifies how baked pixels look: tiles saved under another value are redrawn when shown.

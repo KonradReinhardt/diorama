@@ -71,6 +71,7 @@ final class CoastScenario {
 			context.runOnClient(mc -> Settings.get().mapCoast = false);
 			look(context, u, v, 4);
 			context.takeScreenshot("coast-4-off");
+			tower(context, world);
 		} finally {
 			context.runOnClient(mc -> {
 				Settings.get().mapCoast = was[0];
@@ -78,6 +79,42 @@ final class CoastScenario {
 				Settings.get().save();
 			});
 			context.setScreen(() -> null);
+		}
+	}
+
+	/**
+	 * A tower on a small island in a pool, high in the air: its top and upper walls hide the water
+	 * north of it from the map, and must not count as shore; only the island's edge does.
+	 */
+	private static void tower(ClientGameTestContext context, TestSingleplayerContext world) {
+		int[] at = context.computeOnClient(mc -> new int[] {mc.player.getBlockX() + 30, mc.player.getBlockZ() - 10});
+		int x = at[0], z = at[1], y = 150;
+		var server = world.getServer();
+		try {
+			server.runCommand("fill " + (x - 13) + " " + (y - 1) + " " + (z - 13) + " " + (x + 13) + " " + y + " " + (z + 13) + " stone");
+			server.runCommand("fill " + (x - 12) + " " + y + " " + (z - 12) + " " + (x + 12) + " " + y + " " + (z + 12) + " water");
+			server.runCommand("fill " + (x - 2) + " " + y + " " + (z - 2) + " " + (x + 2) + " " + y + " " + (z + 2) + " grass_block");
+			server.runCommand("fill " + (x - 1) + " " + (y + 1) + " " + (z - 1) + " " + (x + 1) + " " + (y + 24) + " " + (z + 1) + " stone_bricks");
+			context.waitTicks(100);
+			context.runOnClient(mc -> Settings.get().mapCoast = true);
+			double u = Projection.u(x + 0.5, z + 0.5), v = Projection.worldV(x + 0.5, y + 25, z + 0.5);
+			look(context, u, v, 4);
+			context.takeScreenshot("coast-tower");
+			String top = context.computeOnClient(mc -> {
+				var key = new TileKey(TileKey.SURFACE, (int) Math.floor(u / Projection.TILE_UNITS), (int) Math.floor(v / Projection.TILE_UNITS));
+				MapTile tile = MapSession.get().map().peek(key);
+				if (tile == null) return "no tile";
+				int bits = tile.surface((int) ((u - key.minU()) * Projection.PIXELS_PER_UNIT), (int) ((v - key.minV()) * Projection.PIXELS_PER_UNIT));
+				return bits == Surface.KNOWN ? null : "bits " + bits;
+			});
+			if (top != null) {
+				throw new AssertionError("The tower's top should be known land that isn't shore: " + top);
+			}
+			context.runOnClient(mc -> Settings.get().mapCoast = false);
+			context.waitTicks(1);
+			context.takeScreenshot("coast-tower-off");
+		} finally {
+			server.runCommand("fill " + (x - 13) + " " + (y - 1) + " " + (z - 13) + " " + (x + 13) + " " + (y + 24) + " " + (z + 13) + " air");
 		}
 	}
 

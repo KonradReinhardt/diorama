@@ -39,11 +39,12 @@ public final class MapTile {
 	private int overlayShown = -1;
 	private boolean empty = true;
 	/**
-	 * The {@link dev.diorama.bake.Surface} plane as two bitsets, a bit per pixel: known, and water.
-	 * Null when no pixel of the tile is known. The coast is drawn from them (see CoastMask).
+	 * The {@link dev.diorama.bake.Surface} plane as three bitsets, a bit per pixel: known, water and
+	 * shore. Null when no pixel of the tile is known. The coast is drawn from them (see CoastMask).
 	 */
 	private long @Nullable [] surfaceKnown;
 	private long @Nullable [] surfaceWater;
+	private long @Nullable [] surfaceShore;
 	long lastDrawn;
 
     private long uploadCount;
@@ -55,6 +56,7 @@ public final class MapTile {
 			this.info = image.info();
 			this.surfaceKnown = null;
 			this.surfaceWater = null;
+			this.surfaceShore = null;
 			if (dev.diorama.bake.Surface.anyKnown(image.surface())) {
 				this.patchSurface(image.surface(), 0, 0, Projection.TILE_PIXELS);
 			}
@@ -128,6 +130,7 @@ public final class MapTile {
 		if (this.surfaceKnown == null) {
 			this.surfaceKnown = new long[size * size / 64];
 			this.surfaceWater = new long[size * size / 64];
+			this.surfaceShore = new long[size * size / 64];
 		}
 		for (int y = 0; y < edge; y++) {
 			for (int x = 0; x < edge; x++) {
@@ -138,6 +141,8 @@ public final class MapTile {
 				else this.surfaceKnown[i >> 6] &= ~bit;
 				if ((bits & dev.diorama.bake.Surface.WATER) != 0) this.surfaceWater[i >> 6] |= bit;
 				else this.surfaceWater[i >> 6] &= ~bit;
+				if ((bits & dev.diorama.bake.Surface.SHORE) != 0) this.surfaceShore[i >> 6] |= bit;
+				else this.surfaceShore[i >> 6] &= ~bit;
 			}
 		}
 	}
@@ -153,7 +158,8 @@ public final class MapTile {
 		if ((known[i >> 6] & bit) == 0) {
 			return 0;
 		}
-		return dev.diorama.bake.Surface.KNOWN | ((this.surfaceWater[i >> 6] & bit) != 0 ? dev.diorama.bake.Surface.WATER : 0);
+		return dev.diorama.bake.Surface.KNOWN | ((this.surfaceWater[i >> 6] & bit) != 0 ? dev.diorama.bake.Surface.WATER : 0)
+			| ((this.surfaceShore[i >> 6] & bit) != 0 ? dev.diorama.bake.Surface.SHORE : 0);
 	}
 
 	/** Whether any pixel's surface is known. */

@@ -35,7 +35,13 @@ periods the mask origin is passed modulo, so nothing jumps while panning or as t
 
 The GPU tiles are only colour, so bakes record what the coast needs: a byte per pixel
 (`bake.Surface`): `KNOWN` where the pixel was traced, `WATER` where its ray went through a water
-surface (`TileBaker.outWater`). Zero is unknown: pixels kept from tiles saved before bakes recorded
+surface (`TileBaker.outWater`), and `SHORE` where it shows land that really meets the water. The
+map's drawn edge between land and water isn't always a coast: a tower on an island, or a cliff,
+stands in front of water further north and hides it, and foam along its top and upper walls would
+float in mid-air. So after tracing, `TileBaker.markShores` looks at each land pixel next to a
+water pixel (or on the baked area's edge): it is shore only if the block its ray hit has water
+beside it, straight or diagonally, from two blocks below it to one above. Beaches, banks and the
+foot of a wall are shore; the rest of a tall wall and its top are not. Zero is unknown: pixels kept from tiles saved before bakes recorded
 it, or never traced. It travels with the pixels everywhere they go: full bakes and patches
 (`TileImage.surface`, `Patch.surface`), the redraw from saved chunks, `TileBaker.merge` (a pixel
 kept from the saved tile keeps its saved bits), and `TilePixels.surface` in the store.
@@ -46,7 +52,7 @@ atomically after the bundle. The bundle itself is unchanged, so builds that don'
 read maps as before. A bundle such a build writes later no longer matches the CRC, and its stale
 plane is ignored rather than trusted; nothing is deleted. Overviews record none.
 
-`BakeContext.LOOK_REVISION` went to 5, so in singleplayer on 26.3 tiles saved before are redrawn
+`BakeContext.LOOK_REVISION` went to 5 for the plane and 6 for shores, so in singleplayer on 26.3 tiles saved before are redrawn
 from the world's saved chunks in the background, nearest the views first, and gain their plane
 (only pixels already explored are redrawn). Elsewhere (multiplayer, older versions) a tile gains it
 when it is baked again, as the player passes by; until then its coasts show no effect.
@@ -58,8 +64,8 @@ On the client, `MapTile` keeps the plane as two bitsets (known, water): 64 KB a 
 `CoastMask`, one per view, samples the surface bits of the detailed tiles on the GPU under each of
 its 512 x 512 texels (texel from a map pixel up to 8 units, a power of two, snapping its origin
 every 64 texels), then a two-pass chamfer distance gives each texel's distance to the nearest
-known land in blocks, a texel being `texel` blocks across and `texel / 0.75` deep. Unknown texels
-never count as land, so water beside unexplored ground draws no foam. Red holds the distance in
+shore in blocks, a texel being `texel` blocks across and `texel / 0.75` deep. Only shore texels
+count: land that only hides water, and unexplored ground, draw no foam. Red holds the distance in
 sixteenths of a block (up to 16), green water, blue land. It is built again when the view's
 origin or texel changes, and at most every 100 ms as tiles arrive.
 
@@ -73,6 +79,8 @@ fours), and the art pixel with its phase.
 
 `DIORAMA_TESTS=coast DIORAMA_RENDER_DISTANCE=8 ./gradlew --configure-on-demand :26.3:runClientGameTest`
 finds a shore near the player, asserts the bake recorded the water there, and captures it close up
-over a few frames, at the usual zoom, further out, and with the effect off. `SurfacePlaneTest`
+over a few frames, at the usual zoom, further out, and with the effect off; then builds a tower on
+an island in a pool high in the air, asserts its top is land but not shore, and captures it with
+the effect on and off. `SurfacePlaneTest`
 covers saving and reading the plane, patches, and a bundle rewritten by another build;
 `CoastMaskTest` the distances.

@@ -355,6 +355,50 @@ public final class TileBaker {
         }
     }
 
+	/** Marks a land pixel whose ray hit a solid block, until {@link #markShores} decides about it. */
+	private static final int LAND_HIT = 0x80;
+
+	/**
+	 * Sets {@link Surface#SHORE} on the land pixels whose block meets water: water beside it (or
+	 * diagonally), from two blocks below its height to one above. Only land next to a water pixel
+	 * is looked at, or on the area's edge, whose neighbours lie in another bake.
+	 */
+	private void markShores(byte[] surface, int[] landHits, int width, int height) {
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				int k = y * width + x;
+				if ((surface[k] & LAND_HIT) == 0) {
+					continue;
+				}
+				surface[k] &= ~LAND_HIT;
+				boolean edge = x == 0 || y == 0 || x == width - 1 || y == height - 1;
+				if (!edge && !isWater(surface[k - 1]) && !isWater(surface[k + 1]) && !isWater(surface[k - width]) && !isWater(surface[k + width])) {
+					continue;
+				}
+				if (this.besideWater(landHits[k * 3], landHits[k * 3 + 1], landHits[k * 3 + 2])) {
+					surface[k] |= Surface.SHORE;
+				}
+			}
+		}
+	}
+
+	private static boolean isWater(byte bits) {
+		return (bits & Surface.WATER) != 0;
+	}
+
+	private boolean besideWater(int x, int y, int z) {
+		for (int dy = -2; dy <= 1; dy++) {
+			for (int dz = -1; dz <= 1; dz++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					if (dx == 0 && dz == 0) continue;
+					int id = this.reader.state(x + dx, y + dy, z + dz);
+					if (id != VoxelReader.UNKNOWN && this.looks.kind[id] == BlockLooks.WATER) return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** A full tile image from level-0 pixels: mips and fog coverage. */
 	public static TileImage image(TileKey key, int[] pixels) {
 		int size = Projection.TILE_PIXELS;
@@ -422,6 +466,8 @@ public final class TileBaker {
 		float[] waterDepth = painted ? new float[n] : null;
 		boolean[] sunlit = painted ? new boolean[n] : null;
 		float[] albedo = painted ? new float[n * 3] : null;
+		// The block each land pixel's ray hit, for telling shore from land that only hides water.
+		int[] landHits = surface == null ? null : new int[width * height * 3];
 		double minU = this.key.minU();
 		double minV = this.key.minV();
 		double unitsPerPixel = 1.0 / Projection.PIXELS_PER_UNIT;
@@ -439,7 +485,15 @@ public final class TileBaker {
 					info[iy * width + ix] = (byte) this.overlayBits();
 				}
 				if (surface != null && ix >= 0 && iy >= 0 && ix < width && iy < height) {
-					surface[iy * width + ix] = Surface.of(!Float.isNaN(this.outWater));
+					int k = iy * width + ix;
+					boolean water = !Float.isNaN(this.outWater);
+					surface[k] = Surface.of(water);
+					if (!water && this.hitSolid) {
+						landHits[k * 3] = this.hitX;
+						landHits[k * 3 + 1] = this.hitY;
+						landHits[k * 3 + 2] = this.hitZ;
+						surface[k] |= LAND_HIT;
+					}
 				}
 				pixels[i] = this.abgr(this.outR, this.outG, this.outB, 255, painted);
 				if (nights != null) {
@@ -458,6 +512,9 @@ public final class TileBaker {
 					albedo[i * 3 + 2] = this.outAlbedoB;
 				}
 			}
+		}
+		if (surface != null) {
+			this.markShores(surface, landHits, width, height);
 		}
 		if (border == 0) {
 			return;
