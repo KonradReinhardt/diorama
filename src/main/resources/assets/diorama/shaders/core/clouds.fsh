@@ -92,10 +92,12 @@ const float ROW = 0.75;
 const float VOXEL = 2.0;
 const float LAYER = 2.0;
 const float LAYERS = 5.0;
-// Each cloud has a cell of its own, this many blocks square, and keeps within REACH of the cell's
-// middle: 8 blocks of jitter, then its puffs, at most 1.7 of its largest radius, 9.
-const float CELL = 64.0;
-const float REACH = 24.0;
+// Each cloud has a cell of its own, this many blocks square, and only some cells have one. It
+// sits anywhere within JITTER of the cell's middle and its puffs within 2 of its radius, at most
+// 9.5, so it keeps within REACH of the middle; a line of sight then meets at most two by two cells.
+const float CELL = 128.0;
+const float JITTER = 38.0;
+const float REACH = 57.0;
 // Blocks from the ground up to the clouds' flat bases.
 const float HEIGHT = 40.0;
 // The sun: the tiles' own (TileBaker.SUN_AZIMUTH_*), in the west and slightly south, 50 degrees
@@ -172,7 +174,7 @@ float known(vec2 c) {
 float coverAt(vec2 p) {
     vec4 n = textureLod(Sampler1, p / REGION_PERIOD, 0.0);
     float weather = n.g * 0.65 + n.b * 0.35;
-    return smoothstep(0.46 - 0.4 * rain, 0.62 - 0.4 * rain, weather);
+    return smoothstep(0.48 - 0.4 * rain, 0.64 - 0.4 * rain, weather);
 }
 
 // A hash of a cell, repeating every DRIFT blocks across and REGION_PERIOD down.
@@ -194,23 +196,25 @@ vec4 near[NEAR];
 int nearCount;
 
 // Adds the puffs of the cloud in a drifting cell to the near ones, if it could reach u between
-// depths w0 and w1: each the (u, w) of its middle, its height and its radius. A cloud grows from
-// nothing as its cell drifts into cloudy weather and shrinks away as it leaves.
+// depths w0 and w1: each the (u, w) of its middle, its height and its radius. Fewer than half the
+// cells have a cloud, placed anywhere in the cell, most of them small, each of its own shape: a
+// tall middle puff, lower ones either side, sometimes one in front and a taller one behind. A
+// cloud grows from nothing as its cell drifts into cloudy weather and shrinks away as it leaves.
 void addCloud(vec2 cell, float u, float w0, float w1) {
-    vec2 middle = (cell + 0.5) * CELL + (vec2(cellHash(cell, 1u), cellHash(cell, 2u)) - 0.5) * 16.0;
-    float r = 5.0 + 4.0 * cellHash(cell, 4u);
-    if (abs(u - middle.x) > 1.7 * r || w0 > middle.y + 1.7 * r || w1 < middle.y - 1.7 * r) return;
+    if (cellHash(cell, 8u) > 0.42) return;
+    vec2 middle = (cell + 0.5) * CELL + (vec2(cellHash(cell, 1u), cellHash(cell, 2u)) * 2.0 - 1.0) * JITTER;
+    float size = cellHash(cell, 4u);
+    float r = 3.5 + 6.0 * size * size;
+    if (abs(u - middle.x) > 2.0 * r || w0 > middle.y + 2.0 * r || w1 < middle.y - 2.0 * r) return;
     float grown = clamp((coverAt(middle + vec2(wind * DRIFT, 0.0)) - 0.2 - 0.8 * cellHash(cell, 3u)) * 4.0, 0.0, 1.0);
     if (grown <= 0.0) return;
     r *= 0.35 + 0.65 * smoothstep(0.0, 1.0, grown);
-    float lean = cellHash(cell, 5u) - 0.5;
-    // A tall middle puff with a lower one either side and in front, and sometimes another tall
-    // one behind, so each step down to the south shows a band of shade like a cumulus' lobes.
-    near[nearCount++] = vec4(middle, 0.8 * r, r);
-    near[nearCount++] = vec4(middle + vec2(-0.95 * r, (0.25 + lean * 0.4) * r), 0.5 * r, 0.72 * r);
-    near[nearCount++] = vec4(middle + vec2(1.0 * r, (0.3 - lean * 0.4) * r), 0.45 * r, 0.68 * r);
-    near[nearCount++] = vec4(middle + vec2(lean * 0.6 * r, 0.75 * r), 0.35 * r, 0.6 * r);
-    if (cellHash(cell, 6u) > 0.4) near[nearCount++] = vec4(middle + vec2((0.5 - lean) * 0.8 * r, -0.6 * r), 0.95 * r, 0.75 * r);
+    vec4 h = vec4(cellHash(cell, 5u), cellHash(cell, 6u), cellHash(cell, 7u), cellHash(cell, 9u));
+    near[nearCount++] = vec4(middle, (0.7 + 0.25 * h.x) * r, r);
+    near[nearCount++] = vec4(middle + vec2(-0.75 - 0.4 * h.y, h.z * 0.6 - 0.2) * r, (0.4 + 0.25 * h.w) * r, (0.55 + 0.25 * h.x) * r);
+    near[nearCount++] = vec4(middle + vec2(0.75 + 0.4 * h.z, h.y * 0.6 - 0.2) * r, (0.4 + 0.25 * h.x) * r, (0.55 + 0.25 * h.w) * r);
+    if (h.w > 0.4) near[nearCount++] = vec4(middle + vec2(h.z * 0.8 - 0.4, 0.6 + 0.25 * h.x) * r, 0.35 * r, (0.5 + 0.15 * h.y) * r);
+    if (h.y > 0.5) near[nearCount++] = vec4(middle + vec2(h.w - 0.5, -0.45 - 0.25 * h.z) * r, (0.8 + 0.2 * h.x) * r, (0.6 + 0.2 * h.z) * r);
 }
 
 // Gathers the clouds that could stand anywhere from (u, w0) to (u, w1), drifted.

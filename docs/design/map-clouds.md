@@ -11,7 +11,7 @@ counted as explored, and switching them on or off never redraws a tile.
 - **Clouds on the minimap** (`minimapClouds`, Minimap, off by default): they would hide much of its
   small view.
 
-Both need the render pipelines of 1.21.6 and later (`MapClouds.supported()`); older versions don't
+Both need the render pipelines of 1.21.6 and later (`MapEffect.supported()`); older versions don't
 list them. Clouds are only drawn on the surface under an open sky: not in cave slices, under a
 roof (the Nether) or where the dimension has no sky light (the End).
 
@@ -43,16 +43,20 @@ toward a moonlit blue.
 Clouds don't cover the map evenly. A weather field anchored to the world (the fog's noise texture
 over 8192 blocks) decides where they gather: in clear weather a few patches some hundreds of
 blocks across, in rain most of the map (rain comes from `EnvironmentLighting`, so it only counts
-where day and night lighting is supported). Each cloud has a cell of its own, 64 blocks square,
-with a hashed position, size and shape; the cells drift east with the wind, 1024 blocks per loop
-of `GameTime` (about 0.85 blocks a second). A cloud's size follows the weather where it is, so it
-grows from nothing as it drifts into a cloudy patch and shrinks away as it leaves.
+where day and night lighting is supported). Each cloud has a cell of its own, 128 blocks square,
+and fewer than half the cells have one, placed anywhere within 38 blocks of the cell's middle, so
+they are scattered rather than lined up and never crowd each other. Sizes lean small (a radius of
+3.5 to 9.5 blocks, mostly near the low end), and each has its own shape: a tall middle puff, lower
+ones either side at hashed distances and heights, sometimes one in front and a taller one behind.
+The cells drift east with the wind, 1024 blocks per loop of `GameTime` (about 0.85 blocks a
+second). A cloud's size follows the weather where it is, so it grows from nothing as it drifts
+into a cloudy patch and shrinks away as it leaves.
 
 ## How it is drawn
 
-`MapViewport.draw` draws, in order: the fog's opaque underlay, the tiles, the clouds, then the fog
-over everything. The clouds are one quad over the view through their own pipeline,
-`DioramaPipelines.CLOUDS` (`fog.vsh` with `clouds.fsh`), through `MapCanvas.clouds`. They read the
+`MapViewport.draw` draws, in order: the fog's opaque underlay, the tiles, the coast
+([coast.md](coast.md)), the clouds, then the fog over everything. The clouds are one quad over the view through their own pipeline,
+`DioramaPipelines.CLOUDS` (`fog.vsh` with `clouds.fsh`), through `MapCanvas.effect`. They read the
 fog's mask (sampler 0), so clouds and shadows only show over explored ground and fade with it at
 the frontier, and the fog's noise (sampler 1) for the weather. Neither is rebuilt for them.
 
@@ -65,8 +69,8 @@ the cells' hash also repeats with the wind's 1024 blocks, so nothing jumps as `G
 
 Per pixel, `sight` follows the map's line of sight, `(u, w0 + y, y)` for falling height `y`, row
 by row of boxes from the south, and stops at the first box whose south face or top it meets.
-Only the four cells it can reach are gathered (`REACH` covers a cloud's jitter and puffs), at most
-20 puffs.
+Only the cells it can reach are gathered (`REACH` covers a cloud's jitter and puffs, so at most two
+by two), and of those only clouds whose box the line crosses: at most 20 puffs.
 
 ## Testing
 
