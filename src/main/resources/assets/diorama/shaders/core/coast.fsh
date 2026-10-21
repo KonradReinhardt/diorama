@@ -166,6 +166,17 @@ float distanceAt(vec2 c) {
     return decode(textureLod(Sampler0, uvAt(c), 0.0).r);
 }
 
+// Whether the point drawn at c is water: the part of its mask texel it falls in, so nothing is
+// drawn on land even when a texel spans several blocks.
+bool waterAt(vec2 c) {
+    vec2 at = uvAt(c) * vec2(texels);
+    ivec2 t = clamp(ivec2(floor(at)), ivec2(0), texels - 1);
+    vec4 cell = texelFetch(Sampler0, t, 0);
+    int parts = int(cell.b * 255.0 + 0.5) | int(cell.a * 255.0 + 0.5) << 8;
+    ivec2 part = clamp(ivec2(floor(fract(at) * 4.0)), ivec2(0), ivec2(3));
+    return ((parts >> (part.y * 4 + part.x)) & 1) != 0;
+}
+
 // Whether a line `at` blocks from the shore runs through this art pixel, which spans `pixel`
 // blocks of distance: lines are one art pixel thick at every zoom.
 bool onLine(float d, float at, float pixel) {
@@ -192,14 +203,7 @@ void main() {
 
     vec2 index = setUpGrid();
     vec2 c = artCentre(index);
-    // Only on water: the part of the texel under this art pixel, so nothing is drawn on land even
-    // when a texel spans several blocks.
-    vec2 at = uvAt(c) * vec2(texels);
-    ivec2 t = clamp(ivec2(floor(at)), ivec2(0), texels - 1);
-    vec4 cell = texelFetch(Sampler0, t, 0);
-    int parts = int(cell.b * 255.0 + 0.5) | int(cell.a * 255.0 + 0.5) << 8;
-    ivec2 part = clamp(ivec2(floor(fract(at) * 4.0)), ivec2(0), ivec2(3));
-    if (((parts >> (part.y * 4 + part.x)) & 1) == 0) discard;
+    if (!waterAt(c)) discard;
     vec4 m = textureLod(Sampler0, uvAt(c), 0.0);
     float d = decode(m.r);
     float sea = smoothstep(0.1, 0.9, m.g);
@@ -225,21 +229,26 @@ void main() {
     float detail = 1.0 - smoothstep(0.75, 2.0, art);
 
     // Ocean waves: one rolls in every WAVE_PERIOD seconds, at slightly different times along the
-    // coast, and breaks into a surge of foam that runs up the shore and draws back.
+    // coast, and breaks on the shore, flaring the foam and leaving bubbles as it draws back.
     float phase = fract(seconds / WAVE_PERIOD + beat * 1.7);
     float surge = fract(phase - ROLL);
     float rush = smoothstep(0.0, 0.06, surge) * (1.0 - smoothstep(0.06, 0.5, surge));
-    float calm = 0.3 + 0.4 * swell;
-    float foam = max(pixel, mix(calm, max(calm, 0.3 + 1.5 * rush), waves));
+    // Foam is the water's edge itself, one art pixel at every zoom: water with land beside it, in
+    // any of the four directions, that is the shore and not land standing over water it hides
+    // (or ground not explored), which lie far from any shore.
+    bool edge = !waterAt(c + vec2(step.x, 0.0)) || !waterAt(c - vec2(step.x, 0.0))
+        || !waterAt(c + vec2(0.0, step.y)) || !waterAt(c - vec2(0.0, step.y));
+    bool foam = edge && d < max(2.0 * pixel, 1.0 + texel);
 
     vec3 white = sepia ? vec3(0.97, 0.93, 0.82) : vec3(0.95, 0.98, 1.0);
     vec3 pale = sepia ? vec3(0.86, 0.79, 0.64) : vec3(0.78, 0.90, 0.97);
     vec3 night = mix(vec3(0.30, 0.34, 0.48), vec3(1.0), daylight);
     vec4 color = vec4(0.0);
-    if (d < foam) {
+    if (foam) {
+        // Breathing with the swell, brightest as a wave breaks; up close, broken here and there.
         float gaps = (0.30 - 0.15 * swell) * (1.0 - 0.6 * waves * rush) * detail;
         if (noise(p + vec2(seconds * 32.0 / 120.0, 0.0), 8.0, 3) >= gaps) {
-            color = vec4(white, d < foam - pixel ? 0.9 : 0.65);
+            color = vec4(white, max(0.6 + 0.25 * swell, 0.95 * waves * rush));
         }
     }
     if (color.a == 0.0 && waves > 0.0 && phase < ROLL) {
@@ -248,14 +257,14 @@ void main() {
         float crest = WAVE_START * (1.0 - phase / ROLL);
         float rise = waves * (0.25 + 0.6 * (1.0 - crest / WAVE_START));
         bool whole = noise(p + vec2(seconds * 64.0 / 1200.0, 0.0), 16.0, 1) >= 0.32;
-        if (whole && crest > foam && onLine(d, crest, pixel)) color = vec4(white, 0.8 * rise);
-        else if (whole && crest > foam && onLine(d, crest + pixel, pixel)) color = vec4(pale, 0.45 * rise);
+        if (whole && crest > 2.0 * pixel && onLine(d, crest, pixel)) color = vec4(white, 0.8 * rise);
+        else if (whole && crest > 2.0 * pixel && onLine(d, crest + pixel, pixel)) color = vec4(pale, 0.45 * rise);
     }
-    if (color.a == 0.0 && waves > 0.0 && d < 0.3 + 1.5 * (1.0 - smoothstep(0.06, 0.5, surge)) && noise(p, 8.0, 2) > 0.62) {
-        // Bubbles left on the sand as the surge draws back.
+    if (color.a == 0.0 && waves > 0.0 && d > pixel && d < 0.3 + 1.5 * (1.0 - smoothstep(0.06, 0.5, surge)) && noise(p, 8.0, 2) > 0.62) {
+        // Bubbles left behind as the surge draws back, a pixel each.
         color = vec4(white, 0.4 * waves * detail);
     }
-    if (color.a == 0.0 && waves < 1.0 && d > foam + pixel && d < ripples) {
+    if (color.a == 0.0 && waves < 1.0 && d > 2.0 * pixel && d < ripples) {
         // Ripples on calm water, a few blocks apart, dashed; where waves roll in they give way.
         float wave = (d + seconds * RIPPLE_SPEED + beat * SPACING) / spacing;
         float n = floor(wave + 0.5);
