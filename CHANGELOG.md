@@ -10,7 +10,7 @@ Since upstream 0.2.1:
 
 - **Map directions.** The camera can face north (default), east, south or west; each direction keeps its own saved map.
 - **Pixel-perfect block grid.** Every block face is 4×3 map pixels at a 45° pitch, one ray per pixel, outlines from the faces' geometry, and the world map rests on whole screen pixels.
-- **Render styles.** Plain, Outlined (default), Painted and Painted without outlines, computed while baking.
+- **Render styles.** Plain, Outlined, Painted and Painted without outlines (default), computed while baking.
 - **Fog styles.** Clouds (default), Antique map and Antique map (color), both in 16× pixel art; in singleplayer 26.3 the unknown is sketched from the seed's biomes without generating chunks.
 - **Day and night lighting** on Fabric 26.3: surface tiles blend saved day and night colours with the world's time; torches and lava light the map at night.
 - **Banner waypoints.** Waypoints are pixel-art banners designed like at the loom, shared through chat and importable from Xaero's Minimap.
@@ -25,5 +25,6 @@ New in this release:
 
 - The pointer turns into a hand over everything that can be clicked (book controls, the right-click menu, banners on the map, dye swatches), "not allowed" over switched-off controls, a crosshair while picking a region's corner and a cross of arrows while dragging the map. The game only lets mods pick the pointer from 1.21.9.
 - Sounds the interface missed: clicking a banner on the map turns the book's page, the right-click menu opens with a soft paper sound, the book's page arrows and close mark turn a page, Esc and the waypoint key turn it as they shut or open the book, revealing a region starts with the spyglass and ends with the cartography table, the dye swatches click and the banner editor sounds like the loom.
+- New defaults, for configs that don't set them yet: Painted without outlines, Always day lighting, the minimap cut to the shape of a vanilla map at a closer zoom (2 GUI pixels per block), only players on the radar, and spawn spots that are dark even by day marked on the world map. Existing configs keep their choices.
 - Periodic bake statistics are logged only with `DIORAMA_DEBUG=1`.
 - Source indentation made consistent (tabs).

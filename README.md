@@ -123,7 +123,7 @@ Mod Menu is optional. To verify its entrypoint in development, use
 `DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.
 
 The fork's branch and validation workflow is documented in [CONTRIBUTING.md](CONTRIBUTING.md), and what each release changed in [CHANGELOG.md](CHANGELOG.md).
-Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lighting, choose World time (default), Always day or Always night. The minimap and world map share this setting. Surface tiles blend their saved day/night colors as the world's sky and weather change; changing the clock does not rebuild terrain or reset exploration. Torches, lanterns and lava illuminate nearby mapped surfaces at night.
+Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lighting, choose World time, Always day (the default from 1.0.0) or Always night. The minimap and world map share this setting. Surface tiles blend their saved day/night colors as the world's sky and weather change; changing the clock does not rebuild terrain or reset exploration. Torches, lanterns and lava illuminate nearby mapped surfaces at night.
 
 Caves, roofed dimensions and the End retain their existing lighting. Decorative shadows keep a fixed direction; colored-light mods are not modeled. Earlier Fabric versions and NeoForge retain daytime surface rendering until their GPU backends are ported.
 
@@ -138,8 +138,8 @@ Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints tog
 ## Painted render style
 
 Settings → Look → Render replaces the old outlines toggle with **Plain**, **Outlined** (the
-default, the previous look), **Painted** and **Painted, no outlines** (the same paint without any
-ink lines). Painted turns explored terrain into a hand-painted
+previous look), **Painted** and **Painted, no outlines** (the same paint without any
+ink lines, the default from 1.0.0). Painted turns explored terrain into a hand-painted
 fantasy map: block textures and soft shading melt into flat areas of paint, light is cel shaded
 (one sunlit colour, one bluish shadow colour), soft sepia ink lines follow edges and colour
 boundaries, coasts are inked with a line of foam, water steps from pale shallows to deep teal

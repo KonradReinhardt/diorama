@@ -73,10 +73,29 @@ public class DioramaClientTest implements FabricClientGameTest {
 	/** How many chunks must be mapped before a scenario starts: most of what the render distance loads. */
 	static final int LOADED_CHUNKS = Math.min(400, (2 * RENDER_DISTANCE + 1) * (2 * RENDER_DISTANCE + 1) * 2 / 3);
 
+	/**
+	 * The settings the scenarios were written for, whatever the defaults or the run folder's config
+	 * say: the outlined look by world time, the plain minimap frame at its middle zoom, every mob on
+	 * the radar and no spawn spots. Scenarios that need others set them themselves.
+	 */
+	static void testBaseline() {
+		Settings s = Settings.get();
+		s.renderStyle = Settings.RenderStyle.OUTLINED;
+		s.lighting = dev.diorama.EnvironmentLighting.Mode.WORLD;
+		s.minimapFrame = Settings.MinimapFrame.PLAIN;
+		s.minimapZoom = 3;
+		s.radarHostile = true;
+		s.radarNeutral = true;
+		s.radarPassive = true;
+		s.spawnSpots = Settings.SpawnSpots.OFF;
+		s.save();
+	}
+
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		context.getInput().resizeWindow(1600, 900);
 		context.runOnClient(mc -> mc.options.renderDistance().set(RENDER_DISTANCE));
+		context.runOnClient(mc -> testBaseline());
 		String seed = System.getProperty("diorama.seed", "diorama");
 		Set<String> tests = selectedTests();
 		if (tests.contains("showcase") && tests.size() > 1) {

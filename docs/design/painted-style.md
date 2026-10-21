@@ -2,7 +2,7 @@
 
 Implementado em 20/10/2026 na branch `feature/painted-style`. A opção substitui o antigo toggle
 de contornos: `Configurações → Aparência → Render` alterna entre **Simples** (sem contornos),
-**Contornos** (o visual anterior e padrão), **Pintado** e **Pintado sem contornos**. A preferência
+**Contornos** (o visual anterior), **Pintado** e **Pintado sem contornos** (padrão desde a 1.0.0). A preferência
 é a mesma para minimapa, mapa mundial e tela do Mod Menu.
 
 **Pintado sem contornos** (`MapStyle.ink` falso) é o mesmo acabamento sem nenhuma linha de
@@ -81,7 +81,7 @@ inteiro de pixels de tela por texel; ver `docs/design/pixel-grid.md`.
 ## Migração
 
 Configs antigas só têm `outlines`: `true` vira Contornos, `false` vira Simples, e o campo deixa de
-ser gravado. O padrão para configs novas continua Contornos.
+ser gravado. O padrão para configs novas é Pintado sem contornos desde a 1.0.0 (antes, Contornos).
 
 ## Custo
 
