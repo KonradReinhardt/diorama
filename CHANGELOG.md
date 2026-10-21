@@ -28,4 +28,4 @@ New in this release:
 - Sounds the interface missed: clicking a banner on the map turns the book's page, the right-click menu opens with a soft paper sound, the book's page arrows and close mark turn a page, Esc and the waypoint key turn it as they shut or open the book, revealing a region starts with the spyglass and ends with the cartography table, the dye swatches click and the banner editor sounds like the loom.
 - New defaults, for configs that don't set them yet: the Painted style, the minimap cut to the shape of a vanilla map at a closer zoom (2 GUI pixels per block) and only players on the radar. Existing configs keep their choices.
 - Periodic bake statistics are logged only with `DIORAMA_DEBUG=1`.
-- Source indentation made consistent (tabs).
+- Source indentation made consistent (tabs), and every design and testing document is in English.

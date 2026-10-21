@@ -1,336 +1,345 @@
-# Mapa mundi com interface de livro — plano
+# A book interface over the world map — plan
 
-Status: plano escrito em 20/10/2026 e revisado no mesmo dia depois do estilo de render Pintado e
-da correção de nitidez (`feature/painted-style`), e de novo depois da grade pixel perfect, do
-Pintado sem contornos e da opção de tingir o explorado no mapa antigo (`feature/pixel-grid`).
-Implementado em 20/10/2026 na branch `feature/book-map-ui` (etapas 1–8); a seção "Como ficou" no
-fim registra onde a implementação se afastou do plano.
+Status: plan written on 2026-10-20 and revised the same day after the Painted render style and the
+sharpness fix (`feature/painted-style`), and again after the pixel-perfect grid, Painted without
+outlines and the option to tint the explored map on the antique map (`feature/pixel-grid`).
+Implemented on 2026-10-20 on the `feature/book-map-ui` branch (steps 1–8); the "How it turned out"
+section at the end records where the implementation departed from the plan. Interface sounds and the
+hand pointer over clickable controls were added for 1.0.0 (see "After 1.0.0").
 
-## Objetivo
+## Goal
 
-Reformular os menus do mapa mundi para uma interface imersiva de livro em pixel art (páginas de
-pergaminho quente, contorno de tinta marrom, capa de couro, cantoneiras douradas), sem deixar de
-mostrar o mapa em tela cheia:
+Recast the world map's menus as an immersive pixel-art book interface (warm parchment pages, brown
+ink outlines, a leather cover, gold corners), while still showing the map full screen:
 
-- O mapa continua ocupando a tela inteira. Os menus são um livro aberto por cima dele.
-- A navegação é feita por marcadores (fitas) laterais coloridos, cada um com o ícone de um item
-  do Minecraft desenhado pelo renderizador de itens do jogo, então resource packs mudam os ícones.
-- Opções e waypoints/estandartes ficam em seções separadas do livro.
-- Configurações que afetam o mapa mundi são alteradas dentro do próprio mapa mundi, sem trocar de
-  tela. Só as configurações exclusivas do minimapa saem para outra tela.
-- Uma animação curta de zoom ao abrir o mapa mundi.
+- The map still takes the whole screen. The menus are a book opened over it.
+- Navigation is through coloured side bookmarks (ribbons), each with the icon of a Minecraft item
+  drawn by the game's item renderer, so resource packs change the icons.
+- Options and waypoints/banners are in separate sections of the book.
+- Settings that affect the world map are changed inside the world map itself, without switching
+  screens. Only settings exclusive to the minimap go to another screen.
+- A short zoom animation as the world map opens.
 
-A imagem de referência define a estética, não os pixels: todos os sprites são arte original do mod.
+The reference image sets the aesthetic, not the pixels: every sprite is the mod's original art.
 
-## Como é hoje
+## How it is today
 
-- `MapScreen`: mapa em tela cheia, faixa preta de status no topo, faixa de ajuda embaixo e um
-  botão vanilla "Settings" no canto superior direito que troca para `SettingsScreen(this)`.
-  Clique em estandarte abre `WaypointEditScreen`; botão direito cria waypoint; tecla U abre
-  `WaypointListScreen`; C, PgUp/PgDn e Espaço controlam cavernas, fatia e recentralização.
-- `SettingsScreen`: todas as opções em três colunas de botões vanilla que alternam valores, com
-  layout compacto para 427×240. Também é a tela do Mod Menu e da tecla de configurações. Em
-  Aparência, o antigo toggle "Contornos" virou o ciclo **Render** (`Settings.renderStyle`:
-  `PLAIN`/`OUTLINED`/`PAINTED`, padrão `OUTLINED`, com tooltip); configs antigas migram do campo
-  privado `outlines`, que não é mais gravado.
-- Estilo **Pintado** (`docs/design/painted-style.md`): o terreno vira mapa de fantasia pintado à
-  mão no bake (`TileBaker` + `PaintedFinish`) — luz chapada em dois tons, tinta sépia sutil, costas
-  com espuma, água em aguadas, pinceladas e grão de papel. Trocar de Render redesenha o mapa
-  inteiro em segundo plano pelo refresh atômico existente, sem perder a exploração.
-- Tiles do mapa são ampliados com NEAREST sempre que um texel cobre ≥ 1 pixel de tela
-  (`MapViewport.magnified`, que conta a escala da GUI e o nível de overview); abaixo disso, mipmaps
-  trilineares. Antes o mapa ficava borrado com GUI 2× ou 3×.
-- `WaypointListScreen`: lista com Editar/Ocultar/Excluir/TP e importação do Xaero.
-- Já existem peças reaproveitáveis: `Spring` (animação por mola), `BannerAtlas`/`BannerCompositor`
-  (estandartes em pixel art), `PaperFrame` (leitura de texturas do resource pack), `SmoothZoom`.
+- `MapScreen`: the map full screen, a black status strip at the top, a help strip at the bottom and a
+  vanilla "Settings" button in the top right corner that switches to `SettingsScreen(this)`. Clicking
+  a banner opens `WaypointEditScreen`; a right click creates a waypoint; the U key opens
+  `WaypointListScreen`; C, PgUp/PgDn and Space control caves, the slice and recentring.
+- `SettingsScreen`: every option in three columns of vanilla buttons that cycle values, with a compact
+  layout for 427×240. It is also the screen for Mod Menu and the settings key. Under Look, the old
+  "Outlines" toggle became the **Render** cycle (`Settings.renderStyle`:
+  `PLAIN`/`OUTLINED`/`PAINTED`, default `OUTLINED`, with a tooltip); old configs migrate from the
+  private `outlines` field, which is no longer written.
+- The **Painted** style (`docs/design/painted-style.md`): terrain becomes a hand-painted fantasy map at
+  bake time (`TileBaker` + `PaintedFinish`): flat two-tone light, subtle sepia ink, foamy coasts,
+  water in washes, brushstrokes and paper grain. Switching Render redraws the whole map in the
+  background through the existing atomic refresh, without losing exploration.
+- Map tiles are magnified with NEAREST whenever a texel covers ≥ 1 screen pixel
+  (`MapViewport.magnified`, which counts the GUI scale and the overview level); below that, trilinear
+  mipmaps. The map used to be blurry at 2× or 3× GUI.
+- `WaypointListScreen`: a list with Edit/Hide/Delete/TP and the Xaero's import.
+- Reusable pieces already exist: `Spring` (spring animation), `BannerAtlas`/`BannerCompositor`
+  (pixel-art banners), `PaperFrame` (reading resource pack textures), `SmoothZoom`.
 
-## Organização do livro
+## How the book is organised
 
-### Estados
+### States
 
-- **Fechado** (padrão ao abrir o mapa): mapa livre em tela cheia; só as fitas aparecem saindo da
-  borda direita da tela, como marcadores para fora das páginas.
-- **Aberto**: o livro (duas páginas) aparece sobre o mapa; as fitas passam a sair da borda direita
-  do livro, e a fita da seção atual fica mais comprida e "presa" à página.
-- O livro lembra a última seção e o waypoint selecionado enquanto o jogo estiver aberto (estado
-  estático em memória, não salvo em disco). Voltar de uma tela filha (editor de estandarte,
-  configurações do minimapa) reabre o livro na mesma seção, sem repetir a animação de abertura.
+- **Shut** (the default as the map opens): the map free and full screen; only the ribbons show,
+  coming out of the screen's right edge, like bookmarks sticking out of the pages.
+- **Open**: the book (two pages) shows over the map; the ribbons now come out of the book's right
+  edge, and the current section's ribbon is longer and "held" by the page.
+- The book remembers the last section and the selected waypoint while the game is running (static
+  state in memory, not saved to disk). Coming back from a child screen (the banner editor, the
+  minimap settings) reopens the book at the same section, without repeating the opening animation.
 
-### Marcadores (fitas)
+### Bookmarks (ribbons)
 
-| Fita | Cor | Item (ícone) | Conteúdo |
+| Ribbon | Colour | Item (icon) | Content |
 |---|---|---|---|
-| Estandartes | vermelho | `minecraft:red_banner` | lista de waypoints + opções de waypoints e estandartes |
-| Aparência | azul | `minecraft:filled_map` | render (Simples/Contornos/Pintado/Pintado sem contornos), estilo do fog, tingir explorado (mapa antigo), cartografia da seed, fog sempre, nuvens passageiras, espuma e marolas, sombreamento, qualidade, iluminação, direção |
-| Camadas | verde | `minecraft:lantern` | superfície/caverna, fatia Y (− / +), grade de chunks, slime chunks, pontos de spawn |
-| Radar | amarelo | `minecraft:spyglass` | jogadores, hostis, neutros, passivos (com as carinhas de `MobFaces`), alcance |
-| Minimapa | creme | `minecraft:compass` | sai para a tela de opções do minimapa (com um pequeno sinal de "sair" na fita) |
+| Banners | red | `minecraft:red_banner` | the waypoint list + waypoint and banner options |
+| Look | blue | `minecraft:filled_map` | render (Plain/Outlined/Painted/Painted no outlines), fog style, tint explored (antique map), seed cartography, always fog, drifting clouds, foam and ripples, shading, quality, lighting, direction |
+| Layers | green | `minecraft:lantern` | surface/cave, Y slice (− / +), chunk grid, slime chunks, spawn spots |
+| Radar | yellow | `minecraft:spyglass` | players, hostile, neutral, passive (with the faces from `MobFaces`), range |
+| Minimap | cream | `minecraft:compass` | leaves for the minimap's options screen (with a small "leave" sign on the ribbon) |
 
-Além das fitas: um "X" no canto do livro (como na referência) fecha o livro, e não o mapa.
+Besides the ribbons: an "X" at the book's corner (as in the reference) shuts the book, not the map.
 
-Seções com mais conteúdo que duas páginas usam as abas do topo do livro (como as quatro abas da
-referência), também com ícones de item. Previsto só para Estandartes: **Lista**
-(`minecraft:red_banner`) e **Opções** (`minecraft:loom`).
+Sections with more content than two pages use the tabs on the book's top edge (like the reference's
+four tabs), also with item icons. Planned only for Banners: **List** (`minecraft:red_banner`) and
+**Options** (`minecraft:loom`).
 
-### Classificação das configurações
+### Sorting the settings
 
-Regra: tudo o que muda o que o mapa mundi mostra fica no livro, inclusive o que vale também para o
-minimapa (radar, sobreposições, aparência, waypoints). Sai do mapa somente o que é exclusivo do
-minimapa:
+Rule: everything that changes what the world map shows stays in the book, including what also
+applies to the minimap (radar, overlays, look, waypoints). Only what is exclusive to the minimap
+leaves the map:
 
-- **No livro**: `renderStyle`, `fogStyle`, `antiqueTintsExplored`, `seedPreview`, `alwaysFogOfWar`, `mapClouds`, `mapCoast`,
-  `depthShading`, `quality`, `lighting` (quando `EnvironmentLighting.supported()`), `mapDirection`,
-  `chunkGrid`, `slimeChunks`, `spawnSpots`, `radar*`, `waypointsOnMap`, `waypointsInWorld`,
-  `deathMarkers`, `animateBanners`, `sepiaBanners`, `extraBannerLayers`.
-- **Fora (fita Minimapa)**: `minimap`, `minimapSize`, `minimapCorner`, `minimapFrame`,
-  `minimapZoom`, `compass`, `coordinates`, `biome`, `autoCaves` (confirmar ao implementar se
-  `autoCaves` afeta o nível inicial do mapa mundi via `MapSession.autoLayer`; se afetar, vai para
-  Camadas).
+- **In the book**: `renderStyle`, `fogStyle`, `antiqueTintsExplored`, `seedPreview`, `alwaysFogOfWar`,
+  `mapClouds`, `mapCoast`, `depthShading`, `quality`, `lighting` (when
+  `EnvironmentLighting.supported()`), `mapDirection`, `chunkGrid`, `slimeChunks`, `spawnSpots`,
+  `radar*`, `waypointsOnMap`, `waypointsInWorld`, `deathMarkers`, `animateBanners`, `sepiaBanners`,
+  `extraBannerLayers`.
+- **Outside (the Minimap ribbon)**: `minimap`, `minimapSize`, `minimapCorner`, `minimapFrame`,
+  `minimapZoom`, `compass`, `coordinates`, `biome`, `autoCaves` (to confirm while implementing whether
+  `autoCaves` affects the world map's starting layer through `MapSession.autoLayer`; if it does, it
+  goes to Layers).
 
-As mudanças valem ao vivo: o livro chama `Settings.save()` como hoje, e `MapSession` continua
-juntando refresh de qualidade/aparência no próximo tick, preservando exploração e texturas
-residentes pelas barreiras existentes. Nenhum rebake extra por estar no livro. `quality` não
-redesenha mais o mapa (com a grade, um raio por pixel nos dois modos; só a névoa muda), e
-`antiqueTintsExplored`, `fogStyle`, `mapClouds`, `mapCoast` e `lighting` são só composição, então mudam na
-hora. `renderStyle` e `depthShading` redesenham o mapa inteiro em segundo plano a cada troca, então o
-livro só aplica no clique (nada de pré-visualizar ao passar o mouse) e o ciclo de Render não
-deve passar por valores intermediários: os espaços de Render escolhem o valor direto.
+Changes apply live: the book calls `Settings.save()` as today, and `MapSession` still gathers quality
+and look refreshes into the next tick, keeping exploration and resident textures through the existing
+barriers. No extra rebake for being in the book. `quality` no longer redraws the map (with the grid,
+one ray per pixel in both modes; only the fog changes), and `antiqueTintsExplored`, `fogStyle`,
+`mapClouds`, `mapCoast` and `lighting` are composition only, so they change at once. `renderStyle` and
+`depthShading` redraw the whole map in the background with every change, so the book only applies
+them on click (no previewing on hover) and the Render cycle mustn't go through intermediate values:
+the Render slots pick the value directly.
 
-### Conteúdo das páginas
+### What the pages hold
 
-- **Estandartes / Lista**: página esquerda com grade 4×3 de espaços (como a referência), um
-  estandarte por espaço (`BannerAtlas`, tamanho pequeno), ordenados por distância e paginados;
-  área de baixo com "Novo", filtro de ocultos e "Importar do Xaero (N)" quando houver. Página
-  direita com o waypoint selecionado: estandarte grande ondulando, nome editável na própria
-  página, coordenadas, distância e ações (Centralizar no mapa, Editar estandarte, Ocultar/Mostrar,
-  Compartilhar, Teleportar com permissão, Excluir com confirmação no segundo clique).
-- **Estandartes / Opções**: as seis opções de waypoints/estandartes.
-- **Aparência**: render como quatro espaços com miniaturas estáticas (Simples, Contornos,
-  Pintado, Pintado sem contornos), no topo da página por ser a escolha mais visível; estilo do fog
-  como três espaços (Nuvens, Mapa antigo, Mapa antigo colorido), com a alternância "tingir
-  explorado" logo abaixo, desabilitada com dica quando o estilo é Nuvens (ela só vale para os dois
-  mapas antigos); direção como uma rosa dos ventos de quatro
-  espaços; o resto como alternâncias e ciclos. As miniaturas são sprites fixos gerados pelo
-  `book-sprites.py` a partir de capturas de `DIORAMA_TESTS=painted` reduzidas à mão para pixel
-  art, não tiles ao vivo. O Pintado combina com o livro (tinta sépia, papel quente): a cor de
-  tinta `#5A2E22` da paleta do livro pode ser conferida contra o `INK` de `PaintedFinish` para os
-  dois parecerem a mesma pena.
-- **Camadas**: modo superfície/caverna e fatia Y com botões (o equivalente de mouse para C e
-  PgUp/PgDn); sobreposições. Slime chunks aparece desabilitado com dica quando não há seed.
-- **Radar**: quatro categorias com ícones e o alcance.
+- **Banners / List**: a left page with a 4×3 grid of slots (like the reference), one banner per slot
+  (`BannerAtlas`, small size), sorted by distance and paged; a bottom area with "New", a hidden filter
+  and "Import from Xaero's (N)" when there is something to import. A right page with the selected
+  waypoint: a large waving banner, the name editable right on the page, coordinates, distance and
+  actions (Centre on the map, Edit banner, Hide/Show, Share, Teleport with permission, Delete with a
+  confirming second click).
+- **Banners / Options**: the six waypoint/banner options.
+- **Look**: render as four slots with still thumbnails (Plain, Outlined, Painted, Painted no outlines),
+  at the top of the page since it is the most visible choice; fog style as three slots (Clouds,
+  Antique map, Antique map (color)), with the "tint explored" toggle right below, disabled with a hint
+  when the style is Clouds (it only applies to the two antique maps); direction as a four-slot compass
+  rose; the rest as toggles and cycles. The thumbnails are fixed sprites generated by
+  `book-sprites.py` from `DIORAMA_TESTS=painted` captures reduced by hand to pixel art, not live tiles.
+  Painted suits the book (sepia ink, warm paper): the book palette's ink colour `#5A2E22` can be
+  checked against `PaintedFinish`'s `INK` so both look like the same pen.
+- **Layers**: surface/cave mode and the Y slice with buttons (the mouse equivalent of C and
+  PgUp/PgDn); overlays. Slime chunks shows disabled with a hint when there is no seed.
+- **Radar**: four categories with icons, and the range.
 
-O editor de estandarte estilo tear (`BannerEditScreen`) continua sendo uma tela própria, porque
-é grande demais para uma página; ele volta ao `MapScreen` com o livro aberto. `WaypointEditScreen`
-e `WaypointListScreen` continuam existindo para uso fora do mapa (tecla de novo waypoint no mundo,
-tecla da lista fora do mapa, testes existentes).
+The loom-style banner editor (`BannerEditScreen`) stays a screen of its own, because it is too large
+for a page; it comes back to `MapScreen` with the book open. `WaypointEditScreen` and
+`WaypointListScreen` stay for use outside the map (the new waypoint key in the world, the list key
+outside the map, existing tests).
 
-### Integração com o mapa
+### Working with the map
 
-- O mapa continua interativo com o livro aberto: arrastar, rolar e botão direito fora do livro
-  funcionam como hoje, para ver o efeito das opções ao vivo. Eventos dentro do livro vão só aos
-  widgets do livro.
-- Clique num estandarte do mapa: abre a seção Estandartes com ele selecionado (em vez de abrir
-  `WaypointEditScreen`). Botão direito no mapa: cria o waypoint e seleciona na lista com o nome em
-  edição.
-- "Centralizar no mapa" anima a vista até o waypoint pelo `SmoothZoom`/centro existente.
-- Esc fecha o livro primeiro; um segundo Esc fecha o mapa. Tecla U (lista) dentro do mapa abre a
-  seção Estandartes. Com um campo de texto focado, as teclas do mapa (C, Espaço, PgUp/PgDn, tecla
-  do mapa) não podem disparar.
-- A faixa preta de status vira uma pequena etiqueta de pergaminho no canto superior esquerdo
-  (modo, coordenadas, chunks, "assando"). A faixa de ajuda vira o tooltip de um "?" discreto no
-  canto inferior, mostrado sozinho por alguns segundos só na primeira abertura da sessão.
-- O botão vanilla "Settings" sai do `MapScreen`.
+- The map stays interactive with the book open: dragging, scrolling and right-clicking outside the
+  book work as today, to see the options' effect live. Events inside the book only go to the book's
+  widgets.
+- Clicking a banner on the map: opens the Banners section with it selected (instead of opening
+  `WaypointEditScreen`). A right click on the map: creates the waypoint and selects it in the list
+  with its name being edited.
+- "Centre on the map" animates the view to the waypoint through the existing `SmoothZoom`/centre.
+- Esc shuts the book first; a second Esc shuts the map. The U key (list) inside the map opens the
+  Banners section. With a text field focused, the map's keys (C, Space, PgUp/PgDn, the map key) must
+  not fire.
+- The black status strip becomes a small parchment label in the top left corner (mode, coordinates,
+  chunks, "baking"). The help strip becomes the tooltip of a discreet "?" in the bottom corner, shown
+  by itself for a few seconds only on the session's first opening.
+- The vanilla "Settings" button leaves `MapScreen`.
 
-## Arquitetura
+## Architecture
 
-Código novo em `dev.diorama.ui` (comum, sem APIs de loader):
+New code in `dev.diorama.ui` (common, without loader APIs):
 
-- `SettingsCatalog`: lista declarativa das opções (`chave`, `seção`, `escopo` MAPA/MINIMAPA,
-  valores, getter/setter, rótulo do valor, tooltip, disponibilidade). Fonte única para
-  `SettingsScreen`, livro e Mod Menu, mantendo as opções compartilhadas como pede o projeto.
-  `SettingsScreen` passa a ser montada pelo catálogo, com um filtro opcional de seção
-  (`new SettingsScreen(parent, Section.MINIMAP)` para a fita Minimapa); sem filtro continua
-  mostrando tudo para o Mod Menu e para a tecla de configurações.
-- `BookLayout` (puro, testável): dado o tamanho da GUI, retorna retângulos do livro, páginas,
-  fitas, abas e "X". Alvo de ~320×200 GUI px para as duas páginas; abaixo de ~360×210 usa modo de
-  página única com setas de virar página. Tudo em pixels inteiros.
-- `MapBook`: estado (fechado/abrindo/aberto/fechando, seção, aba, página, seleção), roteamento de
-  entrada e desenho; o `MapScreen` só delega a ele.
-- Páginas: `AppearancePage`, `LayersPage`, `RadarPage`, `BannersPage` (lista + detalhe) e
-  `BannerOptionsPage`, montadas a partir do catálogo.
-- Widgets em pixel art: `BookToggle` (caixa de tinta/selo), `BookCycle` (setas ‹ › com valor),
-  `BookButton`, `BookSlot` (espaço da grade), `Ribbon` e `BookTab`. Estendem `AbstractWidget`
-  /`AbstractButton` para manter foco por Tab/setas/controle e narração, como as telas atuais.
-- `WaypointListModel`: ordenação por distância, permissão de TP e importação do Xaero extraídas de
-  `WaypointListScreen`, usadas pela tela antiga e pelo livro. `WaypointDraft`: validação de nome e
-  coordenadas extraída de `WaypointEditScreen` para a edição inline.
-- `BookSprites`: único ponto de contato com APIs de GUI que mudam entre versões (`blitSprite` e
-  desenho de `ItemStack` na GUI), isolado com blocos Stonecutter, como `PaperFrame` faz com
+- `SettingsCatalog`: a declarative list of the options (`key`, `section`, `scope` MAP/MINIMAP, values,
+  getter/setter, value label, tooltip, availability). A single source for `SettingsScreen`, the book
+  and Mod Menu, keeping the options shared as the project asks. `SettingsScreen` becomes built from the
+  catalog, with an optional section filter (`new SettingsScreen(parent, Section.MINIMAP)` for the
+  Minimap ribbon); without a filter it still shows everything for Mod Menu and the settings key.
+- `BookLayout` (pure, testable): given the GUI size, returns the rectangles of the book, pages,
+  ribbons, tabs and "X". A target of ~320×200 GUI px for both pages; below ~360×210 it uses a
+  single-page mode with page-turning arrows. Everything in whole pixels.
+- `MapBook`: state (shut/opening/open/shutting, section, tab, page, selection), input routing and
+  drawing; `MapScreen` only delegates to it.
+- Pages: `AppearancePage`, `LayersPage`, `RadarPage`, `BannersPage` (list + detail) and
+  `BannerOptionsPage`, built from the catalog.
+- Pixel-art widgets: `BookToggle` (an ink box/seal), `BookCycle` (‹ › arrows with the value),
+  `BookButton`, `BookSlot` (a grid slot), `Ribbon` and `BookTab`. They extend `AbstractWidget`
+  /`AbstractButton` to keep focus through Tab/arrows/controller and narration, like the current screens.
+- `WaypointListModel`: sorting by distance, the TP permission and the Xaero's import pulled out of
+  `WaypointListScreen`, used by the old screen and the book. `WaypointDraft`: validation of names and
+  coordinates pulled out of `WaypointEditScreen` for inline editing.
+- `BookSprites`: the single point of contact with GUI APIs that change between versions (`blitSprite`
+  and drawing an `ItemStack` in the GUI), isolated with Stonecutter blocks, as `PaperFrame` does with
   `NativeImage`.
 
-### Sprites e resource packs
+### Sprites and resource packs
 
-- Sprites próprios em `assets/diorama/textures/gui/sprites/book/` (capa, página esquerda/direita,
-  lombada, espaço, separador, fita base, aba, "X", alternância, setas), com `.png.mcmeta` de
-  `nine_slice`/`tile` do atlas de GUI. Resource packs podem substituir cada um.
-- A fita é um sprite neutro tingido pela cor da seção, para um pack trocar uma única textura.
-- Os ícones são `ItemStack` reais desenhados pelo renderizador de itens: seguem modelos de item
-  de resource packs.
-- Os PNGs são gerados por um script reproduzível `docs/design/book-sprites.py`, no mesmo espírito
-  de `antique-sprites.py`, com a paleta: página `#F5C99B`, espaço `#EAB384`, tinta `#5A2E22`,
-  couro `#9C5233`, ouro `#E8B83A`, fitas vermelho/azul/verde/amarelo/creme saturados.
-- Um texel = um pixel da GUI, como a GUI vanilla. Nenhuma textura dinâmica nova: só sprites do
-  atlas de GUI e o `BannerAtlas` existente (com seu limite de 6 composições por quadro).
-- Sons vanilla de livro (`BOOK_PAGE_TURN` ao trocar de seção) para imersão; respeitam os volumes.
+- Sprites of its own in `assets/diorama/textures/gui/sprites/book/` (cover, left/right page, spine,
+  slot, separator, base ribbon, tab, "X", toggle, arrows), with `nine_slice`/`tile` `.png.mcmeta` for
+  the GUI atlas. Resource packs can replace each one.
+- The ribbon is a neutral sprite tinted with the section's colour, so a pack replaces a single texture.
+- The icons are real `ItemStack`s drawn by the item renderer: they follow resource packs' item models.
+- The PNGs are generated by a reproducible script, `docs/design/book-sprites.py`, in the same spirit
+  as `antique-sprites.py`, with the palette: page `#F5C99B`, slot `#EAB384`, ink `#5A2E22`, leather
+  `#9C5233`, gold `#E8B83A`, saturated red/blue/green/yellow/cream ribbons.
+- One texel = one GUI pixel, like the vanilla GUI. No new dynamic texture: only GUI atlas sprites and
+  the existing `BannerAtlas` (with its limit of 6 compositions per frame).
+- Vanilla book sounds (`BOOK_PAGE_TURN` when switching sections) for immersion; they respect the
+  volume settings.
 
-## Animações
+## Animations
 
-Todas curtas, por tempo real e interrompíveis:
+All short, in real time and interruptible:
 
-- **Zoom de entrada (~200 ms)**: classe pura `OpeningZoom` com ease-out cúbico de um fator 0,85
-  até 1 sobre o zoom alvo da vista, ancorado no jogador (ou no centro quando não segue). Começa em
-  `max(minZoom, alvo × 0,85)`, então nunca pede zoom abaixo do que o nível suporta. A vista um
-  pouco mais aberta no início pede no máximo ~38% mais área, quase sempre já residente; nenhum
-  rebake. Roda só na primeira `init()` da instância (não em resize nem ao voltar de tela filha),
-  termina na hora ao rolar, arrastar, `lookAt()` (testes) ou mudança de direção, e não mexe no
-  alvo do `SmoothZoom`. As fitas deslizam da borda no mesmo intervalo. A vista desenhada só
-  encaixa em pixels inteiros de tela por texel (`View.pixelPerfect`) quando o zoom está parado
-  (`SmoothZoom.moving()` falso); a abertura precisa contar como "em movimento" para não andar aos
-  saltos, e o alvo deve ser um passo inteiro de pixels (como a roda faz ao ampliar), para não haver
-  "estalo" ao terminar. Se o fator cruzar o limite de `MapViewport.magnified` (um texel = um pixel
-  de tela), a amostragem troca de trilinear para NEAREST no meio da animação; conferir nas capturas.
-- **Abrir/fechar o livro (~180 ms)**: `Spring.SOFT` — o livro sobe alguns pixels e aparece.
-- **Trocar de seção (~120 ms)**: o conteúdo desliza levemente como uma página virando.
-- **Fitas**: passar o mouse estica a fita 3 px (`Spring.BOUNCY`); a selecionada fica mais longa.
+- **Zoom in on opening (~200 ms)**: a pure `OpeningZoom` class with a cubic ease-out from a factor of
+  0.85 to 1 over the view's target zoom, anchored on the player (or the centre when not following).
+  It starts at `max(minZoom, target × 0.85)`, so it never asks for a zoom below what the level
+  supports. The slightly wider view at the start asks for at most ~38% more area, almost always
+  already resident; no rebake. It only runs on the instance's first `init()` (not on resize nor when
+  coming back from a child screen), ends at once on scrolling, dragging, `lookAt()` (tests) or a change
+  of direction, and doesn't touch `SmoothZoom`'s target. The ribbons slide in from the edge over the
+  same span. The drawn view only snaps to whole screen pixels per texel (`View.pixelPerfect`) when the
+  zoom is at rest (`SmoothZoom.moving()` false); the opening must count as "moving" so it doesn't move
+  in jumps, and the target must be a whole pixel step (as the wheel does when magnifying), so there is
+  no "snap" at the end. If the factor crosses `MapViewport.magnified`'s limit (one texel = one screen
+  pixel), sampling switches from trilinear to NEAREST mid-animation; check it in the captures.
+- **Opening/shutting the book (~180 ms)**: `Spring.SOFT`: the book rises a few pixels and fades in.
+- **Switching sections (~120 ms)**: the content slides slightly, like a page turning.
+- **Ribbons**: hovering stretches the ribbon 3 px (`Spring.BOUNCY`); the selected one is longer.
 
-## Etapas
+## Steps
 
-0. Antes de começar: estandartes, nitidez e Pintado já estão em `development` (merge
-   `6d245c3`); a grade pixel perfect, o zoom em passos inteiros, o Pintado sem contornos e a
-   opção de tingir o explorado estão em `feature/pixel-grid`, em cima dela. A branch nova
-   `feature/book-map-ui` sai de `development` depois de integrar `feature/pixel-grid` (ou dela
-   mesma, se ainda não tiver entrado), para o livro já usar as opções novas.
-1. `SettingsCatalog` e `SettingsScreen` montada por ele, sem mudança visual; filtro por seção.
-   Testes JUnit do catálogo.
-2. `BookSprites` com Stonecutter, sprites gerados pelo script, `BookLayout` e widgets do livro.
-   Testes JUnit do layout.
-3. `MapBook` no `MapScreen`: estados, fitas, roteamento de entrada, Esc, remoção do botão
-   Settings, etiqueta de status e ajuda.
-4. Páginas Aparência, Camadas e Radar a partir do catálogo, com efeito ao vivo.
-5. Seção Estandartes: `WaypointListModel`, `WaypointDraft`, grade, detalhe, edição inline,
-   integração com clique/botão direito/centralizar, importação do Xaero, ida e volta ao
-   `BannerEditScreen`.
-6. Fita Minimapa: `SettingsScreen(MapScreen, MINIMAP)` e volta com o livro na mesma seção.
-7. `OpeningZoom` e animações do livro com `Spring`.
-8. Testes de cliente, compilação cruzada, documentação (README, este arquivo, `CLAUDE.md`,
-   `en_us.json` e `pt_br.json`).
+0. Before starting: banners, sharpness and Painted are already in `development` (merge `6d245c3`); the
+   pixel-perfect grid, the whole-step zoom, Painted without outlines and the tint-explored option are
+   in `feature/pixel-grid`, on top of it. The new `feature/book-map-ui` branch starts from
+   `development` after merging `feature/pixel-grid` (or from it, if it isn't in yet), so the book uses
+   the new options.
+1. `SettingsCatalog` and `SettingsScreen` built from it, with no visual change; a section filter.
+   JUnit tests of the catalog.
+2. `BookSprites` with Stonecutter, sprites generated by the script, `BookLayout` and the book's
+   widgets. JUnit tests of the layout.
+3. `MapBook` in `MapScreen`: states, ribbons, input routing, Esc, removing the Settings button, the
+   status label and help.
+4. The Look, Layers and Radar pages from the catalog, with live effect.
+5. The Banners section: `WaypointListModel`, `WaypointDraft`, the grid, the detail, inline editing,
+   working with click/right click/centre, the Xaero's import, going to `BannerEditScreen` and back.
+6. The Minimap ribbon: `SettingsScreen(MapScreen, MINIMAP)` and back with the book at the same
+   section.
+7. `OpeningZoom` and the book's animations with `Spring`.
+8. Client tests, cross-compiling, documentation (the README, this file, `CLAUDE.md`, `en_us.json` and
+   `pt_br.json`).
 
-## Verificação prevista
+## Planned verification
 
 - JUnit (`./gradlew --configure-on-demand :26.3:build`):
-  - `SettingsCatalog`: todo campo público de `Settings` aparece uma vez (o campo privado legado
-    `outlines`, só lido na migração, fica de fora); os de minimapa têm escopo MINIMAPA; toda chave
-    de tradução existe em `en_us.json` e `pt_br.json` (inclusive `render_style.*` e
+  - `SettingsCatalog`: every public field of `Settings` shows up once (the private legacy `outlines`
+    field, only read during migration, is left out); the minimap's have MINIMAP scope; every
+    translation key exists in `en_us.json` and `pt_br.json` (including `render_style.*` and
     `antique_tint`).
-  - `BookLayout`: em 427×240, 640×360 e 960×540 nada sai da tela nem se sobrepõe; o modo de página
-    única entra abaixo do limite.
-  - `OpeningZoom`: começa no fator, termina exatamente no alvo, é monótono e para ao cancelar.
-- Cenário de cliente novo `DIORAMA_TESTS=book-map`: abre o mapa e espera o fim do zoom (zoom
-  final igual ao alvo); captura cada seção; alterna uma opção de aparência no livro e confere
-  `config.json`, `MapStyle` e que a tela continua sendo `MapScreen`; ida e volta pela fita
-  Minimapa sem repetir o zoom; clique num estandarte abre a seção com ele selecionado; renomeia
-  inline; repete a checagem de sobreposição em 1280×720; digitar "c" no nome não troca a camada.
-- No `book-map`, trocar Render para Pintado pelo livro e conferir que `MapStyle.get().painted()`
-  liga, que o mapa atrás continua com cobertura e que a tela continua sendo `MapScreen`; alternar
-  "tingir explorado" e conferir que `submittedJobs` não muda. Medir zoom e âncora pela
-  `MapScreen.heldView()`, porque `view()` devolve a vista já encaixada em pixels inteiros.
-- Rodar também `settings-refresh` (que já alterna o Pintado), `painted`, `modmenu` (a tela do Mod
-  Menu continua completa) e `banner-waypoints`, que tocam as telas alteradas.
-- Compilar os alvos com APIs de GUI diferentes: Fabric 26.3, NeoForge 26.3, 26.1, 1.21.11,
-  1.21.6, 1.21.4 e 1.21.1 (assinaturas de `blitSprite` e de desenho de item mudam entre eles).
+  - `BookLayout`: at 427×240, 640×360 and 960×540 nothing leaves the screen or overlaps; single-page
+    mode kicks in below the limit.
+  - `OpeningZoom`: starts at the factor, ends exactly at the target, is monotonic and stops when
+    cancelled.
+- A new client scenario, `DIORAMA_TESTS=book-map`: opens the map and waits for the zoom to end (the
+  final zoom equals the target); captures each section; toggles a look option in the book and checks
+  `config.json`, `MapStyle` and that the screen is still `MapScreen`; goes through the Minimap ribbon
+  and back without repeating the zoom; a click on a banner opens the section with it selected; renames
+  inline; repeats the overlap check at 1280×720; typing "c" in the name doesn't switch the layer.
+- In `book-map`, switch Render to Painted through the book and check that `MapStyle.get().painted()`
+  turns on, that the map behind still has coverage and that the screen is still `MapScreen`; toggle
+  "tint explored" and check that `submittedJobs` doesn't change. Measure zoom and anchor through
+  `MapScreen.heldView()`, because `view()` returns the view already snapped to whole pixels.
+- Also run `settings-refresh` (which already toggles Painted), `painted`, `modmenu` (the Mod Menu
+  screen stays complete) and `banner-waypoints`, which touch the changed screens.
+- Compile the targets with different GUI APIs: Fabric 26.3, NeoForge 26.3, 26.1, 1.21.11, 1.21.6,
+  1.21.4 and 1.21.1 (the signatures of `blitSprite` and of drawing items change between them).
 
-## Riscos e limites
+## Risks and limits
 
-- APIs de GUI de sprites e itens mudam entre 1.21.1, 1.21.2–1.21.5, 1.21.6+ e 26.x: tudo passa por
-  `BookSprites`; conferir nas fontes mapeadas de cada alvo antes de escrever os blocos.
-- Telas pequenas (427×240): o livro cobre quase toda a altura; o modo de página única evita texto
-  apertado.
-- O mapa continua renderizando inteiro por trás do livro; o custo extra é algumas dezenas de quads
-  de sprite e até 12 estandartes do atlas existente.
-- `XaeroImport.find()` faz I/O; hoje roda no `init()` da lista. No livro, rodar só ao abrir a
-  seção Estandartes pela primeira vez, e de preferência num worker, para não travar a thread de
-  render.
-- Fora do escopo: estilo de livro no `SettingsScreen` do minimapa/Mod Menu e no `BannerEditScreen`
-  (podem vir depois reaproveitando `BookSprites`).
+- GUI APIs for sprites and items change between 1.21.1, 1.21.2–1.21.5, 1.21.6+ and 26.x: everything
+  goes through `BookSprites`; check each target's mapped sources before writing the blocks.
+- Small screens (427×240): the book covers almost the whole height; single-page mode avoids cramped
+  text.
+- The map keeps rendering in full behind the book; the extra cost is a few dozen sprite quads and up to
+  12 banners from the existing atlas.
+- `XaeroImport.find()` does I/O; today it runs in the list's `init()`. In the book, run it only when
+  the Banners section first opens, and preferably on a worker, so it doesn't stall the render thread.
+- Out of scope: the book style in the minimap's/Mod Menu's `SettingsScreen` and in `BannerEditScreen`
+  (they can come later, reusing `BookSprites`).
 
-## Decisões em aberto
+## Open decisions
 
-1. Clique fora do livro: proposto manter a interação com o mapa (arrastar/zoom/botão direito)
-   em vez de fechar o livro.
-2. Edição de waypoint: proposto inline no livro, com só o editor de tear em tela própria.
-3. Tela de opções do minimapa: proposto manter a tela vanilla filtrada agora, sem estilo de livro.
+1. Clicking outside the book: proposed to keep interacting with the map (drag/zoom/right click)
+   instead of shutting the book.
+2. Editing a waypoint: proposed inline in the book, with only the loom editor on a screen of its own.
+3. The minimap's options screen: proposed to keep the filtered vanilla screen for now, without the
+   book style.
 
-## Como ficou
+## How it turned out
 
-- **Código**: `ui/SettingsCatalog` (lista única; cada opção tem `shown` — a versão suporta — e
-  `active` — outra opção a deixa sem efeito, como o tingimento sob as Nuvens), `ui/MapBook`
-  (estado, fitas, animação, desenho, entrada), `ui/PageFlow` (distribui o conteúdo pelas páginas),
-  `ui/BookPages` (Aparência, Camadas, Radar, Opções dos estandartes), `ui/BannersPage`,
-  `ui/BookLayout`, `ui/BookWidget` (base com todos os blocos de versão de widget),
-  `ui/BookWidgets`, `ui/BookSprites`, `ui/OpeningZoom`, `waypoint/WaypointDraft` e
-  `waypoint/WaypointListModel`. `SettingsScreen` é montada pelo catálogo, com o mesmo layout de
-  três colunas, e aceita só algumas seções numa coluna (`new SettingsScreen(map, Section.MINIMAP)`).
-- **Sprites**: em vez de sprites do atlas de GUI com `.mcmeta`, uma única folha
-  `assets/diorama/textures/gui/book.png` (256×256), gerada por `docs/design/book-sprites.py` sem
-  dependências, desenhada por `MapCanvas.blit` com nine-slice próprio (cantos fixos, bordas e miolo
-  repetidos, um texel = um pixel da GUI). Motivo: `blitSprite` muda de assinatura em quatro grupos
-  de versões, enquanto `MapCanvas` já resolve todos. Resource packs trocam a folha inteira; as
-  regiões ficam listadas em `BookSprites`. Capa e página têm 64×64 para o miolo custar poucos quads.
-- **Miniaturas** de Render e de estilo do fog são desenhadas proceduralmente pelo script (uma ilha
-  de blocos 4×4 em cada estilo), não reduzidas de capturas.
-- **Ícones**: itens buscados pelo id no registro (`BookSprites.stack`), porque no 26.x os
-  estandartes viraram uma `ColorCollection` em `Items`. A fita de Estandartes usa `white_banner`:
-  o vermelho sumia na fita vermelha. Radar: `player_head`, `creeper_head`, `wolf_spawn_egg`,
-  `cow_spawn_egg`. Camadas: `grass_block` e `lantern` nas duas vistas.
-- **Camadas de desenho**: o livro começa num estrato novo (`nextStratum()` a partir de 1.21.6,
-  `flush()` antes), senão os textos do mapa apareciam por cima das páginas.
-- **Layout**: abas sobem 18 px (o ícone de 16 px não cabia em 14). Duas páginas de até 160×196;
-  abaixo de ~300 px de largura de GUI, uma página por vez. O conteúdo é um fluxo: o que não cabe passa
-  para a próxima página e, além do par aberto, para outras folhas viradas pelas setas no rodapé.
-- **Fechado**: etiqueta de pergaminho no canto superior esquerdo (modo, coordenadas, chunks,
-  "desenhando") e um selo "?" com os controles no tooltip; nos primeiros 6 s da primeira abertura
-  da sessão os controles aparecem sozinhos num cartão. A faixa preta e a linha de ajuda saíram.
-- **Estandartes**: botão direito no mapa cria um rascunho no livro (Salvar/Descartar), que só
-  entra no `WaypointStore` ao salvar. Um estandarte existente é editado no lugar: nome e posição
-  valem a cada digitação válida (coordenada inválida fica em vermelho) e são gravados ao trocar de
-  seleção, de seção, fechar o livro ou sair do mapa. "Centralizar" desliza a vista até ele;
-  "Excluir" pede um segundo clique. Com vários mundos do Xaero, "Do Xaero…" abre a lista clássica
-  para escolher. `XaeroImport.find()` foi separado em `request()` (estado do cliente, thread
-  principal) e `find(Request)` (arquivos, rodando num worker).
-- **Animações**: zoom de entrada de 200 ms de 0,85× até um passo inteiro de pixels (o zoom inicial
-  é encaixado antes, então não há estalo ao terminar); o livro sobe 10 px e aparece por
-  `Spring.SOFT`; as fitas deslizam da borda até o livro; o mouse estica a fita 3 px. A troca de
-  seção ficou só com o som de página (`BOOK_PAGE_TURN`), sem o deslizamento de 120 ms previsto.
-- **Teclado**: Esc fecha o livro antes do mapa; com um campo focado, as teclas do mapa (C,
-  PgUp/PgDn, tecla do mapa, U) não disparam; Espaço aperta o widget focado em vez de recentralizar.
-- **Traduções**: `pt_br.json` passou a traduzir todas as chaves do mod (antes cobria só parte).
-- **Depois da primeira entrega** (mesmo dia, a pedido):
-  - A fita e a aba de Estandartes desenham o próprio sprite de estandarte do mapa (branco liso,
-    ondulando com a opção "Ondular"), não mais um item.
-  - A fita tem cauda recortada nos dois lados (36×22). Fechada, aparece inteira a 3 px da borda da
-    tela e, ao passar o mouse, desliza 3 px para fora; aberta, só a ponta direita sai da capa.
-  - Farfalhar de tecido (`ARMOR_EQUIP_LEATHER`, volume de interface, tom 0,9–1,25, no máximo um a
-    cada 60 ms) ao apontar um estandarte no mapa ou na grade do livro.
-  - Botão direito em qualquer ponto do mapa abre um cartão (`ui/MapMenu`) com as coordenadas e:
-    fincar estandarte aqui (rascunho no livro), copiar coordenadas (`x y z`, ou `x ~ z` onde a
-    altura não é conhecida) e teleportar (com `/tp`; em terreno que o mapa não viu,
-    `/spreadplayers x z 0 1 false @s`, oferecido só sem teto, e só se o servidor mandar o comando).
-    Fora do terreno conhecido, x e z vêm da projeção inversa na altura do jogador (ou da fatia de
-    caverna), sem ler nada que a névoa esconda. Esc fecha o cartão antes do livro e do mapa.
-  - Ações de clique reconstroem os widgets no quadro seguinte (`MapScreen.rebuild`), não no meio
-    do tratamento do clique; o campo de nome de um estandarte recém-fincado recebe o foco ao ser
-    construído.
-- **Testes**: JUnit de `SettingsCatalog`, `BookLayout`, `OpeningZoom` e `WaypointDraft`; cenário
-  `DIORAMA_TESTS=book-map`. O cenário `waypoints` agora espera o rascunho no livro após o botão
-  direito e continua as checagens de campos no `WaypointEditScreen` clássico.
+- **Code**: `ui/SettingsCatalog` (the single list; each option has `shown` — the version supports it
+  — and `active` — another option leaves it without effect, like the tint under Clouds), `ui/MapBook`
+  (state, ribbons, animation, drawing, input), `ui/PageFlow` (spreads the content over the pages),
+  `ui/BookPages` (Look, Layers, Radar, Banner options), `ui/BannersPage`, `ui/BookLayout`,
+  `ui/BookWidget` (the base with every widget version block), `ui/BookWidgets`, `ui/BookSprites`,
+  `ui/OpeningZoom`, `waypoint/WaypointDraft` and `waypoint/WaypointListModel`. `SettingsScreen` is
+  built from the catalog, with the same three-column layout, and accepts just some sections in one
+  column (`new SettingsScreen(map, Section.MINIMAP)`).
+- **Sprites**: instead of GUI atlas sprites with `.mcmeta`, a single sheet,
+  `assets/diorama/textures/gui/book.png` (256×256), generated by `docs/design/book-sprites.py` with no
+  dependencies, drawn by `MapCanvas.blit` with its own nine-slice (fixed corners, repeated edges and
+  middle, one texel = one GUI pixel). Why: `blitSprite` changes signature across four groups of
+  versions, while `MapCanvas` already handles them all. Resource packs replace the whole sheet; the
+  regions are listed in `BookSprites`. Cover and page are 64×64 so the middle costs few quads.
+- **Thumbnails** of Render and of the fog style are drawn procedurally by the script (an island of 4×4
+  blocks in each style), not reduced from captures.
+- **Icons**: items looked up by id in the registry (`BookSprites.stack`), because in 26.x banners
+  became a `ColorCollection` in `Items`. The Banners ribbon uses `white_banner`: red vanished on the red
+  ribbon. Radar: `player_head`, `creeper_head`, `wolf_spawn_egg`, `cow_spawn_egg`. Layers:
+  `grass_block` and `lantern` for the two views.
+- **Drawing layers**: the book starts on a new stratum (`nextStratum()` from 1.21.6, `flush()` before),
+  otherwise the map's text showed over the pages.
+- **Layout**: tabs rise 18 px (the 16 px icon didn't fit in 14). Two pages of up to 160×196; below
+  ~300 px of GUI width, one page at a time. The content is a flow: what doesn't fit moves to the next
+  page and, past the open pair, to further sheets turned by the arrows at the bottom.
+- **Shut**: a parchment label in the top left corner (mode, coordinates, chunks, "drawing") and a "?"
+  seal with the controls in its tooltip; for the first 6 s of the session's first opening the controls
+  show by themselves on a card. The black strip and the help line are gone.
+- **Banners**: a right click on the map creates a draft in the book (Save/Discard), which only goes
+  into `WaypointStore` on saving. An existing banner is edited in place: name and position apply with
+  each valid keystroke (an invalid coordinate shows red) and are written when the selection or section
+  changes, the book shuts or the map is left. "Centre" glides the view to it; "Delete" asks for a second
+  click. With several Xaero's worlds, "From Xaero's…" opens the classic list to choose.
+  `XaeroImport.find()` was split into `request()` (client state, main thread) and `find(Request)`
+  (files, on a worker).
+- **Animations**: a 200 ms zoom in on opening, from 0.85× to a whole pixel step (the starting zoom is
+  snapped first, so there is no snap at the end); the book rises 10 px and fades in through
+  `Spring.SOFT`; the ribbons slide from the edge to the book; hovering stretches the ribbon 3 px.
+  Switching sections kept only the page sound (`BOOK_PAGE_TURN`), without the planned 120 ms slide.
+- **Keyboard**: Esc shuts the book before the map; with a field focused, the map's keys (C,
+  PgUp/PgDn, the map key, U) don't fire; Space presses the focused widget instead of recentring.
+- **Translations**: `pt_br.json` now translates every key of the mod (it used to cover only part).
+- **After the first delivery** (the same day, on request):
+  - The Banners ribbon and tab draw the map's own banner sprite (plain white, waving with the "Wave"
+    option), no longer an item.
+  - The ribbon has a notched tail on both sides (36×22). Shut, it shows whole 3 px from the screen's
+    edge and, on hover, slides 3 px out; open, only its right tip comes out of the cover.
+  - A rustle of cloth (`ARMOR_EQUIP_LEATHER`, at interface volume, pitch 0.9–1.25, at most one every
+    60 ms) when pointing at a banner on the map or in the book's grid.
+  - A right click anywhere on the map opens a card (`ui/MapMenu`) with the coordinates and: plant a
+    banner here (a draft in the book), copy the coordinates (`x y z`, or `x ~ z` where the height isn't
+    known) and teleport (with `/tp`; on terrain the map hasn't seen, `/spreadplayers x z 0 1 false @s`,
+    offered only without a roof, and only if the server sends the command). Outside known terrain, x
+    and z come from the inverse projection at the player's height (or the cave slice's), without reading
+    anything the fog hides. Esc shuts the card before the book and the map.
+  - Click actions rebuild the widgets on the next frame (`MapScreen.rebuild`), not in the middle of
+    handling the click; a freshly planted banner's name field takes the focus as it is built.
+- **Tests**: JUnit for `SettingsCatalog`, `BookLayout`, `OpeningZoom` and `WaypointDraft`; the
+  `DIORAMA_TESTS=book-map` scenario. The `waypoints` scenario now expects the draft in the book after
+  the right click and carries on with its field checks in the classic `WaypointEditScreen`.
 
+## After 1.0.0
+
+- **Pointer** (from 1.21.9, where the game lets screens pick it; `BookWidget.pointer`,
+  `MapScreen.pointer`): a hand over every book control, ribbon, tab and right-click menu row, and
+  "not allowed" over switched-off ones, as vanilla's buttons do; the menu's header and the help seal,
+  which do nothing, keep the arrow. On the map: a hand over a banner, a crosshair while a region's
+  other corner is picked and a cross of arrows while the map is dragged.
+- **Sounds**: a click on a banner on the map turns the book's page, as picking it in the book does; the
+  right-click menu opens with a softer, higher page sound (`BookWidgets.card`); the page arrows and the
+  close mark turn a page instead of clicking; Esc and the waypoint key turn it as they shut or open the
+  book; revealing a region starts with `SPYGLASS_USE` and ends with `UI_CARTOGRAPHY_TABLE_TAKE_RESULT`.

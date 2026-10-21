@@ -1,163 +1,163 @@
-# Waypoints com estandartes — plano
+# Banner waypoints — plan
 
-Status: implementado em 20/10/2026 na branch `feature/banner-waypoints` (etapas 1–7). Escrito
-como plano no mesmo dia; a seção "Como ficou" no fim registra onde a implementação se afastou do
-plano.
+Status: implemented on 2026-10-20 on the `feature/banner-waypoints` branch (steps 1–7). Written as a
+plan the same day; the "How it turned out" section at the end records where the implementation
+departed from the plan.
 
-## Objetivo
+## Goal
 
-Cada waypoint passa a ser um estandarte (banner) do Minecraft, desenhado no mapa mundi
-e no minimapa como um sprite em pixel art "diegético": um estandarte fincado no chão,
-com mastro, travessa, tecido e sombra, no mesmo estilo pixel-perfect do fog. O desenho
-é totalmente customizável como no tear vanilla: cor de base, padrões e cores dos
-padrões, usando os padrões registrados no jogo (incluindo os de datapacks e mods).
+Every waypoint becomes a Minecraft banner, drawn on the world map and the minimap as a "diegetic"
+pixel-art sprite: a banner planted in the ground, with pole, crossbar, cloth and shadow, in the same
+pixel-perfect style as the fog. The design is fully customisable as at the vanilla loom: base colour,
+patterns and the patterns' colours, using the patterns registered in the game (including those from
+datapacks and mods).
 
-## Como é hoje
+## How it is today
 
-- `Waypoint` guarda nome, iniciais, posição, dimensão, `color` (paleta de 16 cores),
-  visibilidade e tipo (`MANUAL`, `DEATH`). `WaypointStore` salva tudo em
-  `waypoints.json` na pasta do mundo via Gson (`saves/<mundo>/diorama/` no singleplayer,
-  `.minecraft/diorama/<mundo>/` em servidores).
-- `WaypointOverlay` desenha um círculo colorido com as iniciais, e uma seta na borda
-  quando o waypoint está fora da vista. O mapa mundi e o minimapa usam o mesmo código.
-- `WaypointEditScreen` edita nome, iniciais e cor. `WaypointHud` desenha no mundo.
-  `WaypointShare` compartilha no formato de chat do Xaero, e `XaeroImport` importa.
+- `Waypoint` keeps a name, initials, position, dimension, `color` (a 16-colour palette), visibility
+  and kind (`MANUAL`, `DEATH`). `WaypointStore` saves everything to `waypoints.json` in the world's
+  folder through Gson (`saves/<world>/diorama/` in singleplayer, `.minecraft/diorama/<world>/` on
+  servers).
+- `WaypointOverlay` draws a coloured circle with the initials, and an arrow at the edge when the
+  waypoint is out of view. The world map and the minimap use the same code.
+- `WaypointEditScreen` edits name, initials and colour. `WaypointHud` draws in the world.
+  `WaypointShare` shares in Xaero's chat format, and `XaeroImport` imports.
 
-## Modelo de dados
+## Data model
 
-- Novo `BannerDesign` (record imutável): `DyeColor base` e `List<Layer>` com
-  `Layer(String pattern, DyeColor color)`. O padrão é guardado pelo id
-  (`minecraft:creeper`, `meumod:...`), não pelo índice do registro, então sobrevive a
-  mudanças de datapack. Um id desconhecido é pulado ao desenhar e mantido ao salvar.
-- `Waypoint.banner` opcional. Waypoints antigos não têm o campo: usam um estandarte
-  liso com a cor de base mais próxima de `color`. Nada é regravado até o jogador editar.
-  O JSON continua legível por versões anteriores, que ignoram o campo novo.
-- Limite de camadas: 6, como o tear. Uma configuração permite até 16 para quem quiser
-  mais detalhe ("totalmente customizável"); acima de 6, o estandarte ainda é válido no
-  mod, só não pode ser copiado para um item vanilla.
-- Waypoints de morte usam um estandarte padrão próprio (preto com caveira e borda),
-  editável como qualquer outro.
+- A new `BannerDesign` (an immutable record): `DyeColor base` and a `List<Layer>` with
+  `Layer(String pattern, DyeColor color)`. The pattern is kept by id (`minecraft:creeper`,
+  `mymod:...`), not by registry index, so it survives datapack changes. An unknown id is skipped when
+  drawing and kept when saving.
+- An optional `Waypoint.banner`. Old waypoints don't have the field: they use a plain banner with the
+  base colour nearest to `color`. Nothing is rewritten until the player edits it. The JSON stays
+  readable by earlier versions, which ignore the new field.
+- Layer limit: 6, like the loom. A setting allows up to 16 for those who want more detail ("fully
+  customisable"); above 6, the banner is still valid in the mod, it just can't be copied to a vanilla
+  item.
+- Death waypoints use a default banner of their own (black with a skull and a border), editable like
+  any other.
 
-## Composição do sprite (CPU)
+## Composing the sprite (CPU)
 
-1. Lê as máscaras do tecido em `textures/entity/banner/<asset>.png` pelo gerenciador de
-   recursos, então resource packs mudam o visual. A frente do estandarte ocupa 20×40
-   texels da textura de entidade. O caminho de cada padrão vem do `assetId` do registro
-   `BANNER_PATTERN`; diferenças entre versões ficam isoladas com Stonecutter.
-2. Compõe como o `BannerRenderer`: base tingida, cada camada é uma máscara de alfa
-   tingida com a cor da tinta, combinada em ordem.
-3. Gera duas resoluções em pixel art, reduzindo por média e depois quantizando para as
-   cores presentes, para o desenho continuar nítido:
-   - mapa mundi: tecido 10×20 (metade da textura), estandarte completo ~14×26;
-   - minimapa: tecido 6×12, estandarte completo ~9×16.
-4. Moldura diegética desenhada à mão: mastro e travessa de madeira com contorno de
-   tinta escura, ponta do mastro, sombra de 1 px no tecido do lado oposto ao sol do
-   mapa e uma sombra pontilhada no chão.
-5. Ondulação: 4 quadros pré-compostos em que colunas do tecido descem 0–1 px numa
-   onda que corre do mastro para fora. Troca de quadro a cada ~250 ms, sem shader novo.
-   Respeita uma opção "Animar estandartes" para quem preferir estático.
+1. Read the cloth's masks from `textures/entity/banner/<asset>.png` through the resource manager, so
+   resource packs change the look. The banner's front takes 20×40 texels of the entity texture. Each
+   pattern's path comes from the `BANNER_PATTERN` registry's `assetId`; differences between versions
+   are isolated with Stonecutter.
+2. Compose like `BannerRenderer`: the dyed base, then each layer as an alpha mask dyed with its colour,
+   combined in order.
+3. Produce two resolutions in pixel art, downscaling by averaging and then quantising to the colours
+   present, so the design stays crisp:
+   - world map: 10×20 cloth (half the texture), the whole banner ~14×26;
+   - minimap: 6×12 cloth, the whole banner ~9×16.
+4. A hand-drawn diegetic frame: a wooden pole and crossbar outlined in dark ink, the pole's tip, a
+   1 px shadow on the cloth on the side away from the map's sun, and a dotted shadow on the ground.
+5. Waving: 4 precomposed frames in which columns of the cloth drop 0–1 px in a wave running out from
+   the pole. The frame changes every ~250 ms, with no new shader. It respects an "Animate banners"
+   option for those who prefer them still.
 
-Os sprites entram num atlas `MapTexture` de 256×256 (256 KiB), com cache LRU por hash
-do desenho (no máximo 128 desenhos, 4 quadros e 2 tamanhos cada). Recompõe só quando um
-desenho muda ou os recursos recarregam (gancho junto de `FogTextures.reload()`).
+The sprites go into a 256×256 `MapTexture` atlas (256 KiB), with an LRU cache by the design's hash (at
+most 128 designs, 4 frames and 2 sizes each). It only recomposes when a design changes or resources
+reload (a hook beside `FogTextures.reload()`).
 
-## Desenho no mapa
+## Drawing on the map
 
-- Mapa mundi: o pé do mastro fica exatamente sobre o bloco do waypoint. Escala inteira
-  de pixels da GUI (1x, ou 2x no zoom aproximado), centrada em pixels inteiros, como o
-  marcador do jogador. Nome numa plaquinha de pergaminho ao passar o mouse ou com zoom ≥ 2.
-- Minimapa: a versão pequena. Fora da vista, o estandarte vai para a borda, um pouco
-  menor, com a seta atual apontando a direção.
-- Sobreposição: estandartes mais ao sul ficam na frente. Quando ficam a menos de meio
-  sprite um do outro, juntam-se num grupo com o número de waypoints.
-- Hover e clique continuam pelas mesmas áreas de `WaypointOverlay.Pin`, agora do tamanho
-  do sprite.
-- Estilo do fog: no mapa antigo em sépia, uma opção "Estandartes em sépia" passa o
-  sprite pela mesma rampa do fog; por padrão eles mantêm as cores, para se destacar.
-- No mundo (`WaypointHud`): o ícone usa o mesmo sprite pequeno no lugar do círculo.
+- World map: the foot of the pole sits exactly on the waypoint's block. A whole GUI pixel scale (1x,
+  or 2x when zoomed in), centred on whole pixels, like the player's marker. The name on a little
+  parchment plate on hover or at zoom ≥ 2.
+- Minimap: the small version. Out of view, the banner goes to the edge, a little smaller, with the
+  current arrow pointing the way.
+- Overlap: banners further south stand in front. When they are less than half a sprite apart, they
+  gather into a group showing the number of waypoints.
+- Hover and click keep using the same `WaypointOverlay.Pin` areas, now the size of the sprite.
+- Fog style: on the sepia antique map, a "Sepia banners" option runs the sprite through the fog's
+  ramp; by default they keep their colours, to stand out.
+- In the world (`WaypointHud`): the icon uses the same small sprite instead of the circle.
 
-## Editor (estilo tear)
+## Editor (loom style)
 
-Uma tela `BannerEditScreen`, aberta pelo `WaypointEditScreen`:
+A `BannerEditScreen`, opened from `WaypointEditScreen`:
 
-- Prévia grande do estandarte em escala inteira (4x), com o mastro, girando entre os
-  quadros da ondulação.
-- 16 amostras de tinta para a base e para a camada selecionada.
-- Grade rolável com todos os padrões registrados, cada miniatura já tingida com a cor
-  escolhida, com o nome traduzido no tooltip.
-- Lista de camadas: adicionar, remover, mover para cima e para baixo, trocar cor.
-- Desfazer e refazer. Botão "Aleatório". Botão "Copiar do estandarte na mão": lê o
-  componente de camadas e a cor de base do item segurado (ou do primeiro estandarte do
-  inventário). Botão "Copiar para o item" fica fora do escopo (exigiria servidor).
-- Teclado e controle: navegação por setas e foco visível, como as outras telas do mod.
+- A large preview of the banner at a whole scale (4x), with the pole, cycling through the waving
+  frames.
+- 16 dye swatches for the base and for the selected layer.
+- A scrolling grid of every registered pattern, each thumbnail already dyed in the chosen colour,
+  with its translated name in the tooltip.
+- A list of layers: add, remove, move up and down, change colour.
+- Undo and redo. A "Random" button. A "Copy from the banner in hand" button: reads the layers
+  component and the base colour of the held item (or of the first banner in the inventory). A "Copy
+  to the item" button is out of scope (it would need the server).
+- Keyboard and controller: arrow navigation and visible focus, like the mod's other screens.
 
-## Compartilhar e importar
+## Sharing and importing
 
-- `WaypointShare`: acrescenta o desenho no fim da linha de chat num campo compacto
-  (base e camadas em base64 de ids curtos). Quem não tem o campo, ou usa o Xaero,
-  recebe o waypoint com a cor de sempre.
-- `XaeroImport`: cria estandartes lisos com a cor mais próxima.
+- `WaypointShare`: appends the design at the end of the chat line in a compact field (base and layers
+  in base64 of short ids). Those without the field, or using Xaero's, get the waypoint with the usual
+  colour.
+- `XaeroImport`: creates plain banners in the nearest colour.
 
-## Etapas
+## Steps
 
-1. `BannerDesign`, migração de `color`, serialização Gson e testes JUnit (ida e volta,
-   arquivo antigo, id desconhecido).
-2. Compositor no CPU e atlas com cache; testes JUnit com máscaras sintéticas (ordem
-   das camadas, tingimento, redução e quantização).
-3. Desenho no mapa mundi e no minimapa, borda, grupos, hover; marcador de morte.
-4. Editor estilo tear e importação do item segurado.
-5. Ondulação, opção de sépia, ícone no HUD.
-6. Compartilhamento por chat e importação do Xaero.
-7. Documentação (README e este arquivo) e um único cenário de cliente
-   `DIORAMA_TESTS=banner-waypoints` com capturas do mapa, do minimapa e do editor.
+1. `BannerDesign`, migrating `color`, Gson serialisation and JUnit tests (round trip, an old file, an
+   unknown id).
+2. The CPU compositor and the cached atlas; JUnit tests with synthetic masks (layer order, dyeing,
+   downscaling and quantising).
+3. Drawing on the world map and the minimap, the edge, groups, hover; the death marker.
+4. The loom-style editor and importing the held item.
+5. Waving, the sepia option, the HUD icon.
+6. Sharing through chat and importing from Xaero's.
+7. Documentation (the README and this file) and a single client scenario
+   `DIORAMA_TESTS=banner-waypoints` with captures of the map, the minimap and the editor.
 
-As etapas 1–3 já entregam o visual novo. O editor (4) é a maior parte do trabalho.
+Steps 1–3 already deliver the new look. The editor (4) is most of the work.
 
-## Compatibilidade e riscos
+## Compatibility and risks
 
-- A API de padrões de estandarte mudou entre versões (registro de dados desde 1.20.5,
-  renomeações em 26.x). Todo o acesso ao registro e às texturas fica numa classe
-  isolada com blocos Stonecutter; compilar Fabric e NeoForge 26.3 e 1.21.1.
-- Resource packs com texturas de estandarte maiores (32x, 64x): a máscara é lida na
-  resolução que vier e reduzida para o mesmo tamanho do sprite.
-- Multiplayer: tudo é do cliente; não precisa de servidor.
-- Performance: composição só quando o desenho muda; desenho do mapa são quads de um
-  atlas, como os ícones de hoje. Sem textura nova por waypoint.
-- Arquivos de waypoints continuam compatíveis nos dois sentidos.
+- The banner pattern API changed between versions (a data registry since 1.20.5, renames in 26.x).
+  All access to the registry and the textures sits in one isolated class with Stonecutter blocks;
+  compile Fabric and NeoForge 26.3 and 1.21.1.
+- Resource packs with larger banner textures (32x, 64x): the mask is read at whatever resolution comes
+  and downscaled to the sprite's size.
+- Multiplayer: everything is client-side; no server needed.
+- Performance: composing only when a design changes; drawing on the map is quads from an atlas, like
+  today's icons. No new texture per waypoint.
+- Waypoint files stay compatible both ways.
 
-## Como ficou
+## How it turned out
 
-- Classes: `waypoint/BannerDesign` (dados puros, tintas próprias com as cores de
-  `DyeColor.getTextureDiffuseColor()`), `waypoint/WaypointJson` (Gson; o campo `banner` só é
-  escrito quando existe), `waypoint/BannerPatternCatalog` (todo acesso ao registro
-  `BANNER_PATTERN`, às texturas e ao item na mão), `render/BannerCompositor` (composição, redução,
-  quantização, moldura e ondulação, sem classes do jogo) e `render/BannerAtlas` (atlas e cache).
-- Tamanhos reais: mapa mundi 14×30 (tecido 10×20), minimapa/HUD/lista 10×21 (tecido 6×12). O pé do
-  mastro fica entre as duas colunas de madeira, em pixels inteiros. 2x a partir de zoom 4 no mapa
-  mundi. Nomes em plaquinha de pergaminho: no mapa mundi só com o mouse sobre o estandarte; no
-  minimapa, acima do estandarte, para waypoints a até 10 blocos do jogador.
-- A paleta da quantização é a tinta de cada camada multiplicada pela cor média da sua máscara.
-- Atlas: 256×256 não comportava 128 desenhos × 4 quadros × 2 tamanhos. Ficou 512×512 (1 MiB) com
-  48 vagas LRU de 80×64 (4 quadros de onda + 1 parado, nos dois tamanhos); as escritas são
-  quadrados 16×16. No máximo 6 desenhos novos são compostos por quadro; enquanto isso o waypoint
-  aparece como um ponto da cor da base. O editor usa um atlas próprio, liberado ao fechar.
-  `BannerAtlas.reload()` roda junto de `FogTextures.reload()`.
-- Ondulação: a metade de baixo do tecido desce 1 px em colunas alternadas de duas, correndo com o
-  vento da esquerda para a direita; a opção "Ondular" desligada usa o quadro parado. Luz vinda de
-  cima à esquerda: borda direita e linha sob a travessa sombreadas.
-- Sépia: opção "Sépia no mapa antigo", aplicada só com o estilo Mapa antigo (não o colorido), com a
-  mesma rampa `sepia()` do `fog.fsh`, calculada no CPU como variante do desenho no atlas.
-- Editor: todos os controles são botões vanilla (foco visível com Tab/setas/controle); as setas
-  rolam a grade ao passar da primeira/última linha; Ctrl+Z, Ctrl+Y e Ctrl+Shift+Z. Clicar num
-  padrão adiciona uma camada com a "tinta do padrão"; escolher uma tinta com uma camada selecionada
-  a recolore. As miniaturas usam a base atual (ou branco/cinza quando a tinta é igual à base).
-- `WaypointEditScreen`: as 16 amostras agora são as tintas da base do estandarte; "Editar
-  estandarte…" abre o editor. Um estandarte que não mudou não é gravado; `color` continua sendo
-  salvo (a tinta da base quando muda) para versões antigas e para o Xaero.
-- Chat: ` diorama-banner:<base64>` no fim da linha quando o desenho não é o liso da cor; o nome é
-  encurtado até 12 caracteres para caber, senão o campo é omitido. O link [Add] usa
-  `/diorama waypoint add-banner …`; `add` continua igual.
-- Testes: `BannerDesignTest` e `BannerCompositorTest` (JUnit) e o cenário
-  `DIORAMA_TESTS=banner-waypoints` com as capturas `banner-map`, `banner-map-close`,
-  `banner-map-sepia`, `banner-minimap` e `banner-editor`.
-- Fora do escopo, como no plano: copiar o desenho para um item.
+- Classes: `waypoint/BannerDesign` (plain data, its own dyes with the colours of
+  `DyeColor.getTextureDiffuseColor()`), `waypoint/WaypointJson` (Gson; the `banner` field is only
+  written when present), `waypoint/BannerPatternCatalog` (all access to the `BANNER_PATTERN` registry,
+  the textures and the item in hand), `render/BannerCompositor` (composing, downscaling, quantising,
+  frame and waving, with no game classes) and `render/BannerAtlas` (atlas and cache).
+- Real sizes: world map 14×30 (10×20 cloth), minimap/HUD/list 10×21 (6×12 cloth). The foot of the
+  pole sits between the two wooden columns, on whole pixels. 2x from zoom 4 on the world map. Names on
+  a parchment plate: on the world map only with the mouse over the banner; on the minimap, above the
+  banner, for waypoints within 10 blocks of the player.
+- The quantising palette is each layer's dye multiplied by the average colour of its mask.
+- Atlas: 256×256 couldn't hold 128 designs × 4 frames × 2 sizes. It became 512×512 (1 MiB) with 48 LRU
+  slots of 80×64 (4 wave frames + 1 still, in both sizes); writes are 16×16 squares. At most 6 new
+  designs are composed per frame; meanwhile the waypoint shows as a dot in the base colour. The editor
+  uses an atlas of its own, freed on closing. `BannerAtlas.reload()` runs beside
+  `FogTextures.reload()`.
+- Waving: the cloth's lower half drops 1 px in alternating pairs of columns, running with the wind
+  from left to right; with the "Wave" option off, the still frame is used. Light comes from the top
+  left: the right edge and the row under the crossbar are shaded.
+- Sepia: a "Sepia on the antique map" option, applied only with the Antique map style (not the colour
+  one), with the same `sepia()` ramp as `fog.fsh`, computed on the CPU as a variant of the design in the
+  atlas.
+- Editor: every control is a vanilla button (visible focus with Tab/arrows/controller); the arrows
+  scroll the grid past its first/last row; Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z. Clicking a pattern adds a
+  layer in the "pattern dye"; choosing a dye with a layer selected recolours it. Thumbnails use the
+  current base (or white/grey when the dye equals the base). Adding a pattern and taking the banner
+  play the loom's sounds (1.0.0).
+- `WaypointEditScreen`: the 16 swatches are now the banner's base dyes; "Edit banner…" opens the
+  editor. A banner left unchanged isn't written; `color` is still saved (the base dye when it changes)
+  for earlier versions and for Xaero's.
+- Chat: ` diorama-banner:<base64>` at the end of the line when the design isn't the plain one of the
+  colour; the name is shortened to 12 characters to fit, otherwise the field is left out. The [Add]
+  link uses `/diorama waypoint add-banner …`; `add` stays the same.
+- Tests: `BannerDesignTest` and `BannerCompositorTest` (JUnit) and the `DIORAMA_TESTS=banner-waypoints`
+  scenario with the `banner-map`, `banner-map-close`, `banner-map-sepia`, `banner-minimap` and
+  `banner-editor` captures.
+- Out of scope, as planned: copying the design to an item.

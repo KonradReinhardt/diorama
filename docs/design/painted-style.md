@@ -1,149 +1,148 @@
-# Estilo de render pintado
+# The painted render style
 
-Implementado em 20/10/2026 na branch `feature/painted-style`. A opção substitui o antigo toggle
-de contornos: `Configurações → Aparência → Render` alterna entre **Simples** (sem contornos),
-**Contornos** (o visual anterior), **Pintado** (padrão desde a 1.0.0) e **Pintado sem contornos**. A preferência
-é a mesma para minimapa, mapa mundial e tela do Mod Menu.
+Implemented on 2026-10-20 on the `feature/painted-style` branch. The option replaces the old
+outlines toggle: `Settings → Look → Render` switches between **Plain** (no outlines), **Outlined**
+(the previous look), **Painted** (the default since 1.0.0) and **Painted, no outlines**. The
+preference is shared by the minimap, the world map and the Mod Menu screen.
 
-**Pintado sem contornos** (`MapStyle.ink` falso) é o mesmo acabamento sem nenhuma linha de
-nanquim: nem nas arestas, nem entre cores, nem na costa. Ficam a tinta por face, a luz em dois
-tons, a água em aguadas com seus anéis e a espuma, o brilho de borda e a textura.
+**Painted, no outlines** (`MapStyle.ink` false) is the same finish without any ink line: not on
+edges, not between colours, not on the coast. The per-face paint, the two-tone light, the water in
+washes with its rings and foam, the edge highlight and the texture stay.
 
-## Objetivo
+## Goal
 
-Fazer o terreno explorado parecer um mapa de fantasia pintado à mão: áreas de cor chapadas, luz
-cel‑shaded, linhas de nanquim sutis e costas desenhadas, sem a textura e o sombreamento suave dos
-blocos do Minecraft.
+Make explored terrain look like a hand-painted fantasy map: flat areas of colour, cel-shaded light,
+subtle ink lines and drawn coasts, without the texture and soft shading of Minecraft's blocks.
 
-## Onde acontece
+## Where it happens
 
-Tudo é calculado no bake de tiles (CPU, `TileBaker` + `PaintedFinish`), não em shader. Assim o
-estilo funciona igual nos 21 alvos e loaders, entra no mesmo refresh atômico de aparência
-(`MapStyle.looksLike/looksHash` incluem `painted`, então `appearance.bin` e a fila em segundo plano
-redesenham os tiles salvos) e o compositor dia/noite continua só misturando os dois planos.
+Everything is computed while baking tiles (CPU, `TileBaker` + `PaintedFinish`), not in a shader. So
+the style works the same on all 21 targets and loaders, joins the same atomic appearance refresh
+(`MapStyle.looksLike/looksHash` include `painted`, so `appearance.bin` and the background queue
+redraw saved tiles) and the day/night compositor still only blends the two planes.
 
-### Luz (`TileBaker`)
+### Light (`TileBaker`)
 
-- **Dois tons**: cada superfície fica com a cor iluminada pelo sol ou com uma única cor de sombra
-  projetada. Sem oclusão de cantos (AO), oclusão de céu ou degradê de altitude; paredes ficam só
-  um pouco mais escuras que o chão (0,86).
-- **Sombras nítidas**: um raio por pixel na grade de blocos (`docs/design/pixel-grid.md`), sem
-  jitter do sol, então a sombra é uma mancha chapada recortada nos texels de cada face.
-- **Paleta**: sol dourado, sombra lavanda‑azulada, um pouco mais de luz ambiente
-  (`MapStyle.paint()`), e uma curva de pigmento em que nada chega ao preto puro nem estoura no
-  branco (piso levemente violeta, ombro nos realces).
-- **Plantas** sobre o chão pesam menos (0,22 em vez de 0,4), para o capim não salpicar o terreno.
-- **Água em aguadas**: a profundidade vertical cai em quatro faixas (rasa < 1,25, < 3,5, < 8 e
-  funda), cada uma mais escura e mostrando menos fundo; a cor do bioma é puxada 55% para um
-  azul‑petróleo de mapa pintado.
+- **Two tones**: each surface gets either its sunlit colour or a single cast-shadow colour. No
+  corner occlusion (AO), sky occlusion or altitude gradient; walls are only a little darker than the
+  ground (0.86).
+- **Crisp shadows**: one ray per pixel on the block grid (`docs/design/pixel-grid.md`), without the
+  sun's jitter, so a shadow is a flat patch cut out along each face's texels.
+- **Palette**: golden sun, bluish-lavender shadow, a little more ambient light (`MapStyle.paint()`),
+  and a pigment curve where nothing reaches pure black or blows out to white (a slightly violet
+  floor, a shoulder in the highlights).
+- **Plants** on the ground weigh less (0.22 instead of 0.4), so grass doesn't speckle the terrain.
+- **Water in washes**: vertical depth falls into four bands (shallow < 1.25, < 3.5, < 8 and deep),
+  each darker and showing less of the bottom; the biome's colour is pulled 55% toward the teal of a
+  painted map.
 
-### Acabamento (`PaintedFinish`)
+### Finish (`PaintedFinish`)
 
-Recebe o patch rastreado com 12 px de borda e devolve só o miolo:
+It takes the traced patch with a 12 px border and returns only the core:
 
-1. **Tinta**: filtro de Kuwahara sobre as faces da grade (cada uma uma célula de 4×3 px), no
-   albedo: o dab de uma face é a média da janela de 2×2 faces que menos varia, aplicado a 90%. Cada
-   pixel muda pela razão entre o dab e o seu albedo, então a cor das faces derrete em manchas e a
-   luz por texel (sombras) fica intacta; nada sai da grade. Dia e noite recebem o mesmo fator.
-2. **Nanquim**: linha sépia quente nos pixels que ficam atrás de uma aresta (peso pela distância
-   exata calculada pelo `TileBaker` a partir das faces), linha mais leve no lado escuro de faces
-   vizinhas de cores bem diferentes, linha firme na terra ao longo de toda costa e anéis azulados
-   onde a água muda de aguada. Só os 4 vizinhos: 1 px, sem engrossar nas quinas. O traço varia de
-   peso com um ruído de mundo, como pena à mão; a linha mais forte vence em vez de somar. Nada de
-   contorno do fundo através da água.
-3. **Luz**: um brilho quente fino nas bordas ensolaradas voltadas para a câmera e uma linha de
-   espuma na água junto à terra.
-4. **Textura**: pinceladas curtas que seguem um campo de direção que gira devagar (longas e
-   horizontais na água), as mesmas pinceladas 4× maiores na terra (para campos abertos mostrarem
-   pincel também no zoom médio), uma aguada grande irregular com leve deriva quente/fria e grão de
-   papel — tudo discreto, para não devolver a textura que o passo 1 tirou.
+1. **Paint**: a Kuwahara filter over the grid's faces (each one a 4×3 px cell), on the albedo: a
+   face's dab is the average of the 2×2-face window that varies least, applied at 90%. Each pixel
+   changes by the ratio between the dab and its albedo, so the faces' colour melts into patches while
+   the per-texel light (shadows) stays intact; nothing leaves the grid. Day and night get the same
+   factor.
+2. **Ink**: a warm sepia line on the pixels behind an edge (weighted by the exact distance the
+   `TileBaker` works out from the faces), a lighter line on the dark side of neighbouring faces of
+   very different colours, a firm line on the land along every coast, and bluish rings where the
+   water changes wash. Only the 4 neighbours: 1 px, never thicker at corners. The stroke's weight
+   varies with world noise, like a pen by hand; the strongest line wins instead of adding up. No
+   outline of the bottom through the water.
+3. **Light**: a thin warm highlight on sunlit edges facing the camera, and a line of foam on the
+   water along the land.
+4. **Texture**: short brushstrokes following a slowly turning direction field (long and horizontal
+   on water), the same strokes 4× larger on land (so open fields show brushwork at medium zoom too),
+   a large uneven wash with a slight warm/cool drift, and paper grain. All of it subtle, so as not to
+   bring back the texture step 1 removed.
 
-### Garantias
+### Guarantees
 
-- Todos os padrões são indexados por pixel de mundo, nunca pela posição no patch: um patch parcial
-  é idêntico aos mesmos pixels do tile inteiro e tiles vizinhos não têm emenda
+- Every pattern is indexed by world pixel, never by position in the patch: a partial patch is
+  identical to the same pixels of the whole tile and neighbouring tiles have no seams
   (`PaintedFinishTest.aPatchMatchesTheSamePixelsOfAWholeArea`).
-- Alpha é preservado e pixels desconhecidos continuam desconhecidos: o estilo nunca aumenta a
-  cobertura nem revela terreno (`keepsEveryAlphaSoCoverageNeverGrows`).
-- O alcance extra (12 px, três blocos) fica dentro das margens já usadas por `TileInvalidation`
-  (a sombra e a oclusão de céu já pedem bem mais), então edições redesenham tudo o que afetam.
-- Trocar de estilo preserva exploração e tiles residentes (cenário `settings-refresh`), e os tiles
-  da tela mudam juntos (cenário `style-swap`; ver "Troca de estilo").
-- Simples e Contornos não usam nada do acabamento pintado; os três estilos compartilham a grade e o
-  contorno geométrico.
+- Alpha is preserved and unknown pixels stay unknown: the style never grows coverage or reveals
+  terrain (`keepsEveryAlphaSoCoverageNeverGrows`).
+- The extra reach (12 px, three blocks) is within the margins `TileInvalidation` already uses (shadow
+  and sky occlusion already ask for much more), so edits redraw everything they affect.
+- Switching styles keeps exploration and resident tiles (the `settings-refresh` scenario), and the
+  tiles on screen change together (the `style-swap` scenario; see "Switching styles").
+- Plain and Outlined use nothing of the painted finish; all three styles share the grid and the
+  geometric outline.
 
-## Nitidez
+## Sharpness
 
-Os tiles são ampliados com NEAREST sempre que um texel cobre pelo menos um pixel real de tela
-(zoom × escala da GUI × tamanho do nível de overview), e a vista desenhada encaixa num número
-inteiro de pixels de tela por texel; ver `docs/design/pixel-grid.md`.
+Tiles are magnified with NEAREST whenever a texel covers at least one real screen pixel (zoom × GUI
+scale × overview level size), and the drawn view snaps to a whole number of screen pixels per texel;
+see `docs/design/pixel-grid.md`.
 
-## Migração
+## Migration
 
-Configs antigas só têm `outlines`: `true` vira Contornos, `false` vira Simples, e o campo deixa de
-ser gravado. O padrão para configs novas é Pintado desde a 1.0.0 (antes, Contornos).
+Old configs only have `outlines`: `true` becomes Outlined, `false` becomes Plain, and the field is no
+longer written. The default for new configs is Painted since 1.0.0 (before, Outlined).
 
-## Custo
+## Cost
 
-O acabamento é uma passada linear sobre a área: médias por face, um Kuwahara por face (não por
-pixel), 4 vizinhos e consultas de tabela. Medido num tile inteiro de 512² com dia e noite (JUnit,
-melhor de 8, nesta máquina): ~31 ms, contra ~0,2–0,34 s de bake médio por tile nos logs do teste de
-cliente com a grade. As tabelas de pincel, aguada e grão são geradas uma vez na carga da classe
-(256², 128², 128²).
+The finish is one linear pass over the area: per-face averages, one Kuwahara per face (not per
+pixel), 4 neighbours and table lookups. Measured on a whole 512² tile with day and night (JUnit, best
+of 8, on this machine): ~31 ms, against ~0.2–0.34 s average bake per tile in the client test's logs
+with the grid. The brush, wash and grain tables are generated once when the class loads (256², 128²,
+128²).
 
-## Troca de estilo
+## Switching styles
 
-Como o estilo vem do bake e os tiles salvos guardam só RGB, trocar de estilo (ou de sombreamento
-de profundidade) re-rastreia os tiles residentes. Antes o refresh de aparência esperava *todos* os
-residentes e trocava tudo num único quadro; com dezenas ou centenas de tiles e ~0,2–0,3 s por tile
-por baker, o clique no livro levava segundos para aparecer. Agora a troca é **viewport-first**
+Since the style comes from the bake and saved tiles keep only RGB, switching styles (or depth
+shading) traces the resident tiles again. The appearance refresh used to wait for *all* resident
+tiles and swap everything in a single frame; with dozens or hundreds of tiles at ~0.2–0.3 s per tile
+per baker, a click in the book took seconds to show. Now the swap is **viewport-first**
 (`AppearanceRefresh.swappable`, `MapLevel.swapStaged`):
 
-- A fila já começa pelos tiles que as vistas desenham. Eles trocam **juntos, no mesmo quadro**,
-  assim que todos estiverem prontos: a tela nunca mostra metade num estilo e metade no outro.
-- Os residentes que nenhuma vista desenha (inclusive o anel pré-carregado fora da borda,
-  `MapLevel.OFF_SCREEN`) trocam conforme chegam, até 4 por quadro; ninguém os vê mudar.
-- Overviews continuam atrás da barreira do writer e trocam juntos por último, depois de todos os
-  tiles detalhados.
-- Antes de cada troca, geração e frescor de terreno/luz são conferidos de novo; um resultado velho
-  volta para a fila e segura o grupo da tela. Depois de trocado, o tile segue o caminho comum
-  (edições sobem direto) e não é rastreado de novo pela revisão. `appearance.bin` é carimbado na
-  troca, como antes no commit único.
-- Bakes que ainda estavam na fila quando a geração mudou (um estilo novo) pulam o trabalho ao
-  começar, em vez de rastrear um tile inteiro que seria descartado.
+- The queue starts with the tiles the views draw. They swap **together, in the same frame**, as soon
+  as all of them are ready: the screen never shows half in one style and half in the other.
+- Resident tiles no view draws (including the preloaded ring past the edge, `MapLevel.OFF_SCREEN`)
+  swap as they arrive, up to 4 per frame; nobody sees them change.
+- Overviews stay behind the writer's barrier and swap together last, after every detailed tile.
+- Before each swap, generation and terrain/light freshness are checked again; a stale result goes
+  back to the queue and holds the on-screen group. Once swapped, a tile follows the usual path (edits
+  go straight up) and isn't traced again by the revision. `appearance.bin` is stamped at the swap, as
+  it used to be at the single commit.
+- Bakes still queued when the generation changed (a new style) skip their work as they start, instead
+  of tracing a whole tile that would be thrown away.
 
-Medição (`DIORAMA_TESTS=style-swap`, Fabric 26.3, janela 1600×900, nesta máquina, 20/10/2026): o
-cenário visita quatro lugares a 400 blocos para deixar 57 tiles residentes (109 MiB), volta ao ponto
-fixo (8,5; 8,5), abre o livro em Aparência e clica no estilo. Tempo do clique até os 4 tiles da tela
-mudarem, e até o fim da revisão inteira:
+Measurement (`DIORAMA_TESTS=style-swap`, Fabric 26.3, 1600×900 window, on this machine, 2026-10-20):
+the scenario visits four places 400 blocks away to leave 57 resident tiles (109 MiB), comes back to a
+fixed spot (8.5, 8.5), opens the book at Look and clicks the style. Time from the click until the 4
+tiles on screen change, and until the whole revision is done:
 
-| Troca | Antes (tela = revisão inteira) | Depois: tela | Depois: revisão inteira |
+| Switch | Before (screen = whole revision) | After: screen | After: whole revision |
 | --- | --- | --- | --- |
-| Contornos → Pintado | 4421 ms | **875 ms** | 4223 ms |
-| Pintado → Contornos | 3148 ms | **448 ms** | 3150 ms |
+| Outlined → Painted | 4421 ms | **875 ms** | 4223 ms |
+| Painted → Outlined | 3148 ms | **448 ms** | 3150 ms |
 
-O cenário falha se só parte dos tiles da tela mudar, se um tile da tela perder textura ou
-cobertura, ou se o clique não escolher o estilo. O trabalho total não muda; só a ordem em que ele
-fica visível. Com mais tiles na tela (zoom afastado, janela maior) o tempo cresce com eles, não com
-os residentes.
+The scenario fails if only some of the tiles on screen change, if a tile on screen loses its texture
+or coverage, or if the click doesn't pick the style. The total work doesn't change; only the order in
+which it becomes visible. With more tiles on screen (zoomed out, a larger window) the time grows with
+them, not with the resident tiles.
 
-Manter as texturas do estilo anterior para voltar instantaneamente foi avaliado e **não** adotado:
-cada tile residente custa ~1,9 MiB de GPU (dia + noite), a volta já fica abaixo de meio segundo, e
-o cache não pouparia nenhum bake: o disco e `appearance.bin` ainda precisariam dos pixels no estilo
-escolhido, então os mesmos tiles seriam rastreados de qualquer jeito, agora com texturas fora do
-orçamento de 256 MiB.
+Keeping the previous style's textures to switch back instantly was considered and **not** adopted:
+each resident tile costs ~1.9 MiB of GPU memory (day + night), switching back already takes under
+half a second, and the cache would save no bakes: the disk and `appearance.bin` would still need the
+pixels in the chosen style, so the same tiles would be traced anyway, now with textures outside the
+GPU budget (then 256 MiB, 512 MB today).
 
-## Limites
+## Limits
 
-- Caves, Nether e End também recebem tinta, nanquim e textura; neles a luz já é a do jogo e o
-  passo de dois tons só remove a AO.
-- Pixels históricos que não podem ser redesenhados (multiplayer, versões sem `SavedChunks`)
-  mantêm a aparência com que foram salvos, como nos outros estilos.
-- Muito afastado, os mipmaps médiam linhas e pinceladas; o que segura o estilo nessa escala são
-  as áreas chapadas, a paleta e a água em aguadas.
+- Caves, the Nether and the End also get paint, ink and texture; there the light is already the
+  game's and the two-tone step only removes the AO.
+- Historical pixels that can't be redrawn (multiplayer, versions without `SavedChunks`) keep the
+  look they were saved with, as in the other styles.
+- Far out, mipmaps average lines and brushstrokes away; what holds the style at that scale are the
+  flat areas, the palette and the water in washes.
 
-## Validação
+## Validation
 
 `DIORAMA_TESTS=painted DIORAMA_RENDER_DISTANCE=8 ./gradlew --configure-on-demand :26.3:runClientGameTest`
-fotografa uma aldeia e uma costa nos três estilos de perto, o Pintado no zoom médio, o minimapa e a
-noite (Fabric 26.3).
+captures a village and a coast in all three styles up close, Painted at a medium zoom, the minimap and
+night (Fabric 26.3).
