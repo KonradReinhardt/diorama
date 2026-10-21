@@ -1,6 +1,9 @@
 package dev.diorama.ui;
 
 import com.mojang.blaze3d.platform.InputConstants;
+//? if >=1.21.9 {
+import com.mojang.blaze3d.platform.cursor.CursorTypes;
+//?}
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -27,17 +30,33 @@ public abstract class BookWidget extends AbstractWidget {
 	/** Pressed, by a click at (x, y) or, with NaN, by the keyboard. */
 	protected abstract void press(double x, double y);
 
+	/** Whether a click on it does something, so the pointer turns to a hand over it. */
+	protected boolean clickable() {
+		return true;
+	}
+
 	//? if >=26.1 {
 	@Override
 	protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		this.draw(graphics, mouseX, mouseY, this.isHoveredOrFocused() && this.active);
+		this.pointer(graphics);
 	}
 	//?} else {
 	/*@Override
 	protected void renderWidget(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
 		this.draw(graphics, mouseX, mouseY, this.isHoveredOrFocused() && this.active);
+		this.pointer(graphics);
 	}
 	*///?}
+
+	/** A hand over a control that can be pressed, "not allowed" over one switched off, as vanilla's buttons do. */
+	private void pointer(GuiGraphicsExtractor graphics) {
+		//? if >=1.21.9 {
+		if (this.isHovered() && this.clickable()) {
+			graphics.requestCursor(this.active ? CursorTypes.POINTING_HAND : CursorTypes.NOT_ALLOWED);
+		}
+		//?}
+	}
 
 	//? if >=1.21.9 {
 	@Override

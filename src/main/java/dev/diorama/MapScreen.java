@@ -27,11 +27,13 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 //? if >=1.21.9 {
+import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 //?}
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -63,6 +65,8 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	private double pressX;
 	private double pressY;
 	private boolean dragged;
+	/** The left button is down and dragging the map. */
+	private boolean panning;
 	/** The press started on the book, so it neither pans nor clicks the map. */
 	private boolean pressOnBook;
 	private final MapBook book = new MapBook(this);
@@ -205,6 +209,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		Radar.draw(graphics, view, this.blips, true, true);
 		Markers.player(graphics, view.screenX(playerU), view.screenY(playerV), player.getViewYRot(a), 2);
 		this.lastView = view;
+		this.pointer(graphics, onMap, hoveredPin != null);
 		// The tooltip is for whatever is drawn on top: a player, then a waypoint, then a mob.
 		if (hovered != null && hovered.kind() == Radar.Kind.PLAYER) {
 			graphics.setTooltipForNextFrame(this.font, Radar.describe(hovered, player), mouseX, mouseY);
@@ -225,6 +230,9 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		RegionReveal.Outcome outcome = RegionReveal.takeOutcome();
 		if (outcome != null) {
+			if (outcome == RegionReveal.Outcome.DONE) {
+				BookWidgets.play(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1.0F);
+			}
 			this.say(Component.translatable("diorama.reveal." + outcome.name().toLowerCase(java.util.Locale.ROOT)));
 		}
 		Component shownNote = this.revealCorner != null ? this.revealHint(mouseX, mouseY)
@@ -240,6 +248,22 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		BookSprites.above(graphics);
 		this.book.drawBehind(graphics);
 		super.extractRenderState(graphics, mouseX, mouseY, a);
+	}
+
+	/**
+	 * The pointer over the map, as the book's controls set their own: a cross of arrows while the map
+	 * is dragged, a crosshair while a region's other corner is picked, a hand over a banner.
+	 */
+	private void pointer(GuiGraphicsExtractor graphics, boolean onMap, boolean overPin) {
+		//? if >=1.21.9 {
+		if (this.panning) {
+			graphics.requestCursor(CursorTypes.RESIZE_ALL);
+		} else if (onMap && this.revealCorner != null) {
+			graphics.requestCursor(CursorTypes.CROSSHAIR);
+		} else if (onMap && overPin) {
+			graphics.requestCursor(CursorTypes.POINTING_HAND);
+		}
+		//?}
 	}
 
 	/** Where the player is and what the map shows, on a slip of parchment in the top left corner. */
@@ -340,11 +364,13 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		this.pressX = x;
 		this.pressY = y;
 		this.dragged = false;
+		this.panning = false;
 		return true;
 	}
 
 	/** A release; false leaves it to the screen's widgets. */
 	private boolean released(double x, double y, int button) {
+		this.panning = false;
 		if (this.pressOnBook) {
 			this.pressOnBook = false;
 			return false;
@@ -361,13 +387,18 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			RegionReveal.Region picked = button == InputConstants.MOUSE_BUTTON_LEFT ? this.pickedRegion(x, y) : null;
 			this.revealCorner = null;
 			if (picked != null) {
-				this.say(Component.translatable(RegionReveal.start(picked) ? "diorama.reveal.started" : "diorama.reveal.denied"));
+				boolean started = RegionReveal.start(picked);
+				if (started) {
+					BookWidgets.play(SoundEvents.SPYGLASS_USE, 1.0F);
+				}
+				this.say(Component.translatable(started ? "diorama.reveal.started" : "diorama.reveal.denied"));
 			}
 			return true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT) {
 			WaypointOverlay.Pin pin = WaypointOverlay.under(this.pins, x, y);
 			if (pin != null) {
+				BookWidgets.pageTurn(this.minecraft.getSoundManager());
 				this.book.showWaypoint(pin.waypoint());
 			}
 			return true;
@@ -523,6 +554,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			}
 		}
 		this.menu = new MapMenu(target, entries, (int) screenX, (int) screenY);
+		BookWidgets.card(this.minecraft.getSoundManager());
 		this.rebuild();
 	}
 
@@ -591,6 +623,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			this.dragged = true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT && this.dragged) {
+			this.panning = true;
 			this.smoothZoom.reset(this.zoom);
 			this.opening.cancel();
 			this.panTarget = null;
@@ -629,6 +662,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		if (key == InputConstants.KEY_ESCAPE && this.book.isOpen()) {
 			this.setFocused(null);
+			BookWidgets.pageTurn(this.minecraft.getSoundManager());
 			this.book.close();
 			return true;
 		}
@@ -638,6 +672,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		// The player's own bindings come before the map's fixed keys, so Open map rebound to C still closes it.
 		if (waypointListKey) {
+			BookWidgets.pageTurn(this.minecraft.getSoundManager());
 			this.book.show(MapBook.Section.BANNERS, 0);
 			return true;
 		}

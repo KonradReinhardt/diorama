@@ -20,6 +20,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 //?}
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -262,6 +263,8 @@ public final class BannerEditScreen extends Screen {
 		layers.add(new BannerDesign.Layer(pattern.id(), this.pen));
 		this.selected = layers.size() - 1;
 		this.change(this.design().withLayers(layers));
+		// The loom's own sounds: picking a pattern, and taking the banner off it.
+		dev.diorama.ui.BookWidgets.play(SoundEvents.UI_LOOM_SELECT_PATTERN, 1.0F);
 	}
 
 	private void move(int by) {
@@ -334,6 +337,7 @@ public final class BannerEditScreen extends Screen {
 	private long toastUntil;
 
 	private void finish() {
+		dev.diorama.ui.BookWidgets.play(SoundEvents.UI_LOOM_TAKE_RESULT, 1.0F);
 		this.done.accept(this.design());
 		this.onClose();
 	}

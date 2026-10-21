@@ -13,6 +13,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.Nullable;
@@ -66,6 +67,16 @@ public final class BookWidgets {
 	/** Plays a page turning, as the book's ribbons and arrows do, and the map as it opens and shuts. */
 	public static void pageTurn(SoundManager sounds) {
 		sounds.play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
+	}
+
+	/** A card of parchment laid on the map, as the right-click menu opens: a page turning, higher and softer. */
+	public static void card(SoundManager sounds) {
+		sounds.play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.5F, 0.6F));
+	}
+
+	/** Plays one of the game's sounds as the interface does, heard the same wherever the player stands. */
+	public static void play(SoundEvent sound, float pitch) {
+		Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(sound, pitch));
 	}
 
 	/** A pressable stamp with a label. */
@@ -363,7 +374,7 @@ public final class BookWidgets {
 		}
 	}
 
-	/** A small sprite that does something: the close mark, page arrows, the help seal. */
+	/** A small sprite that does something: the close mark and page arrows, which turn a page; the help seal only explains. */
 	public static final class Mark extends BookWidget {
 		private final BookSprites.Region normal;
 		private final BookSprites.Region hover;
@@ -385,6 +396,18 @@ public final class BookWidgets {
 		protected void press(double x, double y) {
 			if (this.action != null) {
 				this.action.run();
+			}
+		}
+
+		@Override
+		protected boolean clickable() {
+			return this.action != null;
+		}
+
+		@Override
+		public void playDownSound(SoundManager sounds) {
+			if (this.action != null) {
+				pageTurn(sounds);
 			}
 		}
 	}

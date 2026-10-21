@@ -119,5 +119,10 @@ public final class MapMenu {
 				this.action.run();
 			}
 		}
+
+		@Override
+		protected boolean clickable() {
+			return !this.header;
+		}
 	}
 }

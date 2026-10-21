@@ -1,16 +1,21 @@
 package dev.diorama.waypoint;
 
 import com.mojang.blaze3d.platform.InputConstants;
+//? if >=1.21.9 {
+import com.mojang.blaze3d.platform.cursor.CursorTypes;
+//?}
 import dev.diorama.render.BannerAtlas;
 import dev.diorama.render.BannerCompositor;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.gui.screens.Screen;
 //? if >=1.21.9 {
 import net.minecraft.client.input.MouseButtonEvent;
 //?}
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -141,6 +146,11 @@ public final class WaypointEditScreen extends Screen {
 			graphics.fill(sx - 1, sy - 1, sx + SWATCH + 1, sy + SWATCH + 1, 0xFF1E140C);
 			graphics.fill(sx, sy, sx + SWATCH, sy + SWATCH, dyes[i].argb());
 		}
+		//? if >=1.21.9 {
+		if (this.swatchAt(mouseX, mouseY) >= 0) {
+			graphics.requestCursor(CursorTypes.POINTING_HAND);
+		}
+		//?}
 	}
 
 	// Mouse events came as separate numbers before 1.21.9.
@@ -156,20 +166,28 @@ public final class WaypointEditScreen extends Screen {
 	}
 	*///?}
 
-	/** Picks the colour swatch under a left click; false if the click wasn't on one. */
+	/** Picks the colour swatch under a left click, with a button's click; false if the click wasn't on one. */
 	private boolean clicked(double x, double y, int button) {
-		if (button == InputConstants.MOUSE_BUTTON_LEFT) {
-			BannerDesign.Dye[] dyes = BannerDesign.Dye.values();
-			for (int i = 0; i < dyes.length; i++) {
-				int sx = this.swatchX + (i % 8) * (SWATCH + SWATCH_GAP);
-				int sy = this.swatchY + (i / 8) * (SWATCH + SWATCH_GAP);
-				if (x >= sx && x < sx + SWATCH && y >= sy && y < sy + SWATCH) {
-					this.banner = this.banner.withBase(dyes[i]);
-					return true;
-				}
+		int swatch = button == InputConstants.MOUSE_BUTTON_LEFT ? this.swatchAt(x, y) : -1;
+		if (swatch < 0) {
+			return false;
+		}
+		this.banner = this.banner.withBase(BannerDesign.Dye.values()[swatch]);
+		this.minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+		return true;
+	}
+
+	/** The dye of the swatch under a point, as an index into {@link BannerDesign.Dye#values()}, or -1. */
+	private int swatchAt(double x, double y) {
+		int count = BannerDesign.Dye.values().length;
+		for (int i = 0; i < count; i++) {
+			int sx = this.swatchX + (i % 8) * (SWATCH + SWATCH_GAP);
+			int sy = this.swatchY + (i / 8) * (SWATCH + SWATCH_GAP);
+			if (x >= sx && x < sx + SWATCH && y >= sy && y < sy + SWATCH) {
+				return i;
 			}
 		}
-		return false;
+		return -1;
 	}
 
 	/** The colour kept beside the banner, for older versions: the old colour while the base dye is still its nearest. */
