@@ -75,10 +75,11 @@ public final class MapLevel implements ChunkSource {
 	private volatile @Nullable Overlays overlays;
 	/**
 	 * Bumped whenever tiles baked before stop being valid: new block colours, or cave slices
-	 * switching to or from fog of war. Bakes that started under an older value are dropped.
+	 * switching to or from fog of war. Bakes that started under an older value are dropped, and
+	 * ones still queued when it changes skip their work. Read by bakers.
 	 */
-	private int surfaceGeneration;
-	private int caveGeneration;
+	private volatile int surfaceGeneration;
+	private volatile int caveGeneration;
 
 	// Render thread only below here.
 	private final TileCache tiles = new TileCache();
@@ -914,6 +915,8 @@ public final class MapLevel implements ChunkSource {
             && (redraw || this.appearanceRefresh != null) ? this.withSaved : null;
         this.completeBakes.remove(key);
         this.scheduler.submit(key, generation, () -> {
+            // Superseded while queued, as by a new look: the result would be dropped anyway.
+            if (generation != this.generation(key)) return TileImage.partial(key, List.of());
             long start = System.nanoTime();
             var saved = store == null ? null : store.readPixels(key);
             if (blocks == null && fallback == null && !this.chunksReach(key)) {
