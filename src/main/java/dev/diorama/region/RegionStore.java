@@ -91,6 +91,27 @@ public final class RegionStore {
 		return out;
 	}
 
+	/**
+	 * The region shown on maps that a world point is in, the smallest where several are, or null.
+	 * With {@code minimap}, only those shown on the minimap.
+	 */
+	public @Nullable MapRegion containing(String dimension, double x, double z, boolean minimap) {
+		MapRegion best = null;
+		for (MapRegion region : this.regions) {
+			if (!region.dimension.equals(dimension) || !region.visible || minimap && !region.onMinimap) {
+				continue;
+			}
+			double[] b = region.bounds();
+			if (x < b[0] || z < b[1] || x > b[2] || z > b[3] || best != null && region.area() >= best.area()) {
+				continue;
+			}
+			if (RegionGeometry.contains(region.rings, x, z)) {
+				best = region;
+			}
+		}
+		return best;
+	}
+
 	public @Nullable MapRegion find(UUID id) {
 		for (MapRegion region : this.regions) {
 			if (region.id.equals(id)) {

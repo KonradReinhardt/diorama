@@ -1,9 +1,16 @@
 package dev.diorama.ui;
 
+import dev.diorama.Settings;
 import dev.diorama.region.MapRegion;
+import dev.diorama.render.BannerAtlas;
+import dev.diorama.render.BannerCompositor;
+import dev.diorama.waypoint.BannerDesign;
+import dev.diorama.waypoint.BannerEditScreen;
+import dev.diorama.waypoint.BannerPatternCatalog;
+import dev.diorama.waypoint.Waypoint;
+import dev.diorama.waypoint.WaypointListModel;
 import dev.diorama.region.RegionGeometry;
 import dev.diorama.region.RegionStore;
-import dev.diorama.region.RegionStyle;
 import dev.diorama.waypoint.Waypoints;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,9 +27,11 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The regions section's list: the regions of this dimension on the left page, nearest first, each
- * with its dye and size, and the one picked on the right: its name written in place, its dye, fill
- * and where it shows, and what to do with it. Every change but the name is one step of the regions'
- * history (Ctrl+Z on the map takes it back); the name is written as the region is left.
+ * with its dye and size, and the one picked on the right: its banner and name written in place, its
+ * dye, fill and where it shows, and what to do with it; or its banner's own page: the loom, the
+ * banner in hand, a waypoint's to copy, and the banner's base dye for the region. Every change but
+ * the name is one step of the regions' history (Ctrl+Z on the map takes it back); the name is
+ * written as the region is left.
  */
 final class RegionsPage {
 	private static final int ROW = 15;
@@ -36,11 +45,17 @@ final class RegionsPage {
 	private boolean deleteArmed;
 	/** The name field takes the keyboard when it is next built: the region was just drawn. */
 	private boolean nameFirst;
+	/** The right page shows the picked region's banner, to change it. */
+	private boolean bannerPage;
+	/** A line under the banner page's controls: why the banner in hand wasn't taken. */
+	private @Nullable Component bannerNote;
 
 	void select(MapRegion region) {
 		this.commit();
 		selected = region.id;
 		this.deleteArmed = false;
+		this.bannerPage = false;
+		this.bannerNote = null;
 		int index = rows().indexOf(region);
 		if (index >= 0) {
 			listPage = -1 - index;
@@ -100,6 +115,8 @@ final class RegionsPage {
 		if (current == null) {
 			flow.heading(Component.translatable("diorama.book.regions.none"));
 			flow.paragraph(Component.translatable(rows.isEmpty() ? "diorama.book.regions.empty" : "diorama.book.regions.pick"));
+		} else if (this.bannerPage) {
+			this.banner(book, flow, current);
 		} else {
 			this.detail(book, flow, current);
 		}
@@ -156,8 +173,19 @@ final class RegionsPage {
 		RegionStore store = RegionStore.get();
 		boolean editable = store != null && !store.readOnly();
 		flow.heading(Component.translatable("diorama.book.regions.region"));
-		int at = flow.take(14);
-		EditBox box = this.field(flow, flow.x(), at, flow.width(), region.id.equals(this.typedFor) && this.typed != null ? this.typed : region.name);
+		// Its banner beside its name; a click on it turns to the banner's page.
+		int at = flow.take(36);
+		BookWidgets.Slot standard = new BookWidgets.Slot(flow.x(), at, 22, 36, Component.translatable("diorama.book.regions.banner"),
+			(graphics, x, y, w, h, alpha) -> BannerAtlas.shared().draw(graphics, region.design(), BannerCompositor.Size.MAP, x + w / 2.0F, y + h - 3, 1,
+				BannerAtlas.frameNow(Settings.get().animateBanners), false, BookWidgets.fade(-1, alpha * (region.banner != null ? 1 : 0.45F))),
+			() -> false, () -> {
+				this.commit();
+				this.bannerPage = true;
+				host.rebuild();
+			}, true);
+		standard.setTooltip(Tooltip.create(Component.translatable("diorama.book.regions.banner")));
+		flow.add(standard);
+		EditBox box = this.field(flow, flow.x() + 26, at + 12, flow.width() - 26, region.id.equals(this.typedFor) && this.typed != null ? this.typed : region.name);
 		if (box != null) {
 			box.setEditable(editable);
 			box.setResponder(text -> {
@@ -183,11 +211,6 @@ final class RegionsPage {
 			d -> this.change(host, region, r -> r.onMinimap = !r.onMinimap), () -> editable);
 		flow.stepper(Component.translatable("diorama.book.regions.label"), () -> onOff(region.showLabel),
 			d -> this.change(host, region, r -> r.showLabel = !r.showLabel), () -> editable);
-		RegionStyle[] styles = RegionStyle.values();
-		flow.stepper(Component.translatable("diorama.book.regions.style"), () -> region.style == RegionStyle.AUTO
-				? Component.translatable("diorama.book.regions.style.auto")
-				: Component.translatable("diorama.settings.region_style." + name(region.style)),
-			d -> this.change(host, region, r -> r.style = styles[Math.floorMod(r.style.ordinal() + d, styles.length)]), () -> editable);
 		flow.gap(2);
 		List<PageFlow.ButtonSpec> buttons = new ArrayList<>();
 		buttons.add(new PageFlow.ButtonSpec(Component.translatable("diorama.book.center"), () -> host.centerOn(region)));
@@ -195,6 +218,11 @@ final class RegionsPage {
 			this.commit();
 			host.drawRegions(region);
 		}, editable));
+		buttons.add(new PageFlow.ButtonSpec(Component.translatable("diorama.book.regions.banner"), () -> {
+			this.commit();
+			this.bannerPage = true;
+			host.rebuild();
+		}));
 		buttons.add(new PageFlow.ButtonSpec(Component.translatable(this.deleteArmed ? "diorama.book.confirm" : "diorama.book.delete"), () -> {
 			if (!this.deleteArmed) {
 				this.deleteArmed = true;
@@ -213,6 +241,79 @@ final class RegionsPage {
 		if (store != null && store.readOnly()) {
 			flow.paragraph(Component.translatable("diorama.regions.read_only"));
 		}
+	}
+
+	/**
+	 * The region's banner: large, with what changes it beside it (the loom, the banner in hand, none,
+	 * and its base dye for the region), and the waypoints' banners nearest first to copy one.
+	 */
+	private void banner(MapBook book, PageFlow flow, MapRegion region) {
+		MapBook.Host host = book.host();
+		RegionStore store = RegionStore.get();
+		boolean editable = store != null && !store.readOnly();
+		flow.heading(Component.translatable("diorama.book.regions.banner_of", region.name));
+		int top = flow.take(64);
+		int x = flow.x(), width = flow.width();
+		flow.decorate((graphics, dy, alpha) -> BannerAtlas.shared().draw(graphics, region.design(), BannerCompositor.Size.MAP, x + 14, top + 62 + dy, 2,
+			BannerAtlas.frameNow(Settings.get().animateBanners), false, BookWidgets.fade(-1, alpha * (region.banner != null ? 1 : 0.45F))));
+		int bx = x + 34, bw = width - 34;
+		Component[] labels = {
+			Component.translatable("diorama.book.regions.loom"), Component.translatable("diorama.book.regions.from_hand"),
+			Component.translatable("diorama.book.regions.no_banner"), Component.translatable("diorama.book.regions.banner_dye")
+		};
+		Runnable[] actions = {
+			() -> {
+				this.commit();
+				Minecraft.getInstance().gui.setScreen(new BannerEditScreen(host.screen(), region.design(), design -> this.change(host, region, r -> r.banner = design)));
+			},
+			() -> {
+				BannerDesign held = BannerPatternCatalog.fromInventory();
+				this.bannerNote = held == null ? Component.translatable("diorama.book.regions.no_banner_held") : null;
+				if (held != null) {
+					this.change(host, region, r -> r.banner = held);
+				} else {
+					host.rebuild();
+				}
+			},
+			() -> this.change(host, region, r -> r.banner = null),
+			() -> this.change(host, region, r -> r.dye = r.design().base())
+		};
+		boolean[] active = {editable, editable, editable && region.banner != null, editable && region.banner != null && region.banner.base() != region.dye};
+		for (int i = 0; i < labels.length; i++) {
+			BookWidgets.Button button = new BookWidgets.Button(bx, top + i * (BookWidgets.BUTTON + 2), bw, labels[i], actions[i]);
+			button.active = active[i];
+			flow.add(button);
+		}
+		if (this.bannerNote != null) {
+			flow.paragraph(this.bannerNote);
+		}
+		flow.gap(2);
+		flow.heading(Component.translatable("diorama.book.regions.from_waypoint"));
+		List<Waypoint> waypoints = WaypointListModel.rows();
+		int cols = Math.max(1, (width + 2) / 24);
+		int shown = Math.min(waypoints.size(), cols * 2);
+		if (shown == 0) {
+			flow.paragraph(Component.translatable("diorama.book.regions.no_waypoints"));
+		}
+		for (int row = 0; row * cols < shown; row++) {
+			int at = flow.take(30);
+			for (int c = 0; c < cols && row * cols + c < shown; c++) {
+				Waypoint w = waypoints.get(row * cols + c);
+				BookWidgets.Slot slot = new BookWidgets.Slot(x + c * 24, at, 22, 28, Component.literal(w.name),
+					(graphics, sx, sy, sw, sh, alpha) -> BannerAtlas.shared().draw(graphics, w.design(), BannerCompositor.Size.SMALL, sx + sw / 2.0F, sy + sh - 3, 1,
+						BannerAtlas.frameNow(Settings.get().animateBanners), false, BookWidgets.fade(-1, alpha)),
+					() -> w.design().equals(region.banner), () -> this.change(host, region, r -> r.banner = w.design()), true);
+				slot.setTooltip(Tooltip.create(Component.literal(w.name)));
+				slot.active = editable;
+				flow.add(slot);
+			}
+		}
+		flow.gap(2);
+		flow.buttons(List.of(new PageFlow.ButtonSpec(Component.translatable("diorama.book.regions.back"), () -> {
+			this.bannerPage = false;
+			this.bannerNote = null;
+			host.rebuild();
+		})));
 	}
 
 	/** One step of the history: the region changed by {@code edit}, the page drawn again. */

@@ -8,7 +8,6 @@ import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileKey;
 import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionStore;
-import dev.diorama.region.RegionStyle;
 import dev.diorama.render.gpu.MapCanvas;
 import dev.diorama.render.gpu.MapEffect;
 import dev.diorama.render.gpu.MapTexture;
@@ -437,24 +436,7 @@ public final class MapViewport {
 		return (texel << 4 | day) << 24 | (u | (linesOnly ? 64 : 0)) << 16 | v << 8 | pixelCode & 63 | band << 6;
 	}
 
-	/**
-	 * The map's style for regions: the setting, or, left automatic, the render style's own, unless
-	 * the fog makes the whole map an old one. Never {@link RegionStyle#AUTO}.
-	 */
-	public static RegionStyle regionStyle(Settings settings) {
-		if (settings.regionStyle != RegionStyle.AUTO) {
-			return settings.regionStyle;
-		}
-		if (settings.antiqueFog()) {
-			return settings.fogStyle == Settings.FogStyle.ANCIENT_MAP ? RegionStyle.ANTIQUE : RegionStyle.ANTIQUE_COLOR;
-		}
-		return switch (settings.renderStyle) {
-			case PLAIN -> RegionStyle.PLAIN;
-			case OUTLINED -> RegionStyle.OUTLINED;
-			case PAINTED -> RegionStyle.PAINTED;
-			case PAINTED_NO_OUTLINES -> RegionStyle.PAINTED_NO_INK;
-		};
-	}
+
 
 	/** The regions of this dimension this view shows, and their mask, or null when it shows none. */
 	private RegionMask.@Nullable Pass prepareRegions(View view) {
@@ -476,7 +458,7 @@ public final class MapViewport {
 				shown.add(region);
 			}
 		}
-		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight, regionStyle(settings));
+		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight, settings.regionStyle);
 	}
 
 	/** Draws this region brighter from the next frame, or none. */

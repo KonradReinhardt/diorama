@@ -209,7 +209,7 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		this.drawReveal(graphics, view, player, mouseX, mouseY);
 		if (Settings.get().regionLabels) {
-			dev.diorama.render.RegionLabels.draw(graphics, view, this.viewport.shownRegions(), MapViewport.regionStyle(Settings.get()));
+			dev.diorama.render.RegionLabels.draw(graphics, view, this.viewport.shownRegions(), Settings.get());
 		}
 		this.regions.draw(graphics, view, mouseX, mouseY);
 		Radar.Blip hovered = null;

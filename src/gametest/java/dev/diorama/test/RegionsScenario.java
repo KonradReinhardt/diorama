@@ -92,44 +92,28 @@ final class RegionsScenario {
 	 * the map redrawn in each style before it is captured, close up and further out.
 	 */
 	private static void looks(ClientGameTestContext context, double[] player) {
-		Object[][] looks = {
-			{Settings.RenderStyle.PLAIN, Settings.FogStyle.CLOUDS, "plain"},
-			{Settings.RenderStyle.OUTLINED, Settings.FogStyle.CLOUDS, "outlined"},
-			{Settings.RenderStyle.PAINTED, Settings.FogStyle.CLOUDS, "painted"},
-			{Settings.RenderStyle.PAINTED_NO_OUTLINES, Settings.FogStyle.CLOUDS, "painted-no-ink"},
-			{Settings.RenderStyle.PAINTED, Settings.FogStyle.ANCIENT_MAP, "antique"},
-			{Settings.RenderStyle.PAINTED, Settings.FogStyle.ANCIENT_MAP_COLOR, "antique-color"},
-		};
-		for (Object[] l : looks) {
+		// Each region style over the painted map: the render style no longer chooses it.
+		context.runOnClient(mc -> {
+			Settings.get().renderStyle = Settings.RenderStyle.PAINTED;
+			Settings.get().fogStyle = Settings.FogStyle.CLOUDS;
+			Settings.get().save();
+		});
+		for (dev.diorama.region.RegionStyle style : dev.diorama.region.RegionStyle.values()) {
 			context.runOnClient(mc -> {
-				Settings.get().renderStyle = (Settings.RenderStyle) l[0];
-				Settings.get().fogStyle = (Settings.FogStyle) l[1];
+				Settings.get().regionStyle = style;
 				// The fills as each style lays them: the border band, on by default, would replace them.
 				Settings.get().regionBand = Settings.RegionBand.OFF;
 				Settings.get().save();
 			});
 			look(context, player[0], player[1], 2);
 			quiet(context);
-			context.takeScreenshot("regions-look-" + l[2]);
+			String name = style.name().toLowerCase(java.util.Locale.ROOT);
+			context.takeScreenshot("regions-look-" + name);
 			look(context, player[0], player[1], 4);
-			context.takeScreenshot("regions-look-" + l[2] + "-close");
+			context.takeScreenshot("regions-look-" + name + "-close");
 		}
-		// A style chosen for regions, apart from the render style; then one region's own.
-		context.runOnClient(mc -> {
-			Settings.get().renderStyle = Settings.RenderStyle.PLAIN;
-			Settings.get().fogStyle = Settings.FogStyle.CLOUDS;
-			Settings.get().regionStyle = dev.diorama.region.RegionStyle.PAINTED;
-			Settings.get().save();
-			RegionStore store = RegionStore.get();
-			MapRegion claim = RegionMode.here().stream().filter(r -> r.name.equals("Claim")).findFirst().orElseThrow();
-			MapRegion outlined = claim.copy();
-			outlined.style = dev.diorama.region.RegionStyle.ANTIQUE;
-			store.commit(claim.copy(), outlined);
-		});
-		look(context, player[0], player[1], 2);
-		quiet(context);
-		context.takeScreenshot("regions-look-chosen");
-		// The border band, narrow then wide, over the painted regions.
+		// The border band, narrow then wide, over the watercolour regions.
+		context.runOnClient(mc -> Settings.get().regionStyle = dev.diorama.region.RegionStyle.WATERCOLOR);
 		for (Settings.RegionBand b : new Settings.RegionBand[] {Settings.RegionBand.NARROW, Settings.RegionBand.WIDE}) {
 			context.runOnClient(mc -> Settings.get().regionBand = b);
 			look(context, player[0], player[1], 2);
@@ -137,10 +121,20 @@ final class RegionsScenario {
 		}
 		look(context, player[0], player[1], 4);
 		context.takeScreenshot("regions-band-wide-close");
+
+		// Home's banner, planted over its name on the map.
 		context.runOnClient(mc -> {
-			Settings.get().regionBand = Settings.RegionBand.OFF;
-			Settings.get().regionStyle = dev.diorama.region.RegionStyle.AUTO;
+			RegionStore store = RegionStore.get();
+			MapRegion home = RegionMode.here().stream().filter(r -> r.name.equals("Home")).findFirst().orElseThrow();
+			MapRegion bannered = home.copy();
+			bannered.banner = new BannerDesign(BannerDesign.Dye.RED, List.of(new BannerDesign.Layer("minecraft:cross", BannerDesign.Dye.YELLOW)));
+			store.commit(home.copy(), bannered);
 		});
+		look(context, player[0], player[1], 2);
+		context.takeScreenshot("regions-banner-map");
+		look(context, player[0], player[1], 0.5);
+		context.takeScreenshot("regions-banner-far");
+		look(context, player[0], player[1], 2);
 	}
 
 	/** Waits until no tile has been baking for a while, as a new render style redraws the map. */
@@ -449,7 +443,21 @@ final class RegionsScenario {
 		if (context.computeOnClient(mc -> RegionStore.get().find(picked.id)) != null) {
 			throw new AssertionError("Delete, then confirm, should delete the region");
 		}
-		clickWidget(context, Component.translatable("diorama.book.options").getString());
+		// Home's page, then its banner's.
+		context.runOnClient(mc -> ((MapScreen) mc.gui.screen()).book().showRegion(
+			RegionMode.here().stream().filter(r -> r.name.equals("Home")).findFirst().orElseThrow()));
+		context.waitTicks(3);
+		BookMapScenario.settle(context);
+		context.takeScreenshot("regions-book-home");
+		clickWidget(context, Component.translatable("diorama.book.regions.banner").getString());
+		BookMapScenario.settle(context);
+		context.takeScreenshot("regions-book-banner");
+		clickWidget(context, Component.translatable("diorama.book.regions.banner_dye").getString());
+		if (context.computeOnClient(mc -> RegionMode.here().stream().filter(r -> r.name.equals("Home")).findFirst().orElseThrow().dye) != BannerDesign.Dye.RED) {
+			throw new AssertionError("Home should keep its red: its banner is red too");
+		}
+		clickWidget(context, Component.translatable("diorama.book.regions.back").getString());
+		clickWidget(context, Component.translatable("diorama.book.regions.options").getString());
 		BookMapScenario.settle(context);
 		context.takeScreenshot("regions-book-options");
 		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
@@ -463,9 +471,15 @@ final class RegionsScenario {
 		context.waitTicks(2);
 	}
 
+	/** The minimap, with the region the player stands in, its banner and name, under it. */
 	private static void minimap(ClientGameTestContext context) {
 		context.setScreen(() -> null);
 		context.waitTicks(40);
+		MapRegion here = context.computeOnClient(mc -> RegionStore.get().containing(dev.diorama.waypoint.Waypoints.dimension(),
+			mc.player.getX(), mc.player.getZ(), true));
+		if (here == null || !here.name.equals("Home")) {
+			throw new AssertionError("The player stands in Home, found " + (here == null ? "nothing" : here.name));
+		}
 		context.takeScreenshot("regions-minimap");
 	}
 

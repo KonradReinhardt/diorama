@@ -23,8 +23,6 @@ public final class MapRegion {
 	/** One of the banner dyes, so a region and its banner share a palette. */
 	public BannerDesign.Dye dye = BannerDesign.Dye.RED;
 	public Fill fill = Fill.NORMAL;
-	/** How it is drawn; {@link RegionStyle#AUTO} draws it as the map's setting says. */
-	public RegionStyle style = RegionStyle.AUTO;
 	public List<Ring> rings = new ArrayList<>();
 	/** The standard planted at the region's label; none draws only its name. */
 	public @Nullable BannerDesign banner;
@@ -49,7 +47,6 @@ public final class MapRegion {
 		out.dimension = this.dimension;
 		out.dye = this.dye;
 		out.fill = this.fill;
-		out.style = this.style;
 		out.rings = new ArrayList<>(this.rings);
 		out.banner = this.banner;
 		out.visible = this.visible;
@@ -57,6 +54,11 @@ public final class MapRegion {
 		out.showLabel = this.showLabel;
 		out.created = this.created;
 		return out;
+	}
+
+	/** The banner it shows: its own, or a plain one in its dye. */
+	public BannerDesign design() {
+		return this.banner != null ? this.banner : BannerDesign.plain(this.dye);
 	}
 
 	/** Call after changing the rings in place. */

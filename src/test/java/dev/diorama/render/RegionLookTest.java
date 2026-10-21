@@ -3,41 +3,37 @@ package dev.diorama.render;
 import static org.junit.jupiter.api.Assertions.*;
 
 import dev.diorama.Settings;
+import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionStyle;
 import dev.diorama.waypoint.BannerDesign;
 import org.junit.jupiter.api.Test;
 
 class RegionLookTest {
-	@Test void leftAutomaticRegionsFollowTheRenderStyleUnlessTheFogIsAnOldMap() {
+	@Test void theRegionStyleIsItsOwnChoiceNotTheRenderStyles() {
 		Settings s = new Settings();
-		s.fogStyle = Settings.FogStyle.CLOUDS;
+		assertEquals(RegionStyle.WATERCOLOR, s.regionStyle);
 		s.renderStyle = Settings.RenderStyle.PLAIN;
-		assertEquals(RegionStyle.PLAIN, MapViewport.regionStyle(s));
-		s.renderStyle = Settings.RenderStyle.OUTLINED;
-		assertEquals(RegionStyle.OUTLINED, MapViewport.regionStyle(s));
-		s.renderStyle = Settings.RenderStyle.PAINTED;
-		assertEquals(RegionStyle.PAINTED, MapViewport.regionStyle(s));
-		s.renderStyle = Settings.RenderStyle.PAINTED_NO_OUTLINES;
-		assertEquals(RegionStyle.PAINTED_NO_INK, MapViewport.regionStyle(s));
 		s.fogStyle = Settings.FogStyle.ANCIENT_MAP;
-		assertEquals(RegionStyle.ANTIQUE, MapViewport.regionStyle(s));
-		s.fogStyle = Settings.FogStyle.ANCIENT_MAP_COLOR;
-		assertEquals(RegionStyle.ANTIQUE_COLOR, MapViewport.regionStyle(s));
-	}
-
-	@Test void aStyleChosenWinsOverTheRenderStyle() {
-		Settings s = new Settings();
-		s.renderStyle = Settings.RenderStyle.PAINTED;
-		s.fogStyle = Settings.FogStyle.ANCIENT_MAP;
-		s.regionStyle = RegionStyle.OUTLINED;
-		assertEquals(RegionStyle.OUTLINED, MapViewport.regionStyle(s));
-		// A region's own style wins over the map's.
-		assertEquals(RegionStyle.PAINTED, RegionStyle.PAINTED.or(MapViewport.regionStyle(s)));
-		assertEquals(RegionStyle.OUTLINED, RegionStyle.AUTO.or(MapViewport.regionStyle(s)));
+		assertEquals(RegionStyle.WATERCOLOR, s.regionStyle, "the render and fog styles leave it alone");
 		// regions.fsh reads the style from three bits of the mask.
 		for (RegionStyle style : RegionStyle.values()) {
-			if (style != RegionStyle.AUTO) assertTrue(style.shaderIndex() >= 0 && style.shaderIndex() < 8);
+			assertTrue(style.shaderIndex() >= 0 && style.shaderIndex() < 8);
 		}
+		// Named apart from the render styles, so the two lists never read alike.
+		for (RegionStyle style : RegionStyle.values()) {
+			for (Settings.RenderStyle render : Settings.RenderStyle.values()) {
+				assertNotEquals(render.name(), style.name());
+			}
+		}
+	}
+
+	@Test void aRegionWithoutABannerShowsOneInItsDye() {
+		MapRegion region = new MapRegion();
+		region.dye = BannerDesign.Dye.CYAN;
+		assertEquals(BannerDesign.plain(BannerDesign.Dye.CYAN), region.design());
+		BannerDesign own = BannerDesign.plain(BannerDesign.Dye.BLACK);
+		region.banner = own;
+		assertEquals(own, region.design());
 	}
 
 	@Test void darkDyesAreLightenedForNames() {

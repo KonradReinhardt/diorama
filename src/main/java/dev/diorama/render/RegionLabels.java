@@ -1,6 +1,7 @@
 package dev.diorama.render;
 
 import dev.diorama.Projection;
+import dev.diorama.Settings;
 import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionStyle;
 import java.util.ArrayList;
@@ -14,10 +15,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /**
  * Regions' names on the world map, written where each region's label point is (see
  * {@link MapRegion#anchor}) once the region is wide enough on screen to hold its name, fading in
- * as it gets there. The lettering follows each region's style: the game's font with a shadow on the plain and
- * outlined maps, in the region's dye; in ink with a shadow of paper on the painted ones; in spaced
- * capitals of old ink on the antique maps, the way old maps letter provinces. Bigger regions are
- * named first, and a name that would sit on another is left out. On whole GUI pixels.
+ * as it gets there; a region with a banner has it planted there, its name under its foot, and,
+ * too small for its name, the banner alone, smaller. The lettering follows the regions' style:
+ * the game's font with a shadow in the region's dye for the marker and political styles; ink with
+ * a shadow of paper for the watercolours; spaced capitals of old ink for the engraved and
+ * illuminated ones, the way old maps letter provinces. Bigger regions are named first, and a name
+ * that would sit on another is left out. On whole GUI pixels.
  */
 public final class RegionLabels {
 	/** Paint and old ink, as regions.fsh draws the lines. */
@@ -29,8 +32,8 @@ public final class RegionLabels {
 	private RegionLabels() {
 	}
 
-	/** Writes the names; regions whose style is {@link RegionStyle#AUTO} take {@code mapStyle}. */
-	public static void draw(GuiGraphicsExtractor graphics, MapViewport.View view, List<MapRegion> regions, RegionStyle mapStyle) {
+	public static void draw(GuiGraphicsExtractor graphics, MapViewport.View view, List<MapRegion> regions, Settings settings) {
+		RegionStyle look = settings.regionStyle;
 		Font font = Minecraft.getInstance().font;
 		List<MapRegion> byArea = new ArrayList<>();
 		for (MapRegion region : regions) {
@@ -40,9 +43,10 @@ public final class RegionLabels {
 		}
 		byArea.sort(Comparator.comparingDouble(MapRegion::area).reversed());
 		List<int[]> placed = new ArrayList<>();
+		boolean capitals = look == RegionStyle.ENGRAVING || look == RegionStyle.ILLUMINATED;
+		boolean sepia = settings.sepiaBanners && look == RegionStyle.ENGRAVING;
+		int frame = BannerAtlas.frameNow(settings.animateBanners);
 		for (MapRegion region : byArea) {
-			RegionStyle look = region.style.or(mapStyle);
-			boolean capitals = look == RegionStyle.ANTIQUE || look == RegionStyle.ANTIQUE_COLOR;
 			String text = capitals ? region.name.toUpperCase(Locale.ROOT) : region.name;
 			int width = capitals ? spacedWidth(font, text) : font.width(text);
 			// How wide the region is on screen: the span of its bounds across the map.
@@ -50,24 +54,41 @@ public final class RegionLabels {
 			double[] us = {Projection.u(b[0], b[1]), Projection.u(b[2], b[1]), Projection.u(b[0], b[3]), Projection.u(b[2], b[3])};
 			double span = (max(us) - min(us)) * view.zoom();
 			float shown = (float) Math.max(0, Math.min(1, (span - width * 0.6) / (width * 0.4 + 2 * ROOM)));
-			if (shown <= 0.05F) {
+			boolean named = shown > 0.05F;
+			// The banner, whole beside a name, smaller alone, none where even that won't fit.
+			BannerCompositor.Size banner = region.banner == null ? null
+				: named ? BannerCompositor.Size.MAP : span >= BannerCompositor.Size.SMALL.width() + 2 * ROOM ? BannerCompositor.Size.SMALL : null;
+			if (!named && banner == null) {
 				continue;
 			}
 			double[] at = region.anchor();
-			int x = Math.round(view.screenX(Projection.u(at[0], at[1]))) - width / 2;
-			int y = Math.round(view.screenY(Projection.worldV(at[0], at[2], at[1]))) - 4;
-			int[] box = {x - 2, y - 2, x + width + 2, y + 10};
+			int ax = Math.round(view.screenX(Projection.u(at[0], at[1])));
+			int ay = Math.round(view.screenY(Projection.worldV(at[0], at[2], at[1])));
+			int x = ax - width / 2;
+			// Under the banner's foot, or across the label point.
+			int y = banner != null ? ay + 2 : ay - 4;
+			int[] box = named ? new int[] {x - 2, y - 2, x + width + 2, y + 10} : new int[] {ax, ay, ax, ay};
+			if (banner != null) {
+				box = new int[] {Math.min(box[0], ax - banner.width() / 2), Math.min(box[1], ay - banner.footY()),
+					Math.max(box[2], ax + banner.width() / 2 + 1), Math.max(box[3], ay + 1)};
+			}
 			if (box[2] < view.x() || box[0] > view.x() + view.width() || box[3] < view.y() || box[1] > view.y() + view.height() || overlaps(placed, box)) {
 				continue;
 			}
 			placed.add(box);
+			if (banner != null) {
+				BannerAtlas.shared().draw(graphics, region.banner, banner, ax, ay, 1, frame, sepia, alpha(-1, named ? shown : 1));
+			}
+			if (!named) {
+				continue;
+			}
 			switch (look) {
-				case AUTO, PLAIN, OUTLINED -> graphics.text(font, text, x, y, alpha(readable(region.dye.argb()), shown), true);
-				case PAINTED, PAINTED_NO_INK -> {
+				case MARKER, POLITICAL -> graphics.text(font, text, x, y, alpha(readable(region.dye.argb()), shown), true);
+				case WATERCOLOR, WASH -> {
 					graphics.text(font, text, x + 1, y + 1, alpha(PAPER, shown * 0.6F), false);
 					graphics.text(font, text, x, y, alpha(PAINT_INK, shown), false);
 				}
-				case ANTIQUE, ANTIQUE_COLOR -> {
+				case ENGRAVING, ILLUMINATED -> {
 					spaced(graphics, font, text, x + 1, y + 1, alpha(PAPER, shown * 0.6F));
 					spaced(graphics, font, text, x, y, alpha(OLD_INK, shown));
 				}

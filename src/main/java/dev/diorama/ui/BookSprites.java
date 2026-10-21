@@ -70,6 +70,11 @@ public final class BookSprites {
 		return new Region(i * THUMB_W, 148, THUMB_W, THUMB_H);
 	}
 
+	/** A region style's picture: a red region on a patch of ground, drawn in that style. */
+	public static Region regionThumb(int i) {
+		return new Region(i * THUMB_W, 168, THUMB_W, THUMB_H);
+	}
+
 	private BookSprites() {
 	}
 

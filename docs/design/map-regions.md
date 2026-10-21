@@ -1,8 +1,8 @@
 # Map regions — plan
 
-Status: plan written on 2026-10-21. Steps 1–5 implemented the same day on the `feature/map-regions`
+Status: plan written on 2026-10-21. Steps 1–6 implemented the same day on the `feature/map-regions`
 branch; the "How it turned out" sections at the end record where they departed from the plan.
-Steps 6–8 are still to do.
+Steps 7 and 8 are still to do.
 
 ## Goal
 
@@ -374,4 +374,28 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
 - Tests: `RegionLookTest` (JUnit); `DIORAMA_TESTS=regions` captures `regions-look-*` (each style,
   near and far), `regions-look-chosen` (a chosen style over the plain render, one region of its own
   style) and `regions-band-*`.
+
+## How it turned out (step 6, and the styles reworked)
+
+- At the user's request the styles were reworked: they are chosen in one place only, the Regions
+  section's Options page, as pictures (`BookSprites.regionThumb`, drawn by `book-sprites.py` at
+  y 168: a red region on a patch of ground in each style), and they never follow the render style
+  or the fog any more. No AUTO, no style per region (`MapRegion.style` is gone; a `style` field
+  left in `regions.json` by the development builds is ignored). Renamed apart from the render
+  styles: Marker, Political, Watercolor, Wash, Engraving, Illuminated (Marcador, Político,
+  Aquarela, Aguada, Gravura, Iluminura); the default is Watercolor, and a setting saved under an old
+  name reads as it. The mask still carries the style per texel.
+- Banners (step 6): `MapRegion.design()` is the region's banner, or a plain one in its dye. On the
+  world map a region with a banner of its own has it planted at its label point, its name under
+  the foot; too small for its name, the small banner alone; smaller, nothing (`RegionLabels`). The
+  sepia banners option tints it under the Engraving style. In the book the banner stands beside
+  the name (a click on it, or the Banner button, turns to its page): large, with Loom…, Banner in
+  hand (`BannerPatternCatalog.fromInventory`), No banner, Use its dye (when the base differs), and
+  the waypoints' banners nearest first to copy one. Each is one step of the history.
+- At the user's request, the region the player stands in shows under the minimap on the side away
+  from the coordinates and biome: its banner (or the plain one) and its name, cut to the room left
+  (`RegionStore.containing`, the smallest region shown on the minimap; off with `minimapRegions`).
+- Tests: `RegionLookTest` reworked; `DIORAMA_TESTS=regions` captures `regions-look-<style>`,
+  `regions-banner-map`, `regions-banner-far`, `regions-book-home`, `regions-book-banner` and the
+  minimap with Home under it.
 

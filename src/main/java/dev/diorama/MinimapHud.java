@@ -1,6 +1,10 @@
 package dev.diorama;
 
 import dev.diorama.bake.TileKey;
+import dev.diorama.region.MapRegion;
+import dev.diorama.region.RegionStore;
+import dev.diorama.render.BannerAtlas;
+import dev.diorama.render.BannerCompositor;
 import dev.diorama.render.MapLevel;
 import dev.diorama.render.MapViewport;
 import dev.diorama.render.Markers;
@@ -69,7 +73,12 @@ public final class MinimapHud implements HudElement {
 		int size = settings.minimapSize.pixels;
 		Font font = mc.font;
 		List<String> info = this.infoLines(settings, player, mc);
-		int infoHeight = info.size() * 10;
+		// The region the player stands in, its banner and name beside the lines.
+		RegionStore regions = settings.minimapRegions ? RegionStore.get() : null;
+		MapRegion here = regions == null ? null : regions.containing(mc.level.dimension().identifier().toString(), pos.x, pos.z, true);
+		// Beside the lines where they leave room for the name, else on a row of its own under them.
+		boolean stacked = here != null && this.regionRoom(font, info, settings.minimapSize.pixels) < Math.min(font.width(here.name), REGION_MIN_ROOM);
+		int infoHeight = here == null ? info.size() * 10 : stacked ? info.size() * 10 + REGION_HEIGHT : Math.max(info.size() * 10, REGION_HEIGHT);
 		boolean right = settings.minimapCorner == Settings.Corner.TOP_RIGHT || settings.minimapCorner == Settings.Corner.BOTTOM_RIGHT;
 		boolean top = settings.minimapCorner == Settings.Corner.TOP_RIGHT || settings.minimapCorner == Settings.Corner.TOP_LEFT;
 		int effects = top ? this.effectRows(player, right) : 0;
@@ -117,12 +126,48 @@ public final class MinimapHud implements HudElement {
 			}
 		}
 		int textY = y + size + (paper ? PaperFrame.BORDER + 3 : 4);
+		if (here != null) {
+			this.region(graphics, font, here, stacked ? List.of() : info, x, stacked ? textY + info.size() * 10 + 1 : textY, size, right);
+		}
 		for (String line : info) {
 			int w = font.width(line);
 			int tx = right ? x + size - w : x;
 			graphics.text(font, line, tx, textY, 0xFFFFFFFF, true);
 			textY += 10;
 		}
+	}
+
+	/** Rows the region under the minimap takes: its small banner's height. */
+	private static final int REGION_HEIGHT = 22;
+	/** Room for a region's name beside the lines below which it goes on a row of its own. */
+	private static final int REGION_MIN_ROOM = 40;
+
+	/** Room the lines leave beside them for a region's name, under a minimap {@code size} across. */
+	private int regionRoom(Font font, List<String> info, int size) {
+		int taken = 0;
+		for (String line : info) {
+			taken = Math.max(taken, font.width(line));
+		}
+		return size - taken - BannerCompositor.Size.SMALL.width() - 3 - (info.isEmpty() ? 0 : 6);
+	}
+
+	/**
+	 * The region the player is in, under the minimap on the side away from the coordinates and
+	 * biome: its banner (its own, or a plain one in its dye), its name beside it, cut to the room
+	 * the lines leave; given no lines, on a row of its own under them.
+	 */
+	private void region(GuiGraphicsExtractor graphics, Font font, MapRegion region, List<String> info, int x, int textY, int size, boolean infoRight) {
+		BannerCompositor.Size banner = BannerCompositor.Size.SMALL;
+		int room = this.regionRoom(font, info, size);
+		String name = font.plainSubstrByWidth(region.name, Math.max(0, room));
+		if (name.length() < region.name.length()) {
+			name = font.plainSubstrByWidth(region.name, Math.max(0, room - font.width("…"))) + "…";
+		}
+		int bannerX = infoRight ? x + banner.width() / 2 : x + size - banner.width() / 2 - 1;
+		BannerAtlas.shared().draw(graphics, region.design(), banner, bannerX, textY + banner.footY(), 1,
+			BannerAtlas.frameNow(Settings.get().animateBanners), false, -1);
+		int nameX = infoRight ? x + banner.width() + 3 : x + size - banner.width() - 3 - font.width(name);
+		graphics.text(font, name, nameX, textY + 6, 0xFFFFFFFF, true);
 	}
 
 	/**

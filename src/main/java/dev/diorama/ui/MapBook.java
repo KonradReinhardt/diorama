@@ -176,7 +176,7 @@ public final class MapBook {
 				BookWidgets.Art[] icons = this.section == Section.BANNERS
 					? new BookWidgets.Art[] {BANNER_ICON, BookWidgets.item(BookSprites.stack("loom"))}
 					: new BookWidgets.Art[] {BookWidgets.item(BookSprites.stack("feather")), BookWidgets.item(BookSprites.stack("cartography_table"))};
-				String[] names = {"diorama.book.list", "diorama.book.options"};
+				String[] names = {"diorama.book.list", this.section == Section.BANNERS ? "diorama.book.options" : "diorama.book.regions.options"};
 				for (int i = 0; i < names.length; i++) {
 					int index = i;
 					this.page(new BookWidgets.Tab(layout.left().x() + 4 + i * (BookLayout.TAB_W + 2), layout.tabY(), icons[i],

@@ -4,7 +4,7 @@
 #
 # All art is drawn here from code, one texel per GUI pixel: warm parchment pages with a dotted
 # inner frame, a leather cover with gold corners, rounded slots, grey ribbons that the game tints
-# per section, and small thumbnails of the render and fog styles.
+# per section, and small thumbnails of the render, fog and region styles.
 import math
 import os
 import struct
@@ -428,6 +428,60 @@ def fog(x, y, kind):
 fog(0, 148, 'clouds')
 fog(28, 148, 'antique')
 fog(56, 148, 'colour')
+
+
+# The region styles (dev.diorama.region.RegionStyle), each a red region on the same patch of
+# ground, drawn as regions.fsh draws it: marker, political, watercolour, wash, engraving and
+# illuminated.
+REGION_DYE = hexc('B02E26')
+REGION_INK = hexc('4C3021')
+OLD_INK = hexc('3C2513')
+
+
+def region_inside(i, j):
+    return (i - 13.5) ** 2 / 90 + (j - 10) ** 2 / 42 < 1
+
+
+def region_thumb(x, y, style):
+    old = style in ('engraving', 'illuminated')
+    for j in range(20):
+        for i in range(28):
+            m = TERRAIN[min(4, j // 4)][min(6, i // 4)]
+            c = PAINT[m] if style in ('watercolour', 'wash') else PLAIN[m]
+            if old:
+                c = mix(c, hexc('E9D2A6'), 0.55)
+            put(x + i, y + j, c)
+    for j in range(20):
+        for i in range(28):
+            if not region_inside(i, j):
+                continue
+            edge = any(not region_inside(i + di, j + dj) for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+            near = any(not region_inside(i + di, j + dj) for di, dj in ((2, 0), (-2, 0), (0, 2), (0, -2)))
+            band = sum(1 for k in range(1, 5) for di, dj in ((k, 0), (-k, 0), (0, k), (0, -k)) if not region_inside(i + di, j + dj))
+            c = px[y + j][x + i]
+            if style == 'marker':
+                c = REGION_DYE if edge else mix(c, REGION_DYE, 0.3)
+            elif style == 'political':
+                c = mix(REGION_DYE, (0, 0, 0), 0.65) if edge else REGION_DYE if near else mix(c, REGION_DYE, 0.5 if band else 0.3)
+            elif style in ('watercolour', 'wash'):
+                grain = ((i * 7 + j * 13) % 5) / 10
+                pool = min(1.0, band / 4)
+                c = mix(c, mix(REGION_DYE, (0, 0, 0), 0.3 * pool), 0.25 + 0.1 * grain + 0.35 * pool)
+                if edge:
+                    c = REGION_INK if style == 'watercolour' and (i + j) % 7 else mix(REGION_DYE, (0, 0, 0), 0.3)
+            else:
+                tint = mix(hexc('6E4A2A'), hexc('E9D2A6'), 0.35) if style == 'engraving' else REGION_DYE
+                c = mix(c, tint, 0.55 * min(1.0, band / 3))
+                if style == 'engraving' and (i - j) % 4 == 0:
+                    c = mix(c, tint, 0.6)
+                if edge:
+                    c = OLD_INK if (i + j) % 8 < 4 or (i + j) % 8 == 5 else mix(c, tint, 0.6)
+            put(x + i, y + j, c)
+    frame(x, y, 28, 20, INK)
+
+
+for k, style in enumerate(('marker', 'political', 'watercolour', 'wash', 'engraving', 'illuminated')):
+    region_thumb(k * 28, 168, style)
 
 
 def write_png(path):

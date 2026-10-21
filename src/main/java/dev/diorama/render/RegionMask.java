@@ -28,7 +28,7 @@ import org.jspecify.annotations.Nullable;
  *   measured exactly to the projected outline, so the shader, reading it smoothed between texels,
  *   finds the edge between texels too, and lines stay one art pixel and smooth at any zoom;</li>
  *   <li>blue: a tag telling regions apart, so a line runs where two regions meet as well;</li>
- *   <li>alpha: the region's style (low bits), its own or the map's (see {@link RegionStyle}).</li>
+ *   <li>alpha: the regions' style (low bits; see {@link RegionStyle}).</li>
  * </ul>
  * Texels just outside a region carry its dye and tag and a negative distance. Before 1.21.6 there
  * are no effect passes: a plain texture of fills and edges is built instead, drawn as a quad.
@@ -82,8 +82,7 @@ final class RegionMask {
 	 * Builds the mask for a view if anything it shows changed, and returns what to draw it with, or
 	 * null when no region is near the view. {@code revision} goes up whenever a region changes, and
 	 * {@code preview} whenever a region being edited, not yet kept, changes; on a cave slice the
-	 * outlines lie at the slice's height. Regions whose style is {@link RegionStyle#AUTO} take
-	 * {@code style}, the map's.
+	 * outlines lie at the slice's height. They are drawn in {@code style}.
 	 */
 	@Nullable Pass prepare(MapViewport.View view, List<MapRegion> regions, long revision, long preview, @Nullable UUID highlight, RegionStyle style) {
 		if (regions.isEmpty()) {
@@ -185,7 +184,7 @@ final class RegionMask {
 				int red = region.dye.ordinal() | region.fill.ordinal() << 4 | (region.id.equals(highlight) ? 64 : 0) | (o != 0 ? 128 : 0);
 				int green = distanceByte(o != 0 ? this.inside[t] : -this.outside[t]);
 				int blue = (tagged - 1) % 255 + 1;
-				int alpha = 0xF0 | region.style.or(style).shaderIndex();
+				int alpha = 0xF0 | style.shaderIndex();
 				this.pixels[t] = alpha << 24 | blue << 16 | green << 8 | red;
 			} else {
 				this.pixels[t] = o == 0 ? 0 : this.plain(t, o, region, region.id.equals(highlight));
