@@ -3,7 +3,7 @@ package dev.diorama.ui;
 import dev.diorama.EnvironmentLighting;
 import dev.diorama.MapDirection;
 import dev.diorama.Settings;
-import dev.diorama.render.MapClouds;
+import dev.diorama.render.gpu.MapEffect;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -97,7 +97,7 @@ public final class SettingsCatalog {
 		out.add(toggle("diorama.settings.biome", Section.MINIMAP, "biome", () -> s.biome, v -> s.biome = v));
 		out.add(toggle("diorama.settings.auto_caves", Section.MINIMAP, "autoCaves", () -> s.autoCaves, v -> s.autoCaves = v));
 		out.add(shownIf(toggle("diorama.settings.minimap_clouds", Section.MINIMAP, "minimapClouds", () -> s.minimapClouds, v -> s.minimapClouds = v),
-			MapClouds::supported));
+			MapEffect::supported));
 
 		out.add(toggle("diorama.settings.players", Section.RADAR, "radarPlayers", () -> s.radarPlayers, v -> s.radarPlayers = v));
 		out.add(toggle("diorama.settings.hostile", Section.RADAR, "radarHostile", () -> s.radarHostile, v -> s.radarHostile = v));
@@ -132,7 +132,9 @@ public final class SettingsCatalog {
 		out.add(new Entry(tint.key(), tint.section(), tint.field(), tint.values(), false, true, tint.get(), tint.set(), always, s::antiqueFog));
 		out.add(toggle("diorama.settings.fog_of_war", Section.LOOK, "alwaysFogOfWar", () -> s.alwaysFogOfWar, v -> s.alwaysFogOfWar = v));
 		out.add(shownIf(tooltip(toggle("diorama.settings.clouds", Section.LOOK, "mapClouds", () -> s.mapClouds, v -> s.mapClouds = v)),
-			MapClouds::supported));
+			MapEffect::supported));
+		out.add(shownIf(tooltip(toggle("diorama.settings.coast", Section.LOOK, "mapCoast", () -> s.mapCoast, v -> s.mapCoast = v)),
+			MapEffect::supported));
 		out.add(choice("diorama.settings.quality", Section.LOOK, "quality", Settings.Quality.values(), () -> s.quality, v -> s.quality = v));
 		out.add(choice("diorama.settings.direction", Section.LOOK, "mapDirection", MapDirection.values(), () -> s.mapDirection, v -> s.mapDirection = v));
 		Entry lighting = choice("diorama.settings.lighting", Section.LOOK, "lighting", EnvironmentLighting.Mode.values(), () -> s.lighting, v -> s.lighting = v);

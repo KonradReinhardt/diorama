@@ -22,15 +22,6 @@ public final class MapClouds {
 	private MapClouds() {
 	}
 
-	/** Whether this version can draw them: they need the render pipelines of 1.21.6 on. */
-	public static boolean supported() {
-		//? if >=1.21.6 {
-		return true;
-		//?} else {
-		/*return false;
-		*///?}
-	}
-
 	/**
 	 * The vertex colour for the clouds over a fog mask whose origin is at (originU, originV), a
 	 * multiple of {@link #ORIGIN_STEP}; {@code scaleCode} and {@code pixelCode} as for the fog.

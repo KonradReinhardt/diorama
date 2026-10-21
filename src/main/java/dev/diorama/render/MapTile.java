@@ -38,6 +38,12 @@ public final class MapTile {
 	/** The overlay bits the overlay texture shows, or -1 when it has to be drawn again. */
 	private int overlayShown = -1;
 	private boolean empty = true;
+	/**
+	 * The {@link dev.diorama.bake.Surface} plane as two bitsets, a bit per pixel: known, and water.
+	 * Null when no pixel of the tile is known. The coast is drawn from them (see CoastMask).
+	 */
+	private long @Nullable [] surfaceKnown;
+	private long @Nullable [] surfaceWater;
 	long lastDrawn;
 
     private long uploadCount;
@@ -47,6 +53,11 @@ public final class MapTile {
 		if (image.isFull()) {
 			this.coverage = image.coverage();
 			this.info = image.info();
+			this.surfaceKnown = null;
+			this.surfaceWater = null;
+			if (dev.diorama.bake.Surface.anyKnown(image.surface())) {
+				this.patchSurface(image.surface(), 0, 0, Projection.TILE_PIXELS);
+			}
             if (this.info == null && this.overlay != null) { this.overlay.close(); this.overlay = null; }
 			this.overlayShown = -1;
 			this.empty = isEmpty(this.coverage);
@@ -105,7 +116,49 @@ public final class MapTile {
 			if (patch.info() != null) {
 				this.patchInfo(patch);
 			}
+			if (patch.surface() != null || this.surfaceKnown != null) {
+				this.patchSurface(patch.surface(), patch.blockX() * TileImage.BLOCK, patch.blockY() * TileImage.BLOCK, TileImage.BLOCK);
+			}
 		}
+	}
+
+	/** Sets the surface bits of a square of pixels from {@code plane}, its rows {@code edge} long; null clears them. */
+	private void patchSurface(byte @Nullable [] plane, int x0, int y0, int edge) {
+		int size = Projection.TILE_PIXELS;
+		if (this.surfaceKnown == null) {
+			this.surfaceKnown = new long[size * size / 64];
+			this.surfaceWater = new long[size * size / 64];
+		}
+		for (int y = 0; y < edge; y++) {
+			for (int x = 0; x < edge; x++) {
+				int bits = plane == null ? 0 : plane[y * edge + x];
+				int i = (y0 + y) * size + x0 + x;
+				long bit = 1L << (i & 63);
+				if ((bits & dev.diorama.bake.Surface.KNOWN) != 0) this.surfaceKnown[i >> 6] |= bit;
+				else this.surfaceKnown[i >> 6] &= ~bit;
+				if ((bits & dev.diorama.bake.Surface.WATER) != 0) this.surfaceWater[i >> 6] |= bit;
+				else this.surfaceWater[i >> 6] &= ~bit;
+			}
+		}
+	}
+
+	/** The {@link dev.diorama.bake.Surface} bits of one pixel; 0 when unknown. */
+	public int surface(int px, int py) {
+		long[] known = this.surfaceKnown;
+		if (known == null) {
+			return 0;
+		}
+		int i = py * Projection.TILE_PIXELS + px;
+		long bit = 1L << (i & 63);
+		if ((known[i >> 6] & bit) == 0) {
+			return 0;
+		}
+		return dev.diorama.bake.Surface.KNOWN | ((this.surfaceWater[i >> 6] & bit) != 0 ? dev.diorama.bake.Surface.WATER : 0);
+	}
+
+	/** Whether any pixel's surface is known. */
+	public boolean hasSurface() {
+		return this.surfaceKnown != null;
 	}
 
 	private void patchInfo(TileImage.Patch patch) {

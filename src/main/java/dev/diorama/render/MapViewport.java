@@ -7,6 +7,7 @@ import dev.diorama.preview.SeedPreview;
 import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileKey;
 import dev.diorama.render.gpu.MapCanvas;
+import dev.diorama.render.gpu.MapEffect;
 import dev.diorama.render.gpu.MapTexture;
 import dev.diorama.render.gpu.Sampling;
 import java.lang.ref.WeakReference;
@@ -90,6 +91,8 @@ public final class MapViewport {
 
 	/** Whether this is the minimap's, which has its own clouds setting. */
 	private final boolean minimap;
+	/** Where this view's water meets the land, for the coast effect. */
+	private final CoastMask coast = new CoastMask();
 
 	/** The world map's. */
 	public MapViewport() {
@@ -174,9 +177,14 @@ public final class MapViewport {
         // partly known (the explored edge, tiles still loading) it shows instead of a flat colour.
         this.drawFog(graphics, view, fog, true);
         this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0, lighting);
+        // The effects are passes of their own over the tiles, never baked: the fog then closes over them.
+        CoastMask.Pass coast = Settings.get().mapCoast && MapEffect.supported() ? this.coast.prepare(level, view) : null;
+        if (coast != null) {
+            MapCanvas.of(graphics).effect(MapEffect.COAST, coast.texture(), FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+                coast.u0(), coast.v0(), coast.u1(), coast.v1(), coastParams(coast, fog.pixelCode(), lighting));
+        }
         if (this.cloudsShown(level, view)) {
-            // Their own pass over the tiles, never baked: the fog then closes over them.
-            MapCanvas.of(graphics).clouds(this.maskTexture, FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+            MapCanvas.of(graphics).effect(MapEffect.CLOUDS, this.maskTexture, FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
                 fog.u0(), fog.v0(), fog.u1(), fog.v1(), fog.clouds());
         }
         this.drawFog(graphics, view, fog, false);
@@ -370,14 +378,28 @@ public final class MapViewport {
 	}
 
 	/** What both fog passes of a frame draw with: the mask is built once, before the tiles. The clouds read it too. */
-	private record FogPass(boolean antique, float u0, float v0, float u1, float v1, int params, int clouds) {
+	private record FogPass(boolean antique, float u0, float v0, float u1, float v1, int params, int clouds, int pixelCode) {
+	}
+
+	/**
+	 * The coast pass's vertex colour: the mask's texel size, sepia and daylight in alpha, the mask
+	 * origin modulo coast.fsh's noise periods (256 units across, 768 down) in fours in red and
+	 * green, the art pixel and its phase in blue.
+	 */
+	static int coastParams(CoastMask.Pass coast, int pixelCode, dev.diorama.EnvironmentLighting lighting) {
+		int texel = Integer.numberOfTrailingZeros((int) Math.round(coast.texel() / CoastMask.FINEST));
+		boolean sepia = Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP && Settings.get().antiqueTint();
+		int u = (int) (Math.floorMod((long) coast.originU(), 256L) / 4);
+		int v = (int) (Math.floorMod((long) coast.originV(), 768L) / 4);
+		int day = Math.round(Math.max(0, Math.min(1, lighting.daylight())) * 15);
+		return (texel << 5 | (sepia ? 16 : 0) | day) << 24 | u << 16 | v << 8 | pixelCode & 63;
 	}
 
 	/** Whether clouds drift over this view: asked for, and over a surface under an open sky. */
 	private boolean cloudsShown(MapLevel level, View view) {
 		Settings settings = Settings.get();
 		var world = Minecraft.getInstance().level;
-		return (this.minimap ? settings.minimapClouds : settings.mapClouds) && MapClouds.supported()
+		return (this.minimap ? settings.minimapClouds : settings.mapClouds) && MapEffect.supported()
 			&& view.layer() == TileKey.SURFACE && !level.roofless()
 			&& world != null && world.dimensionType().hasSkyLight() && !world.dimensionType().hasCeiling();
 	}
@@ -447,7 +469,7 @@ public final class MapViewport {
             | (noiseV * 32 | pixelCode >> 5 | (progress & 15) << 1) << 8 | fogCode;
 		boolean sepia = Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP && Settings.get().antiqueTint();
 		int clouds = MapClouds.params(scaleCode, originU, originV, pixelCode, lighting.daylight(), lighting.rain(), Projection.direction(), sepia);
-		return new FogPass(antique, mu0, mv0, mu1, mv1, params, clouds);
+		return new FogPass(antique, mu0, mv0, mu1, mv1, params, clouds, pixelCode);
 	}
 
 	private void drawFog(GuiGraphicsExtractor graphics, View view, FogPass fog, boolean underlay) {
@@ -851,6 +873,7 @@ public final class MapViewport {
 			this.maskTexture.close();
 			this.maskTexture = null;
 		}
+		this.coast.close();
 		this.maskInputs = null;
 		this.cartoInputs = null;
         this.reveal.reset();

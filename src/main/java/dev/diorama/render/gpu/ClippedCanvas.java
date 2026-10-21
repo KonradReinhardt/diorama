@@ -121,10 +121,10 @@ public final class ClippedCanvas implements MapCanvas {
 	}
 
 	@Override
-	public void clouds(MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params) {
+	public void effect(MapEffect effect, MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params) {
 		this.cut(x, y, x + width, y + height, u0, v0, u1, v1, (px0, py0, px1, py1, su0, sv0, su1, sv1) -> {
 			int ix = Math.round(px0), iy = Math.round(py0);
-			this.canvas.clouds(mask, noise, ix, iy, Math.round(px1) - ix, Math.round(py1) - iy, su0, sv0, su1, sv1, params);
+			this.canvas.effect(effect, mask, noise, ix, iy, Math.round(px1) - ix, Math.round(py1) - iy, su0, sv0, su1, sv1, params);
 		});
 	}
 

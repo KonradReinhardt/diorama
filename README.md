@@ -164,6 +164,16 @@ zoomed far out. They are their own shader pass over the tiles: nothing is baked 
 switching them never redraws the map. From 1.21.6 on. See [the design](docs/design/map-clouds.md);
 `DIORAMA_TESTS=clouds` captures them.
 
+## Coast foam and ripples
+
+Settings → Look → **Coast foam and ripples** (on by default) draws pixel-art foam breathing along
+the water's edge and dashed ripples rolling in to the shore, on the world map and the minimap,
+measured in world blocks so they follow the map's perspective. Bakes record which pixels show
+water, saved beside each tile as `<u>_<v>.omts` (the tile bundles themselves are unchanged); in
+singleplayer on 26.3 maps saved before are redrawn in the background to gain it, elsewhere
+coasts gain it as they are baked again. From 1.21.6 on. See [the design](docs/design/coast.md);
+`DIORAMA_TESTS=coast` captures it.
+
 ## Antique map style (fork 0.4.0)
 
 Settings → Look → Fog style offers **Clouds** (the existing default), **Antique map** (sepia)

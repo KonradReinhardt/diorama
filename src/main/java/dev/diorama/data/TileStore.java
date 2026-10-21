@@ -288,13 +288,17 @@ public final class TileStore {
             for (TileImage image : images) {
                 int[] day;
                 int[] night;
+                byte[] surface;
                 if (image.isFull()) {
                     day = image.mips()[0].clone();
                     night = image.nightMips() == null ? null : image.nightMips()[0].clone();
+                    surface = image.surface() == null ? null : image.surface().clone();
                 } else {
                     day = saved == null ? new int[size * size] : saved.day().clone();
                     boolean hasNight = saved != null && saved.night() != null || image.patches().stream().anyMatch(p -> p.nightMips() != null);
                     night = !hasNight ? null : saved != null && saved.night() != null ? saved.night().clone() : new int[size * size];
+                    boolean hasSurface = saved != null && saved.surface() != null || image.patches().stream().anyMatch(p -> p.surface() != null);
+                    surface = !hasSurface ? null : saved != null && saved.surface() != null ? saved.surface().clone() : new byte[size * size];
                     for (TileImage.Patch patch : image.patches()) {
                         int edge = TileImage.BLOCK;
                         for (int y = 0; y < edge; y++) {
@@ -304,10 +308,14 @@ public final class TileStore {
                                 if (patch.nightMips() == null) java.util.Arrays.fill(night, offset, offset + edge, 0);
                                 else System.arraycopy(patch.nightMips()[0], y * edge, night, offset, edge);
                             }
+                            if (surface != null) {
+                                if (patch.surface() == null) java.util.Arrays.fill(surface, offset, offset + edge, (byte) 0);
+                                else System.arraycopy(patch.surface(), y * edge, surface, offset, edge);
+                            }
                         }
                     }
                 }
-                TilePixels pixels = new TilePixels(day, night);
+                TilePixels pixels = new TilePixels(day, night, surface);
                 if (saved != null ? saved.samePixels(pixels) : nothingKnown(day)) {
                     count(true);
                     continue;
@@ -465,6 +473,11 @@ public final class TileStore {
 		return keys;
 	}
 
+	/** The tile's surface plane, beside its bundle; see {@link SurfaceFile}. */
+	private Path surfaceFile(TileKey key) {
+		return this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omts");
+	}
+
 	private Path file(TileKey key) {
 		Path dir = key.lod() == 0 ? this.folder : this.folder.resolve("lod" + key.lod());
 		return dir.resolve(key.tileU() + "_" + key.tileV() + ".omt");
@@ -473,7 +486,10 @@ public final class TileStore {
 	private @Nullable TilePixels load(TileKey key) {
         Path bundle = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
         if (Files.isRegularFile(bundle)) {
-            try { return TileBundle.read(bundle, key); }
+            try {
+                TilePixels pixels = TileBundle.read(bundle, key);
+                return key.lod() == 0 ? pixels.withSurface(SurfaceFile.read(this.surfaceFile(key), key, pixels.day())) : pixels;
+            }
             catch (IOException | RuntimeException failure) { Diorama.LOGGER.warn("Invalid lighting bundle {}; trying legacy map", bundle, failure); }
         }
 		Path file = this.file(key);
@@ -506,6 +522,8 @@ public final class TileStore {
         Path file = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
         try {
             this.writtenBytes.addAndGet(TileBundle.write(file, key, pixels));
+            // After the bundle, which a crash between the two leaves without a matching plane.
+            if (key.lod() == 0) SurfaceFile.write(this.surfaceFile(key), key, pixels.day(), pixels.surface());
             this.writes.incrementAndGet();
             return true;
         } catch (IOException | RuntimeException e) {

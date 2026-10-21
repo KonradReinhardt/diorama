@@ -9,9 +9,10 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Pixels are ABGR ints, the byte order the GPU texture expects. Coverage is the share of known
  * pixels per coverage cell, 0..255, which places the fog. {@code info} holds {@link Overlays} bits
- * per pixel, or is null when the bake didn't record them.
+ * per pixel, or is null when the bake didn't record them; {@code surface} the same for
+ * {@link Surface} bits.
  */
-public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] coverage, byte @Nullable [] info, List<Patch> patches, int generation, int @Nullable [][] nightMips) {
+public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] coverage, byte @Nullable [] info, List<Patch> patches, int generation, int @Nullable [][] nightMips, byte @Nullable [] surface) {
 	/** Edge of a re-bake block in pixels. A power of two at least 2^(mip levels - 1), so mips stay aligned. */
 	public static final int BLOCK = 32;
 
@@ -24,16 +25,20 @@ public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] 
 	}
 
     public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
-        return new TileImage(key, mips, coverage, info, List.of(), 0, nightMips);
+        return full(key, mips, coverage, info, nightMips, null);
+    }
+
+    public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips, byte @Nullable [] surface) {
+        return new TileImage(key, mips, coverage, info, List.of(), 0, nightMips, surface);
     }
 
 	public static TileImage partial(TileKey key, List<Patch> patches) {
-		return new TileImage(key, null, null, null, patches, 0, null);
+		return new TileImage(key, null, null, null, patches, 0, null, null);
 	}
 
 	/** Tags the image with the map state it was baked under; see {@code MapLevel}. */
 	public TileImage withGeneration(int generation) {
-		return new TileImage(this.key, this.mips, this.coverage, this.info, this.patches, generation, this.nightMips);
+		return new TileImage(this.key, this.mips, this.coverage, this.info, this.patches, generation, this.nightMips, this.surface);
 	}
 
 	public boolean isFull() {
@@ -41,9 +46,13 @@ public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] 
 	}
 
 	/** One re-baked block at block coordinates {@code (blockX, blockY)} within the tile. */
-	public record Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
+	public record Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips, byte @Nullable [] surface) {
         public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info) {
-            this(blockX, blockY, mips, coverage, info, null);
+            this(blockX, blockY, mips, coverage, info, null, null);
+        }
+
+        public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
+            this(blockX, blockY, mips, coverage, info, nightMips, null);
         }
 	}
 }

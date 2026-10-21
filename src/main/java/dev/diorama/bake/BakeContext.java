@@ -14,7 +14,8 @@ public record BakeContext(MapStyle style, MapDirection direction, boolean fast) 
     // 2: tiles baked before deep-ocean pixels were refreshed when their neighbours loaded.
     // 3: one ray per pixel on the block grid, and outlines from the faces' own geometry.
     // 4: faces 3 rows tall instead of 4.
-    private static final int LOOK_REVISION = 4;
+    // 5: tiles record which pixels show a water surface, for the coast (Surface).
+    private static final int LOOK_REVISION = 5;
 
     /**
      * Identifies how baked pixels look: tiles saved under another value are redrawn when shown.

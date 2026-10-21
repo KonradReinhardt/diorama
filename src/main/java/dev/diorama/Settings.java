@@ -111,6 +111,11 @@ public final class Settings {
 	 * over the tiles as the map is composed, so they never redraw or change a tile.
 	 */
 	public boolean mapClouds = true;
+	/**
+	 * Foam breathing along the coasts and ripples rolling in, on the world map and the minimap.
+	 * Drawn as the map is composed from what bakes record of the water, so it never redraws a tile.
+	 */
+	public boolean mapCoast = true;
 	/** The look with sky occlusion, deep shadows and a lower camera; off is the flatter look from before. */
 	public boolean depthShading = true;
 	public boolean alwaysFogOfWar = false;

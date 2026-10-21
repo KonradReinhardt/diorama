@@ -258,9 +258,10 @@ public final class TileBaker {
 			int[] pixels = new int[TileImage.BLOCK * TileImage.BLOCK];
             int[] night = baker.lit || !source.nightLighting() || !dev.diorama.EnvironmentLighting.supported() ? null : new int[pixels.length];
 			byte[] info = overlays == null ? null : new byte[TileImage.BLOCK * TileImage.BLOCK];
-			baker.bakePixels(bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK, TileImage.BLOCK, pixels, night, info);
-			merge(pixels, night, saved, bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK);
-			patches.add(new TileImage.Patch(bx, by, Mipmaps.build(pixels, TileImage.BLOCK), coverage(pixels, TileImage.BLOCK, TileImage.BLOCK), info, nightMips(night, TileImage.BLOCK)));
+			byte[] surface = new byte[TileImage.BLOCK * TileImage.BLOCK];
+			baker.bakePixels(bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK, TileImage.BLOCK, pixels, night, info, surface);
+			merge(pixels, night, surface, saved, bx * TileImage.BLOCK, by * TileImage.BLOCK, TileImage.BLOCK);
+			patches.add(new TileImage.Patch(bx, by, Mipmaps.build(pixels, TileImage.BLOCK), coverage(pixels, TileImage.BLOCK, TileImage.BLOCK), info, nightMips(night, TileImage.BLOCK), surface));
 		}
 		if (VoxelReader.DEBUG && !baker.reader.missing.isEmpty()) {
 			StringBuilder sb = new StringBuilder();
@@ -299,28 +300,31 @@ public final class TileBaker {
         int[] pixels = new int[size * size];
         int[] night = baker.lit || !source.nightLighting() || !dev.diorama.EnvironmentLighting.supported() ? null : new int[pixels.length];
         byte[] info = overlays == null ? null : new byte[size * size];
-        baker.bakePixels(0, 0, size, size, pixels, night, info);
+        byte[] surface = new byte[size * size];
+        baker.bakePixels(0, 0, size, size, pixels, night, info, surface);
         if (fallback != null && saved != null) {
-            redrawFromFallback(key, fallback, looks, fogOfWar, saved, overlays, context, pixels, night, info);
+            redrawFromFallback(key, fallback, looks, fogOfWar, saved, overlays, context, pixels, night, info, surface);
         }
         int known = 0;
         if (saved != null) for (int pixel : saved.day()) if (pixel >>> 24 != 0) known++;
-        int kept = merge(pixels, night, saved, 0, 0, size);
+        int kept = merge(pixels, night, surface, saved, 0, 0, size);
         // The very edge of explored land can border chunks that were never saved; a sliver there
         // stays as it was, under the fog's rounded edge.
         boolean complete = kept <= known / 100;
-        return new Baked(TileImage.full(key, Mipmaps.build(pixels, size), coverage(pixels, size, size), info, nightMips(night, size)), complete);
+        return new Baked(TileImage.full(key, Mipmaps.build(pixels, size), coverage(pixels, size, size), info, nightMips(night, size),
+            Surface.anyKnown(surface) ? surface : null), complete);
     }
 
     /** Re-traces, block by block, the pixels {@code saved} knows better than this bake did. */
     private static void redrawFromFallback(TileKey key, ChunkSource fallback, BlockLooks looks, boolean fogOfWar, TilePixels saved,
-        @Nullable Overlays overlays, BakeContext context, int[] pixels, int @Nullable [] night, byte @Nullable [] info) {
+        @Nullable Overlays overlays, BakeContext context, int[] pixels, int @Nullable [] night, byte @Nullable [] info, byte[] surface) {
         int size = Projection.TILE_PIXELS;
         int edge = TileImage.BLOCK;
         TileBaker baker = null;
         int[] block = new int[edge * edge];
         int[] blockNight = night == null ? null : new int[edge * edge];
         byte[] blockInfo = info == null ? null : new byte[edge * edge];
+        byte[] blockSurface = new byte[edge * edge];
         for (int by = 0; by < size / edge; by++) {
             for (int bx = 0; bx < size / edge; bx++) {
                 boolean needed = false;
@@ -333,7 +337,8 @@ public final class TileBaker {
                 java.util.Arrays.fill(block, 0);
                 if (blockNight != null) java.util.Arrays.fill(blockNight, 0);
                 if (blockInfo != null) java.util.Arrays.fill(blockInfo, (byte) 0);
-                baker.bakePixels(bx * edge, by * edge, edge, edge, block, blockNight, blockInfo);
+                java.util.Arrays.fill(blockSurface, (byte) 0);
+                baker.bakePixels(bx * edge, by * edge, edge, edge, block, blockNight, blockInfo, blockSurface);
                 for (int y = 0; y < edge; y++) {
                     for (int x = 0; x < edge; x++) {
                         int i = (by * edge + y) * size + bx * edge + x;
@@ -343,6 +348,7 @@ public final class TileBaker {
                         pixels[i] = block[j];
                         if (night != null) night[i] = blockNight[j];
                         if (info != null) info[i] = blockInfo[j];
+                        surface[i] = blockSurface[j];
                     }
                 }
             }
@@ -358,7 +364,7 @@ public final class TileBaker {
     public static TileImage imagePaired(TileKey key, TilePixels pixels) {
         int size = Projection.TILE_PIXELS;
         return TileImage.full(key, Mipmaps.build(pixels.day(), size), coverage(pixels.day(), size, size), null,
-            nightMips(pixels.night(), size));
+            nightMips(pixels.night(), size), pixels.surface());
     }
 
     /** An unavailable night plane stays legacy; darkness with known alpha is still valid data. */
@@ -371,6 +377,11 @@ public final class TileBaker {
 
 	/** Keeps the saved pixel wherever the fresh one is less known; square areas only. Returns how many were kept. */
 	static int merge(int[] pixels, int @Nullable [] night, @Nullable TilePixels saved, int px0, int py0, int edge) {
+		return merge(pixels, night, null, saved, px0, py0, edge);
+	}
+
+	/** Same, keeping the saved surface bits with the saved pixels too. */
+	static int merge(int[] pixels, int @Nullable [] night, byte @Nullable [] surface, @Nullable TilePixels saved, int px0, int py0, int edge) {
 		if (saved == null) {
 			return 0;
 		}
@@ -384,6 +395,7 @@ public final class TileBaker {
 				if ((old >>> 24) > (pixels[i] >>> 24)) {
 					pixels[i] = old;
                     if (night != null) night[i] = saved.night() == null ? 0 : saved.night()[index];
+                    if (surface != null) surface[i] = saved.surface() == null ? 0 : saved.surface()[index];
 					kept++;
 				}
 			}
@@ -391,7 +403,7 @@ public final class TileBaker {
 		return kept;
 	}
 
-	private void bakePixels(int px0, int py0, int width, int height, int[] out, int @Nullable [] nightOut, byte @Nullable [] info) {
+	private void bakePixels(int px0, int py0, int width, int height, int[] out, int @Nullable [] nightOut, byte @Nullable [] info, byte @Nullable [] surface) {
 		if (this.startY <= this.limitY) {
 			return;
 		}
@@ -425,6 +437,9 @@ public final class TileBaker {
 				int iy = y - border;
 				if (info != null && this.hitSolid && ix >= 0 && iy >= 0 && ix < width && iy < height) {
 					info[iy * width + ix] = (byte) this.overlayBits();
+				}
+				if (surface != null && ix >= 0 && iy >= 0 && ix < width && iy < height) {
+					surface[iy * width + ix] = Surface.of(!Float.isNaN(this.outWater));
 				}
 				pixels[i] = this.abgr(this.outR, this.outG, this.outB, 255, painted);
 				if (nights != null) {
