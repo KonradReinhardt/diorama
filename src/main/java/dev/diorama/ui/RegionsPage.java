@@ -3,8 +3,8 @@ package dev.diorama.ui;
 import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionGeometry;
 import dev.diorama.region.RegionStore;
+import dev.diorama.region.RegionStyle;
 import dev.diorama.waypoint.Waypoints;
-import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -181,11 +181,13 @@ final class RegionsPage {
 			d -> this.change(host, region, r -> r.visible = !r.visible), () -> editable);
 		flow.stepper(Component.translatable("diorama.book.regions.on_minimap"), () -> onOff(region.onMinimap),
 			d -> this.change(host, region, r -> r.onMinimap = !r.onMinimap), () -> editable);
-		int areaAt = flow.take(11);
-		NumberFormat number = NumberFormat.getIntegerInstance();
-		double area = region.area();
-		flow.centered(() -> Component.translatable("diorama.book.regions.area", number.format(Math.round(area)), String.format("%.1f", area / 256)),
-			flow.x(), areaAt + 1, flow.width(), BookSprites.INK_SOFT);
+		flow.stepper(Component.translatable("diorama.book.regions.label"), () -> onOff(region.showLabel),
+			d -> this.change(host, region, r -> r.showLabel = !r.showLabel), () -> editable);
+		RegionStyle[] styles = RegionStyle.values();
+		flow.stepper(Component.translatable("diorama.book.regions.style"), () -> region.style == RegionStyle.AUTO
+				? Component.translatable("diorama.book.regions.style.auto")
+				: Component.translatable("diorama.settings.region_style." + name(region.style)),
+			d -> this.change(host, region, r -> r.style = styles[Math.floorMod(r.style.ordinal() + d, styles.length)]), () -> editable);
 		flow.gap(2);
 		List<PageFlow.ButtonSpec> buttons = new ArrayList<>();
 		buttons.add(new PageFlow.ButtonSpec(Component.translatable("diorama.book.center"), () -> host.centerOn(region)));

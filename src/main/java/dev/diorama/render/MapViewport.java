@@ -8,6 +8,7 @@ import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileKey;
 import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionStore;
+import dev.diorama.region.RegionStyle;
 import dev.diorama.render.gpu.MapCanvas;
 import dev.diorama.render.gpu.MapEffect;
 import dev.diorama.render.gpu.MapTexture;
@@ -99,6 +100,8 @@ public final class MapViewport {
 	private final RegionMask regions = new RegionMask();
 	/** The region drawn brighter: the one the eraser points at, the one being edited, the one the book shows. */
 	private java.util.@Nullable UUID highlight;
+	/** The regions drawn last frame, for their labels. */
+	private List<MapRegion> shown = List.of();
 	/** A region being edited, drawn instead of the one kept with its id, and how many changes it has had. */
 	private @Nullable MapRegion preview;
 	private long previewVersion;
@@ -422,14 +425,35 @@ public final class MapViewport {
 	/**
 	 * The regions pass's vertex colour, laid out as the coast's: the mask's texel size (log2 of map
 	 * pixels, bits 4-7) and daylight in alpha, the mask origin modulo 256 and 768 units in fours in
-	 * red and green, lines only in red's bit 6, the art pixel and its phase in blue.
+	 * red and green, lines only in red's bit 6, the art pixel and its phase in blue, and the border
+	 * band in blue's bits 6 and 7. Each region's style is in the mask.
 	 */
 	static int regionParams(RegionMask.Pass pass, int pixelCode, dev.diorama.EnvironmentLighting lighting, boolean linesOnly) {
 		int texel = Integer.numberOfTrailingZeros((int) Math.round(pass.texel() / RegionMask.FINEST));
 		int u = (int) (Math.floorMod((long) pass.originU(), 256L) / 4);
 		int v = (int) (Math.floorMod((long) pass.originV(), 768L) / 4);
 		int day = Math.round(Math.max(0, Math.min(1, lighting.daylight())) * 15);
-		return (texel << 4 | day) << 24 | (u | (linesOnly ? 64 : 0)) << 16 | v << 8 | pixelCode & 63;
+		int band = Settings.get().regionBand.ordinal();
+		return (texel << 4 | day) << 24 | (u | (linesOnly ? 64 : 0)) << 16 | v << 8 | pixelCode & 63 | band << 6;
+	}
+
+	/**
+	 * The map's style for regions: the setting, or, left automatic, the render style's own, unless
+	 * the fog makes the whole map an old one. Never {@link RegionStyle#AUTO}.
+	 */
+	public static RegionStyle regionStyle(Settings settings) {
+		if (settings.regionStyle != RegionStyle.AUTO) {
+			return settings.regionStyle;
+		}
+		if (settings.antiqueFog()) {
+			return settings.fogStyle == Settings.FogStyle.ANCIENT_MAP ? RegionStyle.ANTIQUE : RegionStyle.ANTIQUE_COLOR;
+		}
+		return switch (settings.renderStyle) {
+			case PLAIN -> RegionStyle.PLAIN;
+			case OUTLINED -> RegionStyle.OUTLINED;
+			case PAINTED -> RegionStyle.PAINTED;
+			case PAINTED_NO_OUTLINES -> RegionStyle.PAINTED_NO_INK;
+		};
 	}
 
 	/** The regions of this dimension this view shows, and their mask, or null when it shows none. */
@@ -438,9 +462,11 @@ public final class MapViewport {
 		RegionStore store = (this.minimap ? settings.minimapRegions : settings.mapRegions) ? RegionStore.get() : null;
 		String dimension = dev.diorama.waypoint.Waypoints.dimension();
 		if (store == null || dimension == null) {
+			this.shown = List.of();
 			return null;
 		}
 		List<MapRegion> shown = new ArrayList<>();
+		this.shown = shown;
 		MapRegion preview = this.preview;
 		for (MapRegion region : store.in(dimension)) {
 			if (preview != null && preview.id.equals(region.id)) {
@@ -450,7 +476,7 @@ public final class MapViewport {
 				shown.add(region);
 			}
 		}
-		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight);
+		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight, regionStyle(settings));
 	}
 
 	/** Draws this region brighter from the next frame, or none. */
@@ -462,6 +488,11 @@ public final class MapViewport {
 	public void preview(@Nullable MapRegion region, long version) {
 		this.preview = region;
 		this.previewVersion = version;
+	}
+
+	/** The regions drawn last frame, the one being edited as it is now. */
+	public List<MapRegion> shownRegions() {
+		return this.shown;
 	}
 
 	/** The region drawn at a map point last frame, or null. */

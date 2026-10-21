@@ -1,8 +1,8 @@
 # Map regions — plan
 
-Status: plan written on 2026-10-21. Steps 1–4 implemented the same day on the `feature/map-regions`
+Status: plan written on 2026-10-21. Steps 1–5 implemented the same day on the `feature/map-regions`
 branch; the "How it turned out" sections at the end record where they departed from the plan.
-Steps 5–8 are still to do.
+Steps 6–8 are still to do.
 
 ## Goal
 
@@ -342,4 +342,33 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
 - `DIORAMA_TESTS=regions` now also names the lasso's region in the book, undoes and redoes it, edits
   Home (corner, removal, move, three undos) and uses the book (click on the map, dye, delete,
   Options): captures `regions-naming`, `regions-edit-*`, `regions-book`, `regions-book-options`.
+
+## How it turned out (step 5)
+
+- The looks are in `regions.fsh` as planned (plain, outlined, painted, painted without ink, antique,
+  antique colour), with these departures:
+  - At the user's request the style is no longer tied to the render style: `RegionStyle` (AUTO plus
+    the six), a map setting `regionStyle` (AUTO follows the render style, or the antique fog, as the
+    plan's decision had it) and a style of each region's own (`MapRegion.style`, AUTO takes the map's;
+    "Style" on the region's page). The mask carries each texel's resolved style in its alpha, so
+    regions of different styles sit side by side; the pass's parameters no longer carry a look.
+  - Also at the user's request, a border band as strategy games draw territories (`regionBand`:
+    off, narrow 4 art pixels, wide 8; off by default): the dye strongest at the border, fading
+    inwards with the square of the distance, laid over whatever style.
+  - So bands fit, the mask measures distances up to 31 texels (quarters of a texel in green).
+  - The antique style's band is always in sepia; the colour one keeps the dye.
+  - Painted: the pen line is broken where a noise is low and wavers one art pixel inwards where
+    another is high; the pooled edge stays with no fill, so a region with no fill still reads.
+  - Plain and outlined lighten dark dyes for their lines, so black and grey regions show on dark
+    ground.
+- Labels (`RegionLabels`): at `MapRegion.anchor()` (polylabel, and the mean height of the corners),
+  fading in as the region's span on screen makes room for the name; biggest regions first, a name
+  overlapping one already placed is left out. Plain and outlined: the game's font with its shadow,
+  in the dye (lightened if dark); painted: ink with a shadow of paper a pixel down and right (a
+  full halo made thin letters read as pale ones); antique: spaced capitals in old ink, the same
+  shadow. `regionLabels` setting and "Name on the map" per region. World map only.
+- The detail page dropped its area line (the list shows it) to fit the style stepper.
+- Tests: `RegionLookTest` (JUnit); `DIORAMA_TESTS=regions` captures `regions-look-*` (each style,
+  near and far), `regions-look-chosen` (a chosen style over the plain render, one region of its own
+  style) and `regions-band-*`.
 

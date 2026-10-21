@@ -71,6 +71,13 @@ public final class Settings {
 	/** The regions the player drew, on the world map and on the minimap. */
 	public boolean mapRegions = true;
 	public boolean minimapRegions = true;
+	/** Regions' names written on the world map, where they fit. */
+	public boolean regionLabels = true;
+	/** How regions are drawn, unless a region has a style of its own; AUTO follows the render style. */
+	public dev.diorama.region.RegionStyle regionStyle = dev.diorama.region.RegionStyle.AUTO;
+	/** A band of each region's dye along the inside of its border, fading inwards, as strategy games draw territories. */
+	public enum RegionBand { OFF, NARROW, WIDE }
+	public RegionBand regionBand = RegionBand.OFF;
 
 	public boolean waypointsOnMap = true;
 	public boolean waypointsInWorld = true;
@@ -224,6 +231,8 @@ public final class Settings {
 		if (settings.renderStyle == null) settings.renderStyle = RenderStyle.PAINTED;
 		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.WORLD;
 		if (settings.fogStyle == null) settings.fogStyle = FogStyle.CLOUDS;
+		if (settings.regionStyle == null) settings.regionStyle = dev.diorama.region.RegionStyle.AUTO;
+		if (settings.regionBand == null) settings.regionBand = RegionBand.OFF;
 		if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;

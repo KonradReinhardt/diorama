@@ -5,6 +5,7 @@ import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
 import dev.diorama.region.MapRegion;
 import dev.diorama.region.RegionGeometry;
+import dev.diorama.region.RegionStyle;
 import dev.diorama.region.Ring;
 import dev.diorama.render.gpu.MapEffect;
 import dev.diorama.render.gpu.MapTexture;
@@ -23,10 +24,11 @@ import org.jspecify.annotations.Nullable;
  * <ul>
  *   <li>red: the region's dye (bits 0-3), its fill (4-5), whether it is highlighted (6) and whether
  *   the texel's middle is inside it (7);</li>
- *   <li>green: the signed distance to its edge, in eighths of a texel around 128, positive inside;
+ *   <li>green: the signed distance to its edge, in quarters of a texel around 128, positive inside;
  *   measured exactly to the projected outline, so the shader, reading it smoothed between texels,
  *   finds the edge between texels too, and lines stay one art pixel and smooth at any zoom;</li>
- *   <li>blue: a tag telling regions apart, so a line runs where two regions meet as well.</li>
+ *   <li>blue: a tag telling regions apart, so a line runs where two regions meet as well;</li>
+ *   <li>alpha: the region's style (low bits), its own or the map's (see {@link RegionStyle}).</li>
  * </ul>
  * Texels just outside a region carry its dye and tag and a negative distance. Before 1.21.6 there
  * are no effect passes: a plain texture of fills and edges is built instead, drawn as a quad.
@@ -41,10 +43,14 @@ final class RegionMask {
 	private static final int SNAP_TEXELS = 64;
 	/** Map units around the view the mask covers too, so an edge just past the view still draws. */
 	private static final double MARGIN = 16;
-	/** Texels from an edge whose distance is measured; farther ones read as this far. */
-	static final int BAND = 8;
+	/**
+	 * Texels from an edge whose distance is measured; farther ones read as this far. Enough for the
+	 * bands laid along an edge (the wide border band is eight art pixels), and as far as the green
+	 * byte holds.
+	 */
+	static final int BAND = 31;
 	/** Distance steps per texel in the green byte. */
-	static final int STEPS = 8;
+	static final int STEPS = 4;
 	/** How much of a dye each fill lays down, for the plain texture before 1.21.6 (regions.fsh has its own). */
 	private static final float[] FILL_ALPHA = {0, 0.16F, 0.30F, 0.48F};
 
@@ -65,7 +71,7 @@ final class RegionMask {
 	public static long buildNanos() { return buildNanos; }
 
 	private record Inputs(long revision, long preview, List<UUID> shown, double originU, double originV, double texel,
-		MapDirection direction, int layer, @Nullable UUID highlight) {
+		MapDirection direction, int layer, @Nullable UUID highlight, RegionStyle style) {
 	}
 
 	/** What the region passes of a frame draw with: the texture and the view's part of it. */
@@ -76,9 +82,10 @@ final class RegionMask {
 	 * Builds the mask for a view if anything it shows changed, and returns what to draw it with, or
 	 * null when no region is near the view. {@code revision} goes up whenever a region changes, and
 	 * {@code preview} whenever a region being edited, not yet kept, changes; on a cave slice the
-	 * outlines lie at the slice's height.
+	 * outlines lie at the slice's height. Regions whose style is {@link RegionStyle#AUTO} take
+	 * {@code style}, the map's.
 	 */
-	@Nullable Pass prepare(MapViewport.View view, List<MapRegion> regions, long revision, long preview, @Nullable UUID highlight) {
+	@Nullable Pass prepare(MapViewport.View view, List<MapRegion> regions, long revision, long preview, @Nullable UUID highlight, RegionStyle style) {
 		if (regions.isEmpty()) {
 			this.drawn = List.of();
 			return null;
@@ -95,9 +102,9 @@ final class RegionMask {
 		for (MapRegion region : regions) {
 			shown.add(region.id);
 		}
-		Inputs inputs = new Inputs(revision, preview, shown, originU, originV, texel, Projection.direction(), view.layer(), highlight);
+		Inputs inputs = new Inputs(revision, preview, shown, originU, originV, texel, Projection.direction(), view.layer(), highlight, style);
 		if (this.texture == null || !inputs.equals(this.inputs)) {
-			this.build(regions, originU, originV, texel, view.layer(), highlight);
+			this.build(regions, originU, originV, texel, view.layer(), highlight, style);
 			this.inputs = inputs;
 		}
 		if (this.drawn.isEmpty()) {
@@ -128,7 +135,7 @@ final class RegionMask {
 		return o == 0 ? null : this.drawn.get(o - 1);
 	}
 
-	private void build(List<MapRegion> regions, double originU, double originV, double texel, int layer, @Nullable UUID highlight) {
+	private void build(List<MapRegion> regions, double originU, double originV, double texel, int layer, @Nullable UUID highlight, RegionStyle style) {
 		long start = System.nanoTime();
 		if (this.texture == null) {
 			this.texture = MapTexture.create("diorama region mask", SIZE, 1);
@@ -178,7 +185,8 @@ final class RegionMask {
 				int red = region.dye.ordinal() | region.fill.ordinal() << 4 | (region.id.equals(highlight) ? 64 : 0) | (o != 0 ? 128 : 0);
 				int green = distanceByte(o != 0 ? this.inside[t] : -this.outside[t]);
 				int blue = (tagged - 1) % 255 + 1;
-				this.pixels[t] = 0xFF000000 | blue << 16 | green << 8 | red;
+				int alpha = 0xF0 | region.style.or(style).shaderIndex();
+				this.pixels[t] = alpha << 24 | blue << 16 | green << 8 | red;
 			} else {
 				this.pixels[t] = o == 0 ? 0 : this.plain(t, o, region, region.id.equals(highlight));
 			}

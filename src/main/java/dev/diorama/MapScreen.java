@@ -208,6 +208,9 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 			this.book.isOpen() && this.book.section() == MapBook.Section.REGIONS ? this.book.pickedRegion() : null);
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		this.drawReveal(graphics, view, player, mouseX, mouseY);
+		if (Settings.get().regionLabels) {
+			dev.diorama.render.RegionLabels.draw(graphics, view, this.viewport.shownRegions(), MapViewport.regionStyle(Settings.get()));
+		}
 		this.regions.draw(graphics, view, mouseX, mouseY);
 		Radar.Blip hovered = null;
 		this.blips = List.of();
@@ -937,22 +940,13 @@ public final class MapScreen extends Screen implements RegionMode.Host {
 		this.book.newRegion(region);
 	}
 
-	/** Glides the view to a region's label point, on the ground under it, and stops following the player. */
+	/** Glides the view to where a region's name is written, and stops following the player. */
 	@Override
 	public void centerOn(MapRegion region) {
-		double[] at = dev.diorama.region.RegionGeometry.label(region.rings, 1);
-		double height = 0;
-		int count = 0;
-		for (dev.diorama.region.Ring ring : region.rings) {
-			for (int i = 0; i < ring.size(); i++) {
-				height += ring.y(i);
-				count++;
-			}
-		}
-		height = count == 0 ? 64 : height / count;
+		double[] at = region.anchor();
 		this.following = false;
 		this.smoothZoom.reset(this.zoom);
-		this.panTarget = new double[] {Projection.u(at[0], at[1]), Projection.worldV(at[0], height, at[1])};
+		this.panTarget = new double[] {Projection.u(at[0], at[1]), Projection.worldV(at[0], at[2], at[1])};
 	}
 
 	/** The region drawn under a screen point, or null. */

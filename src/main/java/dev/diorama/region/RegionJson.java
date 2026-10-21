@@ -100,6 +100,7 @@ final class RegionJson {
 		if (region.name == null) region.name = "";
 		if (region.dye == null) region.dye = BannerDesign.Dye.RED;
 		if (region.fill == null) region.fill = MapRegion.Fill.NORMAL;
+		if (region.style == null) region.style = RegionStyle.AUTO;
 		region.reshaped();
 		return region;
 	}

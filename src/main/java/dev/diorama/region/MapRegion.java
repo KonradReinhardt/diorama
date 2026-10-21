@@ -23,6 +23,8 @@ public final class MapRegion {
 	/** One of the banner dyes, so a region and its banner share a palette. */
 	public BannerDesign.Dye dye = BannerDesign.Dye.RED;
 	public Fill fill = Fill.NORMAL;
+	/** How it is drawn; {@link RegionStyle#AUTO} draws it as the map's setting says. */
+	public RegionStyle style = RegionStyle.AUTO;
 	public List<Ring> rings = new ArrayList<>();
 	/** The standard planted at the region's label; none draws only its name. */
 	public @Nullable BannerDesign banner;
@@ -33,6 +35,8 @@ public final class MapRegion {
 
 	/** Area and bounds, worked out when first asked after a change; never saved. */
 	private transient double @Nullable [] shape;
+	/** Where the label goes, likewise. */
+	private transient double @Nullable [] anchor;
 
 	public MapRegion() {
 	}
@@ -45,6 +49,7 @@ public final class MapRegion {
 		out.dimension = this.dimension;
 		out.dye = this.dye;
 		out.fill = this.fill;
+		out.style = this.style;
 		out.rings = new ArrayList<>(this.rings);
 		out.banner = this.banner;
 		out.visible = this.visible;
@@ -57,6 +62,29 @@ public final class MapRegion {
 	/** Call after changing the rings in place. */
 	public void reshaped() {
 		this.shape = null;
+		this.anchor = null;
+	}
+
+	/**
+	 * Where its name is written: {x, z} of the point inside farthest from its edges (see
+	 * {@link RegionGeometry#label}), and the mean height of its corners, as the ground there.
+	 */
+	public double[] anchor() {
+		double[] a = this.anchor;
+		if (a == null) {
+			double[] at = RegionGeometry.label(this.rings, 1);
+			double height = 0;
+			int count = 0;
+			for (Ring ring : this.rings) {
+				for (int i = 0; i < ring.size(); i++) {
+					height += ring.y(i);
+					count++;
+				}
+			}
+			a = new double[] {at[0], at[1], count == 0 ? 64 : height / count};
+			this.anchor = a;
+		}
+		return a;
 	}
 
 	/** Blocks² inside, holes taken out. */

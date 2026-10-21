@@ -28,7 +28,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 /**
  * Regions drawn on the map (docs/design/map-regions.md): a few regions laid on the ground around
  * the player (one with a hole, one C-shaped, two that meet, one with no fill) captured at several
- * zooms and on the minimap; then the tools by the mouse and keys as a player would use them: the
+ * zooms, in each look and on the minimap; then the tools by the mouse and keys as a player would use them: the
  * lasso and naming in the book, undo and redo, the polygon, the edit tool, the eraser, and the
  * regions section of the book. Opt-in with {@code DIORAMA_TESTS=regions}.
  */
@@ -38,6 +38,10 @@ final class RegionsScenario {
 
 	static void run(ClientGameTestContext context, TestSingleplayerContext world) {
 		boolean[] was = context.computeOnClient(mc -> new boolean[] {Settings.get().mapClouds, Settings.get().minimapClouds});
+		Settings.RenderStyle style = context.computeOnClient(mc -> Settings.get().renderStyle);
+		Settings.FogStyle fog = context.computeOnClient(mc -> Settings.get().fogStyle);
+		dev.diorama.region.RegionStyle regionStyle = context.computeOnClient(mc -> Settings.get().regionStyle);
+		Settings.RegionBand band = context.computeOnClient(mc -> Settings.get().regionBand);
 		List<MapRegion> laid = context.computeOnClient(RegionsScenario::lay);
 		try {
 			context.runOnClient(mc -> {
@@ -52,6 +56,7 @@ final class RegionsScenario {
 				look(context, player[0], player[1], zoom);
 				context.takeScreenshot("regions-zoom-" + zoom);
 			}
+			looks(context, player);
 			look(context, player[0], player[1], 2);
 			MapRegion pointed = context.computeOnClient(mc -> {
 				MapScreen screen = (MapScreen) mc.gui.screen();
@@ -69,12 +74,81 @@ final class RegionsScenario {
 				for (MapRegion region : RegionMode.here()) store.commit(region.copy(), null);
 				Settings.get().mapClouds = was[0];
 				Settings.get().minimapClouds = was[1];
+				Settings.get().renderStyle = style;
+				Settings.get().fogStyle = fog;
+				Settings.get().regionStyle = regionStyle;
+				Settings.get().regionBand = band;
 				Settings.get().save();
 			});
 			context.setScreen(() -> null);
 		}
 		if (laid.size() != 5) {
 			throw new AssertionError("Laid " + laid.size() + " regions");
+		}
+	}
+
+	/**
+	 * The regions in each look, which follows the render style, or the antique fog where it is one:
+	 * the map redrawn in each style before it is captured, close up and further out.
+	 */
+	private static void looks(ClientGameTestContext context, double[] player) {
+		Object[][] looks = {
+			{Settings.RenderStyle.PLAIN, Settings.FogStyle.CLOUDS, "plain"},
+			{Settings.RenderStyle.OUTLINED, Settings.FogStyle.CLOUDS, "outlined"},
+			{Settings.RenderStyle.PAINTED, Settings.FogStyle.CLOUDS, "painted"},
+			{Settings.RenderStyle.PAINTED_NO_OUTLINES, Settings.FogStyle.CLOUDS, "painted-no-ink"},
+			{Settings.RenderStyle.PAINTED, Settings.FogStyle.ANCIENT_MAP, "antique"},
+			{Settings.RenderStyle.PAINTED, Settings.FogStyle.ANCIENT_MAP_COLOR, "antique-color"},
+		};
+		for (Object[] l : looks) {
+			context.runOnClient(mc -> {
+				Settings.get().renderStyle = (Settings.RenderStyle) l[0];
+				Settings.get().fogStyle = (Settings.FogStyle) l[1];
+				Settings.get().save();
+			});
+			look(context, player[0], player[1], 2);
+			quiet(context);
+			context.takeScreenshot("regions-look-" + l[2]);
+			look(context, player[0], player[1], 4);
+			context.takeScreenshot("regions-look-" + l[2] + "-close");
+		}
+		// A style chosen for regions, apart from the render style; then one region's own.
+		context.runOnClient(mc -> {
+			Settings.get().renderStyle = Settings.RenderStyle.PLAIN;
+			Settings.get().fogStyle = Settings.FogStyle.CLOUDS;
+			Settings.get().regionStyle = dev.diorama.region.RegionStyle.PAINTED;
+			Settings.get().save();
+			RegionStore store = RegionStore.get();
+			MapRegion claim = RegionMode.here().stream().filter(r -> r.name.equals("Claim")).findFirst().orElseThrow();
+			MapRegion outlined = claim.copy();
+			outlined.style = dev.diorama.region.RegionStyle.ANTIQUE;
+			store.commit(claim.copy(), outlined);
+		});
+		look(context, player[0], player[1], 2);
+		quiet(context);
+		context.takeScreenshot("regions-look-chosen");
+		// The border band, narrow then wide, over the painted regions.
+		for (Settings.RegionBand b : new Settings.RegionBand[] {Settings.RegionBand.NARROW, Settings.RegionBand.WIDE}) {
+			context.runOnClient(mc -> Settings.get().regionBand = b);
+			look(context, player[0], player[1], 2);
+			context.takeScreenshot("regions-band-" + b.name().toLowerCase(java.util.Locale.ROOT));
+		}
+		look(context, player[0], player[1], 4);
+		context.takeScreenshot("regions-band-wide-close");
+		context.runOnClient(mc -> {
+			Settings.get().regionBand = Settings.RegionBand.OFF;
+			Settings.get().regionStyle = dev.diorama.region.RegionStyle.AUTO;
+		});
+	}
+
+	/** Waits until no tile has been baking for a while, as a new render style redraws the map. */
+	private static void quiet(ClientGameTestContext context) {
+		int quiet = 0;
+		for (int i = 0; i < 1200 && quiet < 20; i++) {
+			context.waitTick();
+			boolean baking = context.computeOnClient(mc -> MapSession.get() != null
+				&& (MapSession.get().map().bakingCount() > 0 || MapSession.get().map().refreshingAppearance()));
+			quiet = baking ? 0 : quiet + 1;
 		}
 	}
 
@@ -271,7 +345,8 @@ final class RegionsScenario {
 	 */
 	private static void edit(ClientGameTestContext context, double[] player) {
 		context.getInput().pressKey(InputConstants.KEY_3);
-		double[] inside = onScreen(context, player[0] - 30, player[1] - 8);
+		// Well inside Home, away from its sides and its courtyard's, whatever the GUI scale.
+		double[] inside = onScreen(context, player[0] - 35, player[1] - 16);
 		context.getInput().setCursorPos(inside[0], inside[1]);
 		context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
 		context.waitTicks(3);
