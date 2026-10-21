@@ -92,6 +92,11 @@ appearance until revisited; their original geometry and lighting cannot be recov
 `DIORAMA_TESTS=whole-map-refresh` forgets the loaded snapshots, changes the look and checks the
 redraw from saved chunks reveals nothing new.
 
+In creative or with cheats in singleplayer (26.3), the world map's right-click menu can also
+reveal a region you haven't explored: pick two corners and the integrated server loads, or
+generates, its chunks for the map. See [the design](docs/design/region-reveal.md);
+`DIORAMA_TESTS=reveal-region` tests it.
+
 `DIORAMA_TESTS=style-swap` times a render style picked in the map's book until the tiles on
 screen change (together) and until the whole revision is done; see `docs/design/painted-style.md`.
 
