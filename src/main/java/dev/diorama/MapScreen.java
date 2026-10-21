@@ -85,6 +85,8 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	private java.util.@Nullable UUID pointedPin;
 	/** Until when the controls show by themselves: the first seconds the map is open in a session. */
 	private static long helpUntil;
+	/** The chunk a region to reveal starts at, while the player picks its other corner; see {@link RegionReveal}. */
+	private int @Nullable [] revealCorner;
 
 	public MapScreen() {
 		super(Component.translatable("diorama.screen.title"));
@@ -181,6 +183,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, drawnZoom, this.layer);
 		if (!this.smoothZoom.moving() && !this.opening.running(zoomNow) && this.panTarget == null) view = view.pixelPerfect();
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
+		this.drawReveal(graphics, view, player, mouseX, mouseY);
 		Radar.Blip hovered = null;
 		this.blips = List.of();
 		// Nothing on the map under the book or a ribbon is pointed at.
@@ -220,10 +223,17 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		if (this.help != null) {
 			this.help.visible = !this.book.isOpen();
 		}
-		if (this.note != null && System.currentTimeMillis() < this.noteUntil) {
-			int w = this.font.width(this.note) + 12;
-			BookSprites.nine(graphics, BookSprites.LABEL, (this.width - w) / 2, 4, w, 16, -1, true);
-			graphics.text(this.font, this.note, (this.width - w) / 2 + 6, 8, BookSprites.INK, false);
+		RegionReveal.Outcome outcome = RegionReveal.takeOutcome();
+		if (outcome != null) {
+			this.say(Component.translatable("diorama.reveal." + outcome.name().toLowerCase(java.util.Locale.ROOT)));
+		}
+		Component shownNote = this.revealCorner != null ? this.revealHint(mouseX, mouseY)
+			: this.note != null && System.currentTimeMillis() < this.noteUntil ? this.note : null;
+		if (shownNote != null) {
+			// Under the status slip, which can reach the middle of a narrow screen.
+			int w = this.font.width(shownNote) + 12;
+			BookSprites.nine(graphics, BookSprites.LABEL, (this.width - w) / 2, 22, w, 16, -1, true);
+			graphics.text(this.font, shownNote, (this.width - w) / 2 + 6, 26, BookSprites.INK, false);
 		}
 		this.book.frame(zoomNow);
 		// The book and its widgets draw over the map and its labels.
@@ -242,6 +252,10 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			.append(Component.translatable("diorama.book.status.chunks", session.map().chunkCount()));
 		if (session.map().bakingCount() > 0 || session.map().refreshingAppearance()) {
 			status.append("  ·  ").append(Component.translatable("diorama.book.status.baking"));
+		}
+		float revealed = RegionReveal.progress();
+		if (revealed >= 0) {
+			status.append("  ·  ").append(Component.translatable("diorama.book.status.revealing", Math.round(revealed * 100)));
 		}
 		Component shown = BookWidgets.fit(status, this.width - 60);
 		BookSprites.nine(graphics, BookSprites.LABEL, 4, 4, this.font.width(shown) + 12, 16, -1, true);
@@ -342,6 +356,15 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		if (this.dragged || Math.hypot(x - this.pressX, y - this.pressY) > 3) {
 			return true;
 		}
+		if (this.revealCorner != null) {
+			// A left click sets the other corner and starts; a right click lets the region go.
+			RegionReveal.Region picked = button == InputConstants.MOUSE_BUTTON_LEFT ? this.pickedRegion(x, y) : null;
+			this.revealCorner = null;
+			if (picked != null) {
+				this.say(Component.translatable(RegionReveal.start(picked) ? "diorama.reveal.started" : "diorama.reveal.denied"));
+			}
+			return true;
+		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT) {
 			WaypointOverlay.Pin pin = WaypointOverlay.under(this.pins, x, y);
 			if (pin != null) {
@@ -374,11 +397,73 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		if (spot != null) {
 			return new MapMenu.Target(spot.getX(), spot.getY(), spot.getZ(), true);
 		}
-		// Undo the projection at a guessed height: the column is right, the height may not be.
-		int y = this.layer != TileKey.SURFACE ? this.layer : player.getBlockY();
-		double depth = (v + y * Projection.yScale()) / Projection.zScale();
+		int[] column = this.column(screenX, screenY);
+		return column == null ? null : new MapMenu.Target(column[0], this.guessedHeight(player), column[1], false);
+	}
+
+	/** The height unknown ground is taken at: the slice shown, or the player's own on the surface. */
+	private int guessedHeight(LocalPlayer player) {
+		return this.layer != TileKey.SURFACE ? this.layer : player.getBlockY();
+	}
+
+	/**
+	 * The block column {x, z} under a screen point, undoing the projection at {@link #guessedHeight}:
+	 * the column is right where the ground is that high, and off by a little where it isn't.
+	 */
+	private int @Nullable [] column(double screenX, double screenY) {
+		MapViewport.View view = this.lastView;
+		LocalPlayer player = this.minecraft.player;
+		if (view == null || player == null) {
+			return null;
+		}
+		double u = view.centerU() + (screenX - view.x() - view.width() / 2.0) / view.zoom();
+		double v = view.centerV() + (screenY - view.y() - view.height() / 2.0) / view.zoom();
+		double depth = (v + this.guessedHeight(player) * Projection.yScale()) / Projection.zScale();
 		MapDirection d = Projection.direction();
-		return new MapMenu.Target((int) Math.floor(d.worldX(u, depth)), y, (int) Math.floor(d.worldZ(u, depth)), false);
+		return new int[] {(int) Math.floor(d.worldX(u, depth)), (int) Math.floor(d.worldZ(u, depth))};
+	}
+
+	/**
+	 * The region being picked, from its first corner to the chunk under the cursor, and the one
+	 * being revealed: outlined in ink at the guessed height, over a light wash.
+	 */
+	private void drawReveal(GuiGraphicsExtractor graphics, MapViewport.View view, LocalPlayer player, int mouseX, int mouseY) {
+		RegionReveal.Region running = RegionReveal.region();
+		if (running != null) {
+			this.outline(graphics, view, player, running, 0x30000000 | (BookSprites.INK & 0xFFFFFF));
+		}
+		RegionReveal.Region picked = this.pickedRegion(mouseX, mouseY);
+		if (picked != null) {
+			this.outline(graphics, view, player, picked, 0x60FCE3C0);
+		}
+	}
+
+	/** The region from the first corner picked to the chunk under a screen point, or null when none is being picked. */
+	private RegionReveal.@Nullable Region pickedRegion(double screenX, double screenY) {
+		int[] corner = this.revealCorner;
+		int[] cursor = corner == null ? null : this.column(screenX, screenY);
+		return cursor == null ? null : RegionReveal.Region.between(corner[0], corner[1], cursor[0] >> 4, cursor[1] >> 4);
+	}
+
+	private void outline(GuiGraphicsExtractor graphics, MapViewport.View view, LocalPlayer player, RegionReveal.Region region, int wash) {
+		int y = this.guessedHeight(player);
+		double x0 = region.minX() << 4, z0 = region.minZ() << 4, x1 = (region.maxX() + 1) << 4, z1 = (region.maxZ() + 1) << 4;
+		// Every camera faces a cardinal direction, so the region's square stays a rectangle on screen.
+		float ax = view.screenX(Projection.u(x0, z0)), bx = view.screenX(Projection.u(x1, z1));
+		float ay = view.screenY(Projection.worldV(x0, y, z0)), by = view.screenY(Projection.worldV(x1, y, z1));
+		int l = Math.round(Math.min(ax, bx)), t = Math.round(Math.min(ay, by));
+		int r = Math.max(l + 2, Math.round(Math.max(ax, bx))), b = Math.max(t + 2, Math.round(Math.max(ay, by)));
+		graphics.fill(l, t, r, b, wash);
+		graphics.fill(l, t, r, t + 1, BookSprites.INK);
+		graphics.fill(l, b - 1, r, b, BookSprites.INK);
+		graphics.fill(l, t, l + 1, b, BookSprites.INK);
+		graphics.fill(r - 1, t, r, b, BookSprites.INK);
+	}
+
+	/** What the slip at the top says while the other corner is picked: the region's size, and how to let it go. */
+	private Component revealHint(int mouseX, int mouseY) {
+		RegionReveal.Region picked = this.pickedRegion(mouseX, mouseY);
+		return Component.translatable("diorama.reveal.pick", picked == null ? 1 : picked.width(), picked == null ? 1 : picked.depth());
 	}
 
 	/** Opens the right-click menu for the spot under a screen point. */
@@ -422,8 +507,36 @@ public final class MapScreen extends Screen implements MapBook.Host {
 				this.closeMenu();
 			}));
 		}
+		// Unexplored land drawn from the world itself, for creative and cheats in singleplayer.
+		if (RegionReveal.region() != null) {
+			entries.add(new MapMenu.Entry(Component.translatable("diorama.menu.reveal_stop"), BookWidgets.item(BookSprites.stack("barrier")), () -> {
+				RegionReveal.cancel();
+				this.closeMenu();
+			}));
+		} else if (RegionReveal.allowed(session)) {
+			int[] corner = this.column(screenX, screenY);
+			if (corner != null) {
+				entries.add(new MapMenu.Entry(Component.translatable("diorama.menu.reveal"), BookWidgets.item(BookSprites.stack("spyglass")), () -> {
+					this.revealCorner = new int[] {corner[0] >> 4, corner[1] >> 4};
+					this.closeMenu();
+				}));
+			}
+		}
 		this.menu = new MapMenu(target, entries, (int) screenX, (int) screenY);
 		this.rebuild();
+	}
+
+	/** For tests: starts picking a region to reveal at a screen point, as the right-click menu's entry does. */
+	public void pickRevealFrom(double screenX, double screenY) {
+		int[] corner = this.column(screenX, screenY);
+		if (corner != null && RegionReveal.allowed(MapSession.get())) {
+			this.revealCorner = new int[] {corner[0] >> 4, corner[1] >> 4};
+		}
+	}
+
+	/** For tests: whether the other corner of a region to reveal is being picked. */
+	public boolean pickingReveal() {
+		return this.revealCorner != null;
 	}
 
 	private void closeMenu() {
@@ -503,6 +616,10 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		// Escape shuts the right-click menu first, then the book, and the map only once both are shut.
 		if (key == InputConstants.KEY_ESCAPE && this.menu != null) {
 			this.closeMenu();
+			return true;
+		}
+		if (key == InputConstants.KEY_ESCAPE && this.revealCorner != null) {
+			this.revealCorner = null;
 			return true;
 		}
 		if (key == InputConstants.KEY_ESCAPE && this.book.isOpen()) {

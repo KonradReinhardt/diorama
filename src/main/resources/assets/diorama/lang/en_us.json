@@ -193,5 +193,13 @@
 	"diorama.menu.teleport": "Teleport here",
 	"diorama.menu.copied": "Copied %s",
 	"diorama.menu.teleporting": "Teleporting…",
-	"diorama.menu.unknown_height": "%s, ?, %s"
+	"diorama.menu.unknown_height": "%s, ?, %s",
+	"diorama.book.status.revealing": "revealing %s%%",
+	"diorama.menu.reveal": "Reveal a region from here",
+	"diorama.menu.reveal_stop": "Stop revealing",
+	"diorama.reveal.pick": "Click the opposite corner · %s × %s chunks · right-click or Esc cancels",
+	"diorama.reveal.started": "Revealing… land never visited is generated",
+	"diorama.reveal.denied": "Revealing needs creative or cheats, in singleplayer",
+	"diorama.reveal.done": "Region revealed",
+	"diorama.reveal.cancelled": "Revealing stopped"
 }

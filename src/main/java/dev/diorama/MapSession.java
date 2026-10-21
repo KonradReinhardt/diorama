@@ -101,6 +101,7 @@ public final class MapSession {
 	/** Saves and ends the session. For closing the game; leaving a world is noticed by {@link #tick}. */
 	public static void close() {
 		if (current != null) {
+            RegionReveal.cancel();
             if (current.seedPreview != null) current.seedPreview.close();
 			current.map.close();
 			current = null;
@@ -145,6 +146,7 @@ public final class MapSession {
 	 */
 	private static @Nullable MapSession forLevel(@Nullable ClientLevel level) {
 		if (current != null && current.level != level) {
+            RegionReveal.cancel();
             if (current.seedPreview != null) current.seedPreview.close();
 			current.map.close();
 			current = null;
@@ -391,6 +393,7 @@ public final class MapSession {
 		boolean spawnSpots = settings.spawnSpots != Settings.SpawnSpots.OFF;
 		boolean overlays = settings.chunkGrid || settings.slimeChunks || spawnSpots;
 		this.map.setOverlays(overlays ? new Overlays(this.slimeSeed(), spawnSpots) : null);
+		RegionReveal.tick(this, playerChunkX, playerChunkZ);
 		this.map.update();
 		if (player != null) {
 			this.updateUnderground(player);

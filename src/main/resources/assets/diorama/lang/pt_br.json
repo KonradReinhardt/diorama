@@ -193,5 +193,13 @@
 	"diorama.menu.teleport": "Teleportar para cá",
 	"diorama.menu.copied": "Copiado: %s",
 	"diorama.menu.teleporting": "Teleportando…",
-	"diorama.menu.unknown_height": "%s, ?, %s"
+	"diorama.menu.unknown_height": "%s, ?, %s",
+	"diorama.book.status.revealing": "revelando %s%%",
+	"diorama.menu.reveal": "Revelar região a partir daqui",
+	"diorama.menu.reveal_stop": "Parar revelação",
+	"diorama.reveal.pick": "Clique no canto oposto · %s × %s chunks · botão direito ou Esc cancela",
+	"diorama.reveal.started": "Revelando… terras nunca visitadas são geradas",
+	"diorama.reveal.denied": "Revelar exige criativo ou cheats, no singleplayer",
+	"diorama.reveal.done": "Região revelada",
+	"diorama.reveal.cancelled": "Revelação interrompida"
 }

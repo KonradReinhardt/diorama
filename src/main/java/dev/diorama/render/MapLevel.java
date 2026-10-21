@@ -1179,6 +1179,11 @@ public final class MapLevel implements ChunkSource {
 		return this.inFlight.size();
 	}
 
+	/** Surface tiles changed since their last save, waiting for or in their background bake. */
+	public int unsavedTiles() {
+		return this.unsaved.size() + this.backgroundBakes.size();
+	}
+
 	/** Whether this saved tile was last drawn entirely with the current look. For tests. */
 	public boolean showsCurrentLook(TileKey key) {
 		return this.stamps != null && this.stamps.isFresh(key);
