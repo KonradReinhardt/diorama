@@ -22,8 +22,8 @@ import org.jspecify.annotations.Nullable;
  * Each on-screen map (minimap, fullscreen) owns one, because each keeps its own fog mask.
  */
 public final class MapViewport {
-    private static long maskBuilds;
-    public static long maskBuilds() { return maskBuilds; }
+	private static long maskBuilds;
+	public static long maskBuilds() { return maskBuilds; }
 	/** Mask texels across for clouds, and for the antique map, whose crisp outline needs finer ones. */
 	private static final int MASK = 256;
 	private static final int ANTIQUE_MASK = 512;
@@ -35,24 +35,24 @@ public final class MapViewport {
 	/** Texels across the current mask; arrays below are sized for it. */
 	private int size = MASK;
 	private int[] maskPixels = new int[MASK * MASK];
-    private FogReveal reveal = new FogReveal(MASK);
-    private int[] columnTiles = new int[MASK], columnCells = new int[MASK];
-    private double[] columnU = new double[MASK];
-    /** Texels whose coverage was borrowed from another level of detail at the last build; see {@link #borrowedCoverage}. */
-    private boolean[] lent = new boolean[MASK * MASK];
-    /** The tile {@link #borrowedCoverage} last looked up at each level, so a texel row doesn't look it up again. */
-    private final @Nullable MapTile[] lendTile = new MapTile[TileKey.MAX_LOD + 1];
-    private final long[] lendKey = new long[TileKey.MAX_LOD + 1];
-    private final boolean[] lendLooked = new boolean[TileKey.MAX_LOD + 1];
+	private FogReveal reveal = new FogReveal(MASK);
+	private int[] columnTiles = new int[MASK], columnCells = new int[MASK];
+	private double[] columnU = new double[MASK];
+	/** Texels whose coverage was borrowed from another level of detail at the last build; see {@link #borrowedCoverage}. */
+	private boolean[] lent = new boolean[MASK * MASK];
+	/** The tile {@link #borrowedCoverage} last looked up at each level, so a texel row doesn't look it up again. */
+	private final @Nullable MapTile[] lendTile = new MapTile[TileKey.MAX_LOD + 1];
+	private final long[] lendKey = new long[TileKey.MAX_LOD + 1];
+	private final boolean[] lendLooked = new boolean[TileKey.MAX_LOD + 1];
 	private int[] notKnownCounts = new int[(MASK + 1) * (MASK + 1)];
 	private int[] notUnknownCounts = new int[(MASK + 1) * (MASK + 1)];
 	private float[] blurA = new float[MASK * MASK];
 	private float[] blurB = new float[MASK * MASK];
 	/** Antique: whether any coverage cell under each texel holds terrain, however little. */
 	private boolean[] anyTerrain = new boolean[MASK * MASK];
-    private boolean settleFlags;
-    private static long maskNanos;
-    public static long maskNanos() { return maskNanos; }
+	private boolean settleFlags;
+	private static long maskNanos;
+	public static long maskNanos() { return maskNanos; }
 	/** What the mask texture was last built from; it only needs building again when this changes. */
 	private @Nullable MaskInputs maskInputs;
 	/** The map the mask was built from. Weak, so a minimap left over after leaving a world doesn't keep its map. */
@@ -172,22 +172,22 @@ public final class MapViewport {
 			Settings.get().antiqueFog() ? 0xFFE5CB96 : cave ? 0xFF0C0E12 : 0xFF8C99AB);
 
 		var lighting = dev.diorama.EnvironmentLighting.current(cave || level.roofless());
-        FogPass fog = this.prepareFog(level, view, lighting);
-        // Unknown ground drawn opaque under the tiles first: wherever terrain is missing or only
-        // partly known (the explored edge, tiles still loading) it shows instead of a flat colour.
-        this.drawFog(graphics, view, fog, true);
-        this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0, lighting);
-        // The effects are passes of their own over the tiles, never baked: the fog then closes over them.
-        CoastMask.Pass coast = Settings.get().mapCoast && MapEffect.supported() ? this.coast.prepare(level, view) : null;
-        if (coast != null) {
-            MapCanvas.of(graphics).effect(MapEffect.COAST, coast.texture(), FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
-                coast.u0(), coast.v0(), coast.u1(), coast.v1(), coastParams(coast, fog.pixelCode(), lighting));
-        }
-        if (this.cloudsShown(level, view)) {
-            MapCanvas.of(graphics).effect(MapEffect.CLOUDS, this.maskTexture, FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
-                fog.u0(), fog.v0(), fog.u1(), fog.v1(), fog.clouds());
-        }
-        this.drawFog(graphics, view, fog, false);
+		FogPass fog = this.prepareFog(level, view, lighting);
+		// Unknown ground drawn opaque under the tiles first: wherever terrain is missing or only
+		// partly known (the explored edge, tiles still loading) it shows instead of a flat colour.
+		this.drawFog(graphics, view, fog, true);
+		this.drawTiles(graphics, level, view, view.zoom() >= OVERLAY_ZOOM ? overlays : 0, lighting);
+		// The effects are passes of their own over the tiles, never baked: the fog then closes over them.
+		CoastMask.Pass coast = Settings.get().mapCoast && MapEffect.supported() ? this.coast.prepare(level, view) : null;
+		if (coast != null) {
+			MapCanvas.of(graphics).effect(MapEffect.COAST, coast.texture(), FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+				coast.u0(), coast.v0(), coast.u1(), coast.v1(), coastParams(coast, fog.pixelCode(), lighting));
+		}
+		if (this.cloudsShown(level, view)) {
+			MapCanvas.of(graphics).effect(MapEffect.CLOUDS, this.maskTexture, FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+				fog.u0(), fog.v0(), fog.u1(), fog.v1(), fog.clouds());
+		}
+		this.drawFog(graphics, view, fog, false);
 		graphics.disableScissor();
 	}
 
@@ -443,12 +443,12 @@ public final class MapViewport {
 			| (int) Math.floorMod(Math.round(originY), (long) artPixels) << 4;
 		// Map units per art pixel: never less than a block.
 		double art = Math.max(1, artPixels / (view.zoom() * gui));
-        SeedPreview preview = null;
-        MapSession session = MapSession.get();
-        if (antique && Settings.get().seedPreview && !level.roofless() && view.layer() == TileKey.SURFACE && session != null && session.map() == level) {
-            preview = session.seedPreview();
-            if (preview != null) preview.request(previewBounds(view));
-        }
+		SeedPreview preview = null;
+		MapSession session = MapSession.get();
+		if (antique && Settings.get().seedPreview && !level.roofless() && view.layer() == TileKey.SURFACE && session != null && session.map() == level) {
+			preview = session.seedPreview();
+			if (preview != null) preview.request(previewBounds(view));
+		}
 		this.buildMask(level, view, originU, originV, texel, steps, fast, antique, preview, art);
 
 		double span = size * texel;
@@ -463,10 +463,10 @@ public final class MapViewport {
 		int fogCode = (cave ? 128 : 0) | steps << 4 | Math.round(lighting.daylight() * 15);
 		// The mask scale code takes the alpha byte's high nibble; 8 marks the antique map, 4 its colours.
 		int quality = (antique ? 8 : 0) | (Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP_COLOR ? 4 : 0);
-        int progress = Math.round(this.reveal.progress(System.nanoTime()) * 63);
-        // Six bits each for the art pixel and reveal easing; no per-frame mask uploads.
-        int params = (scaleCode * 16 | quality | progress >> 4) << 24 | (noiseU * 32 | pixelCode & 31) << 16
-            | (noiseV * 32 | pixelCode >> 5 | (progress & 15) << 1) << 8 | fogCode;
+		int progress = Math.round(this.reveal.progress(System.nanoTime()) * 63);
+		// Six bits each for the art pixel and reveal easing; no per-frame mask uploads.
+		int params = (scaleCode * 16 | quality | progress >> 4) << 24 | (noiseU * 32 | pixelCode & 31) << 16
+			| (noiseV * 32 | pixelCode >> 5 | (progress & 15) << 1) << 8 | fogCode;
 		boolean sepia = Settings.get().fogStyle == Settings.FogStyle.ANCIENT_MAP && Settings.get().antiqueTint();
 		int clouds = MapClouds.params(scaleCode, originU, originV, pixelCode, lighting.daylight(), lighting.rain(), Projection.direction(), sepia);
 		return new FogPass(antique, mu0, mv0, mu1, mv1, params, clouds, pixelCode);
@@ -482,16 +482,16 @@ public final class MapViewport {
 		);
 	}
 
-    private static SeedPreview.Bounds previewBounds(View view) {
-        double depth0 = Projection.zAt(view.minV(), 64), depth1 = Projection.zAt(view.minV() + view.height() / view.zoom(), 64);
-        double u0 = view.minU(), u1 = u0 + view.width() / view.zoom();
-        var d = Projection.direction();
-        double[] xs = {d.worldX(u0, depth0), d.worldX(u0, depth1), d.worldX(u1, depth0), d.worldX(u1, depth1)};
-        double[] zs = {d.worldZ(u0, depth0), d.worldZ(u0, depth1), d.worldZ(u1, depth0), d.worldZ(u1, depth1)};
-        return new SeedPreview.Bounds((int)Math.floor(java.util.Arrays.stream(xs).min().orElse(0)),
-            (int)Math.floor(java.util.Arrays.stream(zs).min().orElse(0)), (int)Math.ceil(java.util.Arrays.stream(xs).max().orElse(0)),
-            (int)Math.ceil(java.util.Arrays.stream(zs).max().orElse(0)), view.zoom() >= .15, view.zoom() >= .45);
-    }
+	private static SeedPreview.Bounds previewBounds(View view) {
+		double depth0 = Projection.zAt(view.minV(), 64), depth1 = Projection.zAt(view.minV() + view.height() / view.zoom(), 64);
+		double u0 = view.minU(), u1 = u0 + view.width() / view.zoom();
+		var d = Projection.direction();
+		double[] xs = {d.worldX(u0, depth0), d.worldX(u0, depth1), d.worldX(u1, depth0), d.worldX(u1, depth1)};
+		double[] zs = {d.worldZ(u0, depth0), d.worldZ(u0, depth1), d.worldZ(u1, depth0), d.worldZ(u1, depth1)};
+		return new SeedPreview.Bounds((int)Math.floor(java.util.Arrays.stream(xs).min().orElse(0)),
+			(int)Math.floor(java.util.Arrays.stream(zs).min().orElse(0)), (int)Math.ceil(java.util.Arrays.stream(xs).max().orElse(0)),
+			(int)Math.ceil(java.util.Arrays.stream(zs).max().orElse(0)), view.zoom() >= .15, view.zoom() >= .45);
+	}
 	private void buildMask(MapLevel level, View view, double originU, double originV, double texel, int scaleSteps, boolean fast, boolean antique, @Nullable SeedPreview preview, double art) {
 		int size = this.size;
 		if (this.maskTexture == null) {
@@ -507,12 +507,12 @@ public final class MapViewport {
 		MaskInputs inputs = new MaskInputs(level.coverageVersion(), view.layer(), lod, originU, originV, texel, scaleSteps, fast, antique, preview == null ? -1 : preview.revision(), Projection.direction());
 		long now = System.nanoTime();
 		if (this.maskLevel.get() == level && inputs.equals(this.maskInputs)) {
-            if (this.settleFlags && this.reveal.progress(now) == 1) {
-                this.settleFlags = false;
-                for (int i = 0; i < size * size; i++) this.maskPixels[i] = (this.maskPixels[i] & 255) * 0x01000001;
-                this.markReach(fogReach(texel, !surface), 0xFF00, 0xFF0000, null);
-                this.maskTexture.write(0, 0, 0, size, this.maskPixels);
-            }
+			if (this.settleFlags && this.reveal.progress(now) == 1) {
+				this.settleFlags = false;
+				for (int i = 0; i < size * size; i++) this.maskPixels[i] = (this.maskPixels[i] & 255) * 0x01000001;
+				this.markReach(fogReach(texel, !surface), 0xFF00, 0xFF0000, null);
+				this.maskTexture.write(0, 0, 0, size, this.maskPixels);
+			}
 			return;
 		}
 		// While tiles stream in, coverage changes almost every frame. Rebuilding for each would cost
@@ -522,7 +522,7 @@ public final class MapViewport {
 			return;
 		}
 		this.lastMaskBuild = now;
-        maskBuilds++;
+		maskBuilds++;
 		boolean reset = this.maskLevel.get() != level || this.maskInputs == null || this.maskInputs.layer() != view.layer() || this.maskInputs.direction() != Projection.direction()
 			// A finer or coarser mask draws known ground in more or less detail; that isn't a
 			// discovery, and easing it in made every zoom step flicker along the frontier. Nor is
@@ -538,15 +538,15 @@ public final class MapViewport {
 		// cell under the texel's centre and soften the rest.
 		int cellsAcross = antique ? (int) Math.max(1, Math.round(texel / cellUnits)) : 1;
 		int cellStep = Math.max(1, cellsAcross / 8);
-        java.util.Arrays.fill(this.lendLooked, false);
-        boolean lends = surface && level.hasOverviews();
-        for (int i = 0; i < size; i++) {
-            double u = originU + (antique ? i * texel + Math.min(texel, cellUnits) / 2 : (i + .5) * texel);
-            this.columnU[i] = u;
-            int tu = (int)Math.floor(u / units);
-            this.columnTiles[i] = tu;
-            this.columnCells[i] = Math.min(Projection.COVERAGE_CELLS - 1, (int)((u - tu * units) / cellUnits));
-        }
+		java.util.Arrays.fill(this.lendLooked, false);
+		boolean lends = surface && level.hasOverviews();
+		for (int i = 0; i < size; i++) {
+			double u = originU + (antique ? i * texel + Math.min(texel, cellUnits) / 2 : (i + .5) * texel);
+			this.columnU[i] = u;
+			int tu = (int)Math.floor(u / units);
+			this.columnTiles[i] = tu;
+			this.columnCells[i] = Math.min(Projection.COVERAGE_CELLS - 1, (int)((u - tu * units) / cellUnits));
+		}
 		int lastTu = Integer.MIN_VALUE;
 		int lastTv = Integer.MIN_VALUE;
 		MapTile tile = null;
@@ -594,21 +594,21 @@ public final class MapViewport {
 			// Explored or not: the outline is drawn where the shader's smooth field crosses between.
 			for (int i = 0; i < size * size; i++) this.maskPixels[i] = 0xFF000000 | ((this.maskPixels[i] & 0xFF) >= 230 ? 0xFF : 0);
 		}
-        // Zoomed out, coverage only changes as overviews are rebuilt from tiles saved seconds
-        // before, already shown up close: easing it would reveal the same ground twice.
-        this.reveal.update(this.maskPixels, this.lent, originU, originV, texel, reset || lod > 0, now);
-        this.settleFlags = !antique && this.reveal.progress(now) < 1;
-        if (antique) {
-            int[] carto = this.cartography(originU, originV, texel, preview);
-            for (int i = 0; i < size * size; i++) this.maskPixels[i] |= carto[i];
-            // The shader frays the frontier by reading max(22 blocks, 7 art pixels) diagonally around
-            // it, plus three art pixels of rings and the bilinear texel. The art pixel changes with
-            // zoom between rebuilds: allow for it doubling.
-            int reach = (int) Math.ceil(Math.max(40, 26 * art) / texel) + 2;
-            this.markReach(new int[] {reach, reach, reach, reach}, ALL_EXPLORED, NONE_EXPLORED, this.anyTerrain);
-        } else this.markReach(fogReach(texel, !surface), 0xFF00, 0xFF0000, null);
+		// Zoomed out, coverage only changes as overviews are rebuilt from tiles saved seconds
+		// before, already shown up close: easing it would reveal the same ground twice.
+		this.reveal.update(this.maskPixels, this.lent, originU, originV, texel, reset || lod > 0, now);
+		this.settleFlags = !antique && this.reveal.progress(now) < 1;
+		if (antique) {
+			int[] carto = this.cartography(originU, originV, texel, preview);
+			for (int i = 0; i < size * size; i++) this.maskPixels[i] |= carto[i];
+			// The shader frays the frontier by reading max(22 blocks, 7 art pixels) diagonally around
+			// it, plus three art pixels of rings and the bilinear texel. The art pixel changes with
+			// zoom between rebuilds: allow for it doubling.
+			int reach = (int) Math.ceil(Math.max(40, 26 * art) / texel) + 2;
+			this.markReach(new int[] {reach, reach, reach, reach}, ALL_EXPLORED, NONE_EXPLORED, this.anyTerrain);
+		} else this.markReach(fogReach(texel, !surface), 0xFF00, 0xFF0000, null);
 		this.maskTexture.write(0, 0, 0, size, this.maskPixels);
-        maskNanos += System.nanoTime() - now;
+		maskNanos += System.nanoTime() - now;
 	}
 
 	/** Antique flags in green's low bits: every texel within reach explored, or none. */
@@ -682,7 +682,7 @@ public final class MapViewport {
 			int lineNotUnknown = 0;
 			for (int i = 0; i < size; i++) {
 				int pixel = this.maskPixels[j * size + i];
-                int known = pixel & 0xFF;
+				int known = pixel & 0xFF;
 				lineNotKnown += known == 0xFF && pixel >>> 24 == 255 ? 0 : 1;
 				lineNotUnknown += known == 0 && (terrain == null || !terrain[j * size + i]) ? 0 : 1;
 				notKnown[(j + 1) * row + i + 1] = notKnown[j * row + i + 1] + lineNotKnown;
@@ -876,6 +876,6 @@ public final class MapViewport {
 		this.coast.close();
 		this.maskInputs = null;
 		this.cartoInputs = null;
-        this.reveal.reset();
+		this.reveal.reset();
 	}
 }

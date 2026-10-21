@@ -74,15 +74,15 @@ final class ImmediateCanvas implements MapCanvas {
 		unbind(1);
 	}
 
-    @Override
-    public void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1) {
-        if (!LegacyShaders.fogReady()) return;
-        BufferBuilder mesh = this.begin(DefaultVertexFormat.POSITION_TEX_COLOR);
-        this.rect(mesh, x0, y0, x1, y1, u0, v0, u1, v1, 0x00ffffff);
-        ((LegacyTexture)terrain).bind(0, sampling);
-        ((LegacyTexture)paper).bind(1, Sampling.REPEAT_LINEAR);
-        LegacyShaders.drawFog(mesh.buildOrThrow()); unbind(0); unbind(1);
-    }
+	@Override
+	public void antiqueTile(MapTexture terrain, MapTexture paper, Sampling sampling, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1) {
+		if (!LegacyShaders.fogReady()) return;
+		BufferBuilder mesh = this.begin(DefaultVertexFormat.POSITION_TEX_COLOR);
+		this.rect(mesh, x0, y0, x1, y1, u0, v0, u1, v1, 0x00ffffff);
+		((LegacyTexture)terrain).bind(0, sampling);
+		((LegacyTexture)paper).bind(1, Sampling.REPEAT_LINEAR);
+		LegacyShaders.drawFog(mesh.buildOrThrow()); unbind(0); unbind(1);
+	}
 
 	// A rectangle of a game texture (a skin), sampled the way the game set that texture up.
 	private void gameRect(ResourceLocation texture, float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, int argb) {

@@ -86,26 +86,26 @@ public final class Settings {
 	public RenderStyle renderStyle = RenderStyle.OUTLINED;
 	/** The old outlines toggle, read once from an older config to pick {@link #renderStyle}; never written. */
 	private @org.jspecify.annotations.Nullable Boolean outlines;
-    /** Antique map draws its unknown ground in sepia inks; the colour variant tints biomes. */
-    public enum FogStyle { CLOUDS, ANCIENT_MAP, ANCIENT_MAP_COLOR }
+	/** Antique map draws its unknown ground in sepia inks; the colour variant tints biomes. */
+	public enum FogStyle { CLOUDS, ANCIENT_MAP, ANCIENT_MAP_COLOR }
 
-    /** Whether the fog is either antique map. */
-    public boolean antiqueFog() {
-        return this.fogStyle == FogStyle.ANCIENT_MAP || this.fogStyle == FogStyle.ANCIENT_MAP_COLOR;
-    }
-    public FogStyle fogStyle = FogStyle.CLOUDS;
-    public boolean seedPreview = true;
-    /**
-     * Whether either antique map tints the explored terrain too, a little desaturated and warmed
-     * toward its paper. Off, explored ground keeps the colours of the render style and only the
-     * unknown is drawn as an old map. Drawn when the map is composed, so it never redraws tiles.
-     */
-    public boolean antiqueTintsExplored = true;
+	/** Whether the fog is either antique map. */
+	public boolean antiqueFog() {
+		return this.fogStyle == FogStyle.ANCIENT_MAP || this.fogStyle == FogStyle.ANCIENT_MAP_COLOR;
+	}
+	public FogStyle fogStyle = FogStyle.CLOUDS;
+	public boolean seedPreview = true;
+	/**
+	 * Whether either antique map tints the explored terrain too, a little desaturated and warmed
+	 * toward its paper. Off, explored ground keeps the colours of the render style and only the
+	 * unknown is drawn as an old map. Drawn when the map is composed, so it never redraws tiles.
+	 */
+	public boolean antiqueTintsExplored = true;
 
-    /** Whether explored terrain is drawn with the antique map's tint: an antique fog with the tint on. */
-    public boolean antiqueTint() {
-        return this.antiqueFog() && this.antiqueTintsExplored;
-    }
+	/** Whether explored terrain is drawn with the antique map's tint: an antique fog with the tint on. */
+	public boolean antiqueTint() {
+		return this.antiqueFog() && this.antiqueTintsExplored;
+	}
 	/**
 	 * Pixel-art clouds drifting over the explored world map, casting shadows on the ground. Drawn
 	 * over the tiles as the map is composed, so they never redraw or change a tile.
@@ -124,7 +124,7 @@ public final class Settings {
 	 * them from the sun. The map itself is the same either way, one ray per pixel on the block grid.
 	 */
 	public Quality quality = Quality.FANCY;
-    public EnvironmentLighting.Mode lighting = EnvironmentLighting.Mode.WORLD;
+	public EnvironmentLighting.Mode lighting = EnvironmentLighting.Mode.WORLD;
 	public boolean chunkGrid = false;
 	public boolean slimeChunks = false;
 	public SpawnSpots spawnSpots = SpawnSpots.OFF;
@@ -162,8 +162,8 @@ public final class Settings {
 	public MapStyle style() {
 		MapStyle base = this.depthShading ? MapStyle.DEFAULT : MapStyle.FLAT;
 		MapStyle style = base.withName("Settings")
-            // Shading changes lighting, not the camera or the explored map footprint.
-            .withPitch(MapStyle.DEFAULT.pitchDegrees())
+			// Shading changes lighting, not the camera or the explored map footprint.
+			.withPitch(MapStyle.DEFAULT.pitchDegrees())
 			.withOutline(this.renderStyle == RenderStyle.OUTLINED ? MapStyle.DEFAULT.outline() : 0);
 		return switch (this.renderStyle) {
 			case PAINTED -> style.paint();
@@ -192,9 +192,9 @@ public final class Settings {
 		// The map session re-bakes only if the tiles would look different.
 		Projection.setDirection(this.mapDirection);
 		MapStyle next = this.style();
-        if (!next.equals(MapStyle.get())) MapStyle.set(next);
-        // MapSession coalesces quality and appearance changes into one refresh on the next tick.
-        TileBaker.setFast(this.quality == Quality.FAST);
+		if (!next.equals(MapStyle.get())) MapStyle.set(next);
+		// MapSession coalesces quality and appearance changes into one refresh on the next tick.
+		TileBaker.setFast(this.quality == Quality.FAST);
 		ServerRules.setAlwaysFogOfWar(this.alwaysFogOfWar);
 	}
 
@@ -218,8 +218,8 @@ public final class Settings {
 		}
 		if (settings.renderStyle == null) settings.renderStyle = RenderStyle.OUTLINED;
 		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.WORLD;
-        if (settings.fogStyle == null) settings.fogStyle = FogStyle.CLOUDS;
-        if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
+		if (settings.fogStyle == null) settings.fogStyle = FogStyle.CLOUDS;
+		if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;
 		}

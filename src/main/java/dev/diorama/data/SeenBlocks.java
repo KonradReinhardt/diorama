@@ -23,33 +23,33 @@ import net.minecraft.core.SectionPos;
  */
 public final class SeenBlocks {
 	private static final int MAGIC = 0x4F4D5331;
-    private static final ConcurrentHashMap<Path, java.lang.ref.WeakReference<SeenBlocks>> OPEN = new ConcurrentHashMap<>();
+	private static final ConcurrentHashMap<Path, java.lang.ref.WeakReference<SeenBlocks>> OPEN = new ConcurrentHashMap<>();
 
 	private final ConcurrentHashMap<Long, long[]> sections = new ConcurrentHashMap<>();
 	private volatile boolean changed;
-    private static final java.util.concurrent.ExecutorService SAVER = java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
-        Thread thread = new Thread(task, "diorama-visibility-saver"); thread.setDaemon(true); return thread;
-    });
-    private java.util.concurrent.CompletableFuture<Void> saving = java.util.concurrent.CompletableFuture.completedFuture(null);
+	private static final java.util.concurrent.ExecutorService SAVER = java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+		Thread thread = new Thread(task, "diorama-visibility-saver"); thread.setDaemon(true); return thread;
+	});
+	private java.util.concurrent.CompletableFuture<Void> saving = java.util.concurrent.CompletableFuture.completedFuture(null);
 
-    /** Coalesce periodic saves and leave compression and disk I/O off the client thread. */
-    public void saveAsync(Path file) {
-        if (!this.changed || !this.saving.isDone()) return;
-        this.saveFinalAsync(file);
-    }
+	/** Coalesce periodic saves and leave compression and disk I/O off the client thread. */
+	public void saveAsync(Path file) {
+		if (!this.changed || !this.saving.isDone()) return;
+		this.saveFinalAsync(file);
+	}
 
-    /** Chain a final snapshot after earlier writes, including when a world reopens immediately. */
-    public void saveFinalAsync(Path file) {
-        if (!this.changed) return;
-        SeenBlocks copy = this.snapshot();
-        this.changed = false;
-        this.saving = this.saving.handle((ignored, failure) -> null).thenRunAsync(() -> {
-            copy.save(file);
-            if (copy.changed) this.changed = true;
-        }, SAVER);
-    }
+	/** Chain a final snapshot after earlier writes, including when a world reopens immediately. */
+	public void saveFinalAsync(Path file) {
+		if (!this.changed) return;
+		SeenBlocks copy = this.snapshot();
+		this.changed = false;
+		this.saving = this.saving.handle((ignored, failure) -> null).thenRunAsync(() -> {
+			copy.save(file);
+			if (copy.changed) this.changed = true;
+		}, SAVER);
+	}
 
-    public java.util.concurrent.CompletableFuture<Void> saving() { return this.saving; }
+	public java.util.concurrent.CompletableFuture<Void> saving() { return this.saving; }
 
 
 	public boolean isSeen(int x, int y, int z) {
@@ -74,26 +74,26 @@ public final class SeenBlocks {
 		return true;
 	}
 
-    /** Client-thread snapshot, safe to save and read after the live session moves on. */
-    public SeenBlocks snapshot() {
-        SeenBlocks copy = new SeenBlocks();
-        this.sections.forEach((key, bits) -> copy.sections.put(key, bits.clone()));
-        copy.changed = true;
-        return copy;
-    }
+	/** Client-thread snapshot, safe to save and read after the live session moves on. */
+	public SeenBlocks snapshot() {
+		SeenBlocks copy = new SeenBlocks();
+		this.sections.forEach((key, bits) -> copy.sections.put(key, bits.clone()));
+		copy.changed = true;
+		return copy;
+	}
 
 	private static int index(int x, int y, int z) {
 		return ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
 	}
 
 	public static SeenBlocks load(Path file) {
-        file = file.toAbsolutePath().normalize();
-        OPEN.entrySet().removeIf(entry -> entry.getValue().get() == null);
-        var reference = OPEN.get(file);
-        SeenBlocks live = reference == null ? null : reference.get();
-        if (live != null) return live;
-        SeenBlocks seen = new SeenBlocks();
-        OPEN.put(file, new java.lang.ref.WeakReference<>(seen));
+		file = file.toAbsolutePath().normalize();
+		OPEN.entrySet().removeIf(entry -> entry.getValue().get() == null);
+		var reference = OPEN.get(file);
+		SeenBlocks live = reference == null ? null : reference.get();
+		if (live != null) return live;
+		SeenBlocks seen = new SeenBlocks();
+		OPEN.put(file, new java.lang.ref.WeakReference<>(seen));
 		if (!Files.isRegularFile(file)) {
 			return seen;
 		}

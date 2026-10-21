@@ -70,11 +70,11 @@ final class VoxelReader {
 	}
 
 	VoxelReader(ChunkSource source, byte @Nullable [] kinds) {
-        this(source, kinds, dev.diorama.Projection.direction());
-    }
+		this(source, kinds, dev.diorama.Projection.direction());
+	}
 
-    VoxelReader(ChunkSource source, byte @Nullable [] kinds, dev.diorama.MapDirection direction) {
-        this.direction = direction;
+	VoxelReader(ChunkSource source, byte @Nullable [] kinds, dev.diorama.MapDirection direction) {
+		this.direction = direction;
 		this.source = source;
 		this.kinds = kinds;
 		this.minY = source.minY();
@@ -88,9 +88,9 @@ final class VoxelReader {
 
 	/** Block state id at the position, {@link #AIR_ID} outside the world, or {@link #UNKNOWN}. */
 	int state(int x, int y, int z) {
-        int worldX = this.direction.worldBlockX(x, z);
-        z = this.direction.worldBlockZ(x, z);
-        x = worldX;
+		int worldX = this.direction.worldBlockX(x, z);
+		z = this.direction.worldBlockZ(x, z);
+		x = worldX;
 		if (y < this.minY || y >= this.maxY) {
 			return AIR_ID;
 		}
@@ -126,9 +126,9 @@ final class VoxelReader {
 	 * section, which keeps far more of the world in the CPU's caches than the ids do.
 	 */
 	int solid(int x, int y, int z) {
-        int worldX = this.direction.worldBlockX(x, z);
-        z = this.direction.worldBlockZ(x, z);
-        x = worldX;
+		int worldX = this.direction.worldBlockX(x, z);
+		z = this.direction.worldBlockZ(x, z);
+		x = worldX;
 		if (y < this.minY || y >= this.maxY) {
 			return 0;
 		}
@@ -169,10 +169,10 @@ final class VoxelReader {
 	 * this call.
 	 */
 	int solidTop(int chunkX0, int chunkZ0, int chunkX1, int chunkZ1) {
-        int ax = this.direction.worldBlockX(chunkX0, chunkZ0), az = this.direction.worldBlockZ(chunkX0, chunkZ0);
-        int bx = this.direction.worldBlockX(chunkX1, chunkZ1), bz = this.direction.worldBlockZ(chunkX1, chunkZ1);
-        chunkX0 = Math.min(ax, bx); chunkX1 = Math.max(ax, bx);
-        chunkZ0 = Math.min(az, bz); chunkZ1 = Math.max(az, bz);
+		int ax = this.direction.worldBlockX(chunkX0, chunkZ0), az = this.direction.worldBlockZ(chunkX0, chunkZ0);
+		int bx = this.direction.worldBlockX(chunkX1, chunkZ1), bz = this.direction.worldBlockZ(chunkX1, chunkZ1);
+		chunkX0 = Math.min(ax, bx); chunkX1 = Math.max(ax, bx);
+		chunkZ0 = Math.min(az, bz); chunkZ1 = Math.max(az, bz);
 		int top = Integer.MIN_VALUE;
 		for (int cx = chunkX0; cx <= chunkX1; cx++) {
 			for (int cz = chunkZ0; cz <= chunkZ1; cz++) {
@@ -196,9 +196,9 @@ final class VoxelReader {
 	}
 
 	int blockLight(int x, int y, int z) {
-        int worldX = this.direction.worldBlockX(x, z);
-        z = this.direction.worldBlockZ(x, z);
-        x = worldX;
+		int worldX = this.direction.worldBlockX(x, z);
+		z = this.direction.worldBlockZ(x, z);
+		x = worldX;
 		if (y < this.minY || y >= this.maxY) {
 			return 0;
 		}
@@ -210,9 +210,9 @@ final class VoxelReader {
 	}
 
 	int skyLight(int x, int y, int z) {
-        int worldX = this.direction.worldBlockX(x, z);
-        z = this.direction.worldBlockZ(x, z);
-        x = worldX;
+		int worldX = this.direction.worldBlockX(x, z);
+		z = this.direction.worldBlockZ(x, z);
+		x = worldX;
 		if (y < this.minY) {
 			return 0;
 		}
@@ -228,16 +228,16 @@ final class VoxelReader {
 
 	/** The chunk snapshot holding this column, for biome tints. */
 	@Nullable ChunkSnapshot snapshot(int x, int z) {
-        int worldX = this.direction.worldBlockX(x, z);
-        z = this.direction.worldBlockZ(x, z);
-        x = worldX;
+		int worldX = this.direction.worldBlockX(x, z);
+		z = this.direction.worldBlockZ(x, z);
+		x = worldX;
 		Decoded chunk = this.chunk(x >> 4, z >> 4);
 		return chunk == null ? null : chunk.snapshot;
 	}
 
-    boolean isSeen(int x, int y, int z) {
-        return this.source.isSeen(this.direction.worldBlockX(x, z), y, this.direction.worldBlockZ(x, z));
-    }
+	boolean isSeen(int x, int y, int z) {
+		return this.source.isSeen(this.direction.worldBlockX(x, z), y, this.direction.worldBlockZ(x, z));
+	}
 
 	private @Nullable Decoded chunk(int chunkX, int chunkZ) {
 		int slot = ((chunkX & TABLE_MASK) << TABLE_BITS) | (chunkZ & TABLE_MASK);

@@ -9,39 +9,39 @@ public final class FogTextures {
 	static final int NOISE_SIZE = 256;
 
 	private static @Nullable MapTexture noise;
-    private static @Nullable MapTexture parchment;
+	private static @Nullable MapTexture parchment;
 
-    static MapTexture parchment() {
-        if (parchment == null) {
-            int[] pixels = new int[256 * 256];
-            try (var input = net.minecraft.client.Minecraft.getInstance().getResourceManager()
-                .open(dev.diorama.Diorama.id("textures/map/parchment.png"));
-                var image = com.mojang.blaze3d.platform.NativeImage.read(input)) {
-                for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++) {
-                    //? if >=1.21.2 {
-                    int argb = image.getPixel(x, y);
-                    pixels[y * 256 + x] = (argb & 0xff00ff00) | (argb & 255) << 16 | (argb >> 16 & 255);
-                    //?} else {
-                    /*pixels[y * 256 + x] = image.getPixelRGBA(x, y);
-                    *///?}
-                }
-            } catch (Exception error) {
-                java.util.Arrays.fill(pixels, 0xffadd8ed);
-                dev.diorama.Diorama.LOGGER.warn("Couldn't load parchment texture", error);
-            }
-            // Alpha carries tileable noise for the antique style's organic edges, so the shader
-            // needs no extra texture and the pattern repeats exactly with the paper.
-            float[] grain = fractal(256, 10, 5L);
-            for (int i = 0; i < pixels.length; i++) pixels[i] = (pixels[i] & 0x00ffffff) | Math.round(grain[i] * 255) << 24;
-            parchment = MapTexture.create("diorama parchment", 256, 1);
-            parchment.write(0, 0, 0, 256, pixels);
-        }
-        return parchment;
-    }
+	static MapTexture parchment() {
+		if (parchment == null) {
+			int[] pixels = new int[256 * 256];
+			try (var input = net.minecraft.client.Minecraft.getInstance().getResourceManager()
+				.open(dev.diorama.Diorama.id("textures/map/parchment.png"));
+				var image = com.mojang.blaze3d.platform.NativeImage.read(input)) {
+				for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++) {
+					//? if >=1.21.2 {
+					int argb = image.getPixel(x, y);
+					pixels[y * 256 + x] = (argb & 0xff00ff00) | (argb & 255) << 16 | (argb >> 16 & 255);
+					//?} else {
+					/*pixels[y * 256 + x] = image.getPixelRGBA(x, y);
+					*///?}
+				}
+			} catch (Exception error) {
+				java.util.Arrays.fill(pixels, 0xffadd8ed);
+				dev.diorama.Diorama.LOGGER.warn("Couldn't load parchment texture", error);
+			}
+			// Alpha carries tileable noise for the antique style's organic edges, so the shader
+			// needs no extra texture and the pattern repeats exactly with the paper.
+			float[] grain = fractal(256, 10, 5L);
+			for (int i = 0; i < pixels.length; i++) pixels[i] = (pixels[i] & 0x00ffffff) | Math.round(grain[i] * 255) << 24;
+			parchment = MapTexture.create("diorama parchment", 256, 1);
+			parchment.write(0, 0, 0, 256, pixels);
+		}
+		return parchment;
+	}
 
-    public static void reload() {
-        if (parchment != null) { parchment.close(); parchment = null; }
-    }
+	public static void reload() {
+		if (parchment != null) { parchment.close(); parchment = null; }
+	}
 
 	private FogTextures() {
 	}

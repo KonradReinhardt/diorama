@@ -51,11 +51,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	private double centerU;
 	private double centerV;
 	private double zoom = 2.0;
-    private final SmoothZoom smoothZoom = new SmoothZoom(2);
-    private long lastZoomFrame;
+	private final SmoothZoom smoothZoom = new SmoothZoom(2);
+	private long lastZoomFrame;
 	private int layer;
 	private boolean following = true;
-    private MapDirection direction = Projection.direction();
+	private MapDirection direction = Projection.direction();
 	private List<Radar.Blip> blips = List.of();
 	private List<WaypointOverlay.Pin> pins = List.of();
 	private MapViewport.@Nullable View lastView;
@@ -97,7 +97,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 
 	@Override
 	protected void init() {
-        this.lastZoomFrame = System.nanoTime();
+		this.lastZoomFrame = System.nanoTime();
 		if (!this.opened) {
 			this.opened = true;
 			// Start on a whole pixel step, where the view rests, so the zoom in ends without a snap.
@@ -146,17 +146,17 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			return;
 		}
 		if (this.direction != Projection.direction()) {
-            this.direction = Projection.direction();
-            this.smoothZoom.reset(this.zoom);
-            this.following = true;
-        }
+			this.direction = Projection.direction();
+			this.smoothZoom.reset(this.zoom);
+			this.following = true;
+		}
 		long zoomNow = System.nanoTime();
-        var zoomStep = this.smoothZoom.advance((zoomNow - this.lastZoomFrame) / 1e9, this.centerU, this.centerV, this.minZoom());
-        double seconds = (zoomNow - this.lastZoomFrame) / 1e9;
-        this.lastZoomFrame = zoomNow;
-        this.zoom = zoomStep.zoom();
-        this.centerU = zoomStep.centerU();
-        this.centerV = zoomStep.centerV();
+		var zoomStep = this.smoothZoom.advance((zoomNow - this.lastZoomFrame) / 1e9, this.centerU, this.centerV, this.minZoom());
+		double seconds = (zoomNow - this.lastZoomFrame) / 1e9;
+		this.lastZoomFrame = zoomNow;
+		this.zoom = zoomStep.zoom();
+		this.centerU = zoomStep.centerU();
+		this.centerV = zoomStep.centerV();
 		if (this.panTarget != null) {
 			double t = 1 - Math.exp(-Math.max(0, Math.min(0.1, seconds)) / 0.08);
 			this.centerU += (this.panTarget[0] - this.centerU) * t;
@@ -591,7 +591,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			this.dragged = true;
 		}
 		if (button == InputConstants.MOUSE_BUTTON_LEFT && this.dragged) {
-            this.smoothZoom.reset(this.zoom);
+			this.smoothZoom.reset(this.zoom);
 			this.opening.cancel();
 			this.panTarget = null;
 			this.centerU -= dx / this.zoom;
@@ -609,10 +609,10 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		this.closeMenu();
 		this.opening.cancel();
-        // GUI pixels per map unit at which a map pixel covers one screen pixel: the pixel-perfect steps start there.
-        double pixelZoom = Projection.PIXELS_PER_UNIT / this.minecraft.getWindow().getGuiScale();
-        this.smoothZoom.scroll(scrollY, x - this.width / 2.0, y - this.height / 2.0, this.minZoom(), MAX_ZOOM, pixelZoom);
-        if (this.smoothZoom.target() != this.zoom) this.following = false;
+		// GUI pixels per map unit at which a map pixel covers one screen pixel: the pixel-perfect steps start there.
+		double pixelZoom = Projection.PIXELS_PER_UNIT / this.minecraft.getWindow().getGuiScale();
+		this.smoothZoom.scroll(scrollY, x - this.width / 2.0, y - this.height / 2.0, this.minZoom(), MAX_ZOOM, pixelZoom);
+		if (this.smoothZoom.target() != this.zoom) this.following = false;
 		return true;
 	}
 
@@ -664,7 +664,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 				if (this.getFocused() instanceof AbstractWidget widget && widget.isFocused()) {
 					return false;
 				}
-                this.smoothZoom.reset(this.zoom);
+				this.smoothZoom.reset(this.zoom);
 				this.panTarget = null;
 				this.following = true;
 				return true;
@@ -828,7 +828,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		this.centerU = u;
 		this.centerV = v;
 		this.zoom = zoom;
-        this.smoothZoom.reset(zoom);
+		this.smoothZoom.reset(zoom);
 		this.layer = layer;
 		this.following = false;
 	}

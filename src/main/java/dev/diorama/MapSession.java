@@ -37,7 +37,7 @@ public final class MapSession {
 	private static final long LOAD_DELAY_MS = 750;
 	private static final long CHANGE_DELAY_MS = 250;
 	private static final int SNAPSHOTS_PER_TICK = 24;
-    private static final long SNAPSHOT_BUDGET_NANOS = 2_000_000;
+	private static final long SNAPSHOT_BUDGET_NANOS = 2_000_000;
 
 	private static @Nullable MapSession current;
 	private static final boolean DEBUG_CHANGES = Diorama.DEBUG;
@@ -46,17 +46,17 @@ public final class MapSession {
 
 	private final ClientLevel level;
 	private final MapLevel map;
-    private @Nullable SeedPreview seedPreview;
-    private boolean previewAttempted;
-    private final @Nullable Path previewFolder;
+	private @Nullable SeedPreview seedPreview;
+	private boolean previewAttempted;
+	private final @Nullable Path previewFolder;
 
-    public @Nullable SeedPreview seedPreview() {
-        if (!previewAttempted) {
-            previewAttempted = true;
-            seedPreview = dev.diorama.preview.SeedBiomeSource.open(level, previewFolder);
-        }
-        return seedPreview;
-    }
+	public @Nullable SeedPreview seedPreview() {
+		if (!previewAttempted) {
+			previewAttempted = true;
+			seedPreview = dev.diorama.preview.SeedBiomeSource.open(level, previewFolder);
+		}
+		return seedPreview;
+	}
 	private final Map<Long, Pending> pending = new LinkedHashMap<>();
 	private boolean underground;
 	private MapStyle style = MapStyle.get();
@@ -64,14 +64,14 @@ public final class MapSession {
 
 	private MapSession(ClientLevel level, @Nullable String key) {
 		this.level = level;
-        this.previewFolder = mapFolder(level, key);
+		this.previewFolder = mapFolder(level, key);
 		// The Nether's roof: its sky view looks down from just under it.
 		int roof = level.dimensionType().hasCeiling() ? level.getMinY() + level.dimensionType().logicalHeight() : MapLevel.NO_ROOF;
 		this.map = new MapLevel(level.getMinY(), level.getMaxY() + 1, roof, mapFolder(level, key),
-            EnvironmentLighting.cycles(false, level.dimensionType().hasCeiling(), level.dimensionType().hasSkyLight(), level.dimensionType().hasFixedTime()));
-        // In singleplayer, tiles away from loaded chunks are redrawn from the world's saved chunks
-        // when the map's look changes, so no part of the map keeps an old look.
-        if (key != null) this.map.setSavedTerrain(dev.diorama.data.SavedChunks.open(level));
+			EnvironmentLighting.cycles(false, level.dimensionType().hasCeiling(), level.dimensionType().hasSkyLight(), level.dimensionType().hasFixedTime()));
+		// In singleplayer, tiles away from loaded chunks are redrawn from the world's saved chunks
+		// when the map's look changes, so no part of the map keeps an old look.
+		if (key != null) this.map.setSavedTerrain(dev.diorama.data.SavedChunks.open(level));
 	}
 
 	/** {@code .minecraft/diorama/<world>/<dimension>}, or null outside a world. */
@@ -101,12 +101,12 @@ public final class MapSession {
 	/** Saves and ends the session. For closing the game; leaving a world is noticed by {@link #tick}. */
 	public static void close() {
 		if (current != null) {
-            RegionReveal.cancel();
-            if (current.seedPreview != null) current.seedPreview.close();
+			RegionReveal.cancel();
+			if (current.seedPreview != null) current.seedPreview.close();
 			current.map.close();
 			current = null;
 		}
-        MapLevel.awaitSaves();
+		MapLevel.awaitSaves();
 	}
 
 	/** Keeps the session in step with the client's level. Call every client tick. */
@@ -127,10 +127,10 @@ public final class MapSession {
 				session.map.colorsChanged();
 			}
 		} else if (BlockLooks.isStale()) {
-            dev.diorama.render.FogTextures.reload();
-            dev.diorama.render.Markers.reload();
-            dev.diorama.render.BannerAtlas.reload();
-            dev.diorama.render.PaperFrame.reload();
+			dev.diorama.render.FogTextures.reload();
+			dev.diorama.render.Markers.reload();
+			dev.diorama.render.BannerAtlas.reload();
+			dev.diorama.render.PaperFrame.reload();
 			BlockLooks.build();
 			session.map.colorsChanged();
 			// Snapshots hold biome tints from the old colormaps. Retake every loaded chunk;
@@ -146,8 +146,8 @@ public final class MapSession {
 	 */
 	private static @Nullable MapSession forLevel(@Nullable ClientLevel level) {
 		if (current != null && current.level != level) {
-            RegionReveal.cancel();
-            if (current.seedPreview != null) current.seedPreview.close();
+			RegionReveal.cancel();
+			if (current.seedPreview != null) current.seedPreview.close();
 			current.map.close();
 			current = null;
 		}
@@ -233,7 +233,7 @@ public final class MapSession {
 		}
 	}
 
-    /** Light-engine and packet updates refresh both surface endpoints as well as cave lighting. */
+	/** Light-engine and packet updates refresh both surface endpoints as well as cave lighting. */
 	public static void lightSectionChanged(ClientChunkCache source, SectionPos section) {
 		if (current != null && current.level.getChunkSource() == source) {
 			int x0 = section.minBlockX();
@@ -307,10 +307,10 @@ public final class MapSession {
 	}
 
 	private int ticks;
-    private long snapshotCount;
-    private final long[] snapshotTimes = new long[1024];
-    public long snapshotCount() { return this.snapshotCount; }
-    public long[] snapshotTimes() { return java.util.Arrays.copyOf(this.snapshotTimes, (int) Math.min(this.snapshotCount, this.snapshotTimes.length)); }
+	private long snapshotCount;
+	private final long[] snapshotTimes = new long[1024];
+	public long snapshotCount() { return this.snapshotCount; }
+	public long[] snapshotTimes() { return java.util.Arrays.copyOf(this.snapshotTimes, (int) Math.min(this.snapshotCount, this.snapshotTimes.length)); }
 
 	/** Queues any loaded chunk the map hasn't seen, in case its load event was missed. */
 	private void sweepLoadedChunks(LocalPlayer player) {
@@ -350,9 +350,9 @@ public final class MapSession {
 	}
 
 	private void tickSession(Minecraft mc) {
-        if (this.seedPreview != null && (!Settings.get().antiqueFog() || !Settings.get().seedPreview
-            || (!Settings.get().minimap && !(mc.gui.screen() instanceof MapScreen))))
-            this.seedPreview.request(null);
+		if (this.seedPreview != null && (!Settings.get().antiqueFog() || !Settings.get().seedPreview
+			|| (!Settings.get().minimap && !(mc.gui.screen() instanceof MapScreen))))
+			this.seedPreview.request(null);
 		LocalPlayer player = mc.player;
 		if (player != null && this.ticks++ % 40 == 0) {
 			this.sweepLoadedChunks(player);
@@ -377,9 +377,9 @@ public final class MapSession {
 			int cz = (int) key;
 			if (this.level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false) instanceof LevelChunk chunk) {
 				boolean known = this.map.chunk(cx, cz) != null;
-                long start = System.nanoTime();
-                ChunkSnapshot snapshot = ChunkSnapshot.take(chunk, this.level);
-                this.snapshotTimes[(int) (this.snapshotCount++ % this.snapshotTimes.length)] = System.nanoTime() - start;
+				long start = System.nanoTime();
+				ChunkSnapshot snapshot = ChunkSnapshot.take(chunk, this.level);
+				this.snapshotTimes[(int) (this.snapshotCount++ % this.snapshotTimes.length)] = System.nanoTime() - start;
 				this.map.put(snapshot, known ? p.box : null, playerChunkX, playerChunkZ);
 				budget.completed();
 			}

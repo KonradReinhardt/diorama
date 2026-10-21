@@ -16,7 +16,7 @@
 	"icon": "assets/diorama/icon.png",
 	"environment": "client",
 	"entrypoints": {
-        "modmenu": ["dev.diorama.fabric.DioramaModMenu"],
+	    "modmenu": ["dev.diorama.fabric.DioramaModMenu"],
 		"client": [
 			"dev.diorama.fabric.DioramaFabric"
 		]
@@ -27,7 +27,7 @@
 		"java": ">=${java}",
 		"fabric-api": "*"
 	},
-    "suggests": { "modmenu": "*" },
+	"suggests": { "modmenu": "*" },
 	"mixins": [
 		"diorama.mixins.json"
 	]

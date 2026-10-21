@@ -10,27 +10,27 @@ import org.jspecify.annotations.Nullable;
 /** A baked tile on the GPU, plus the coverage the fog reads. Render thread only. */
 public final class MapTile {
 	private @Nullable MapTexture texture;
-    private @Nullable MapTexture nightTexture;
-    public @Nullable MapTexture nightTexture() { return this.nightTexture; }
-    public long gpuBytes() {
-        long plane = TextureMemory.bytes(Projection.TILE_PIXELS, Mipmaps.LEVELS);
-        return (texture == null ? 0 : plane) + (nightTexture == null ? 0 : plane)
-            + (overlay == null ? 0 : TextureMemory.bytes(Projection.TILE_PIXELS, 1));
-    }
+	private @Nullable MapTexture nightTexture;
+	public @Nullable MapTexture nightTexture() { return this.nightTexture; }
+	public long gpuBytes() {
+		long plane = TextureMemory.bytes(Projection.TILE_PIXELS, Mipmaps.LEVELS);
+		return (texture == null ? 0 : plane) + (nightTexture == null ? 0 : plane)
+			+ (overlay == null ? 0 : TextureMemory.bytes(Projection.TILE_PIXELS, 1));
+	}
 
-    /**
-     * Whether night planes go to the GPU. The map always bakes and saves both lighting endpoints,
-     * but drawn only by day (the Day lighting setting, or a backend without night) the night one
-     * would double every tile's memory for nothing. Set by {@link MapLevel#update}, which reloads
-     * the tiles when it changes.
-     */
-    static volatile boolean nightPlanes = true;
+	/**
+	 * Whether night planes go to the GPU. The map always bakes and saves both lighting endpoints,
+	 * but drawn only by day (the Day lighting setting, or a backend without night) the night one
+	 * would double every tile's memory for nothing. Set by {@link MapLevel#update}, which reloads
+	 * the tiles when it changes.
+	 */
+	static volatile boolean nightPlanes = true;
 
-    /** What a tile with terrain takes on the GPU at most: its planes, and an overlay if one is drawn. */
-    public static long bytesEach(boolean overlay) {
-        long plane = TextureMemory.bytes(Projection.TILE_PIXELS, Mipmaps.LEVELS);
-        return plane * (nightPlanes ? 2 : 1) + (overlay ? TextureMemory.bytes(Projection.TILE_PIXELS, 1) : 0);
-    }
+	/** What a tile with terrain takes on the GPU at most: its planes, and an overlay if one is drawn. */
+	public static long bytesEach(boolean overlay) {
+		long plane = TextureMemory.bytes(Projection.TILE_PIXELS, Mipmaps.LEVELS);
+		return plane * (nightPlanes ? 2 : 1) + (overlay ? TextureMemory.bytes(Projection.TILE_PIXELS, 1) : 0);
+	}
 	private byte @Nullable [] coverage;
 	/** {@link Overlays} bits per pixel from the bakes that recorded them, or null. */
 	private byte @Nullable [] info;
@@ -47,10 +47,10 @@ public final class MapTile {
 	private long @Nullable [] surfaceShore;
 	long lastDrawn;
 
-    private long uploadCount;
-    public long uploadCount() { return uploadCount; }
+	private long uploadCount;
+	public long uploadCount() { return uploadCount; }
 	void upload(TileImage image) {
-        uploadCount++;
+		uploadCount++;
 		if (image.isFull()) {
 			this.coverage = image.coverage();
 			this.info = image.info();
@@ -61,7 +61,7 @@ public final class MapTile {
 			if (dev.diorama.bake.Surface.anyKnown(image.surface())) {
 				this.patchSurface(image.surface(), 0, 0, Projection.TILE_PIXELS);
 			}
-            if (this.info == null && this.overlay != null) { this.overlay.close(); this.overlay = null; }
+			if (this.info == null && this.overlay != null) { this.overlay.close(); this.overlay = null; }
 			this.overlayShown = -1;
 			this.empty = isEmpty(this.coverage);
 			if (this.empty) {
@@ -69,12 +69,12 @@ public final class MapTile {
 				return;
 			}
 			this.ensureTexture(image);
-            if (this.nightTexture != null && (image.nightMips() == null || !nightPlanes)) { this.nightTexture.close(); this.nightTexture = null; }
-            if (image.nightMips() != null && nightPlanes && this.nightTexture == null) this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
+			if (this.nightTexture != null && (image.nightMips() == null || !nightPlanes)) { this.nightTexture.close(); this.nightTexture = null; }
+			if (image.nightMips() != null && nightPlanes && this.nightTexture == null) this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
 			int size = Projection.TILE_PIXELS;
 			for (int level = 0; level < Mipmaps.LEVELS; level++) {
 				this.texture.write(level, 0, 0, size >> level, image.mips()[level]);
-                if (this.nightTexture != null) this.nightTexture.write(level, 0, 0, size >> level, image.nightMips()[level]);
+				if (this.nightTexture != null) this.nightTexture.write(level, 0, 0, size >> level, image.nightMips()[level]);
 			}
 			return;
 		}
@@ -103,18 +103,18 @@ public final class MapTile {
 				this.texture.write(level, 0, 0, size >> level, new int[(size >> level) * (size >> level)]);
 			}
 		}
-        if (this.nightTexture == null && nightPlanes && image.patches().stream().anyMatch(p -> p.nightMips() != null)) {
-            this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
-            for (int level = 0; level < Mipmaps.LEVELS; level++) {
-                int edge = Projection.TILE_PIXELS >> level;
-                this.nightTexture.write(level, 0, 0, edge, new int[edge * edge]);
-            }
-        }
+		if (this.nightTexture == null && nightPlanes && image.patches().stream().anyMatch(p -> p.nightMips() != null)) {
+			this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
+			for (int level = 0; level < Mipmaps.LEVELS; level++) {
+				int edge = Projection.TILE_PIXELS >> level;
+				this.nightTexture.write(level, 0, 0, edge, new int[edge * edge]);
+			}
+		}
 		for (TileImage.Patch patch : image.patches()) {
 			for (int level = 0; level < Mipmaps.LEVELS; level++) {
 				int edge = TileImage.BLOCK >> level;
 				this.texture.write(level, patch.blockX() * edge, patch.blockY() * edge, edge, patch.mips()[level]);
-                if (this.nightTexture != null) this.nightTexture.write(level, patch.blockX() * edge, patch.blockY() * edge, edge, patch.nightMips() == null ? new int[edge * edge] : patch.nightMips()[level]);
+				if (this.nightTexture != null) this.nightTexture.write(level, patch.blockX() * edge, patch.blockY() * edge, edge, patch.nightMips() == null ? new int[edge * edge] : patch.nightMips()[level]);
 			}
 			if (patch.info() != null) {
 				this.patchInfo(patch);
@@ -319,7 +319,7 @@ public final class MapTile {
 	}
 
 	void close() {
-        if (this.nightTexture != null) { this.nightTexture.close(); this.nightTexture = null; }
+		if (this.nightTexture != null) { this.nightTexture.close(); this.nightTexture = null; }
 		if (this.overlay != null) {
 			this.overlay.close();
 			this.overlay = null;

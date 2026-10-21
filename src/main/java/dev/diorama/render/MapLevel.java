@@ -96,27 +96,27 @@ public final class MapLevel implements ChunkSource {
 	private final Set<TileKey> inFlight = new HashSet<>();
 	private final BakeScheduler scheduler = new BakeScheduler(BAKERS);
 	private final TileFreshness freshness = new TileFreshness();
-    private final Map<TileKey, TileFreshness.Version> jobVersions = new HashMap<>();
-    private long submittedJobs;
-    private @Nullable AppearanceRefresh appearanceRefresh;
-    /** Detailed tiles the views drew at the last update a frame came before; see {@link #swapStaged}. */
-    private Set<TileKey> onScreen = Set.of();
-    private long appearanceVersion;
-    public long appearanceVersion() { return appearanceVersion; }
-    public boolean refreshingAppearance() { return appearanceRefresh != null; }
-    public long submittedJobs() { return this.submittedJobs; }
-    public int residentTiles() { return this.tiles.size(); }
-    public long gpuBytes() { return this.tiles.values().stream().mapToLong(MapTile::gpuBytes).sum(); }
-    public long tileWrites() { return this.store == null ? 0 : this.store.writes(); }
-    public long writtenBytes() { return this.store == null ? 0 : this.store.writtenBytes(); }
-    public int queuedTiles() {
-        Set<TileKey> pending = new HashSet<>(this.dirty.keySet());
-        pending.addAll(this.unsaved.keySet());
-        for (TileKey key : this.wanted.keySet()) if (!this.tiles.containsKey(key)) pending.add(key);
-        pending.removeAll(this.inFlight);
-        return pending.size();
-    }
-    private final RetryBackoff retries = new RetryBackoff();
+	private final Map<TileKey, TileFreshness.Version> jobVersions = new HashMap<>();
+	private long submittedJobs;
+	private @Nullable AppearanceRefresh appearanceRefresh;
+	/** Detailed tiles the views drew at the last update a frame came before; see {@link #swapStaged}. */
+	private Set<TileKey> onScreen = Set.of();
+	private long appearanceVersion;
+	public long appearanceVersion() { return appearanceVersion; }
+	public boolean refreshingAppearance() { return appearanceRefresh != null; }
+	public long submittedJobs() { return this.submittedJobs; }
+	public int residentTiles() { return this.tiles.size(); }
+	public long gpuBytes() { return this.tiles.values().stream().mapToLong(MapTile::gpuBytes).sum(); }
+	public long tileWrites() { return this.store == null ? 0 : this.store.writes(); }
+	public long writtenBytes() { return this.store == null ? 0 : this.store.writtenBytes(); }
+	public int queuedTiles() {
+		Set<TileKey> pending = new HashSet<>(this.dirty.keySet());
+		pending.addAll(this.unsaved.keySet());
+		for (TileKey key : this.wanted.keySet()) if (!this.tiles.containsKey(key)) pending.add(key);
+		pending.removeAll(this.inFlight);
+		return pending.size();
+	}
+	private final RetryBackoff retries = new RetryBackoff();
 	/** Overview tiles the writer rebuilt; reloaded when next wanted. */
 	private final ConcurrentLinkedQueue<TileKey> overviewChanged = new ConcurrentLinkedQueue<>();
 	/** Overview tiles with nothing saved under them; not asked for again until that changes. */
@@ -144,13 +144,13 @@ public final class MapLevel implements ChunkSource {
 	private int playerChunkZ;
 	private long frame;
 	private volatile boolean closed;
-    private dev.diorama.bake.BakeContext bakeContext = dev.diorama.bake.BakeContext.capture();
-    private static final java.util.concurrent.ConcurrentLinkedQueue<java.util.concurrent.CompletableFuture<Void>> SAVES = new java.util.concurrent.ConcurrentLinkedQueue<>();
-    private static final java.util.concurrent.ExecutorService SAVER = Executors.newSingleThreadExecutor(task -> {
-        Thread thread = new Thread(task, "diorama-session-saver");
-        thread.setDaemon(true);
-        return thread;
-    });
+	private dev.diorama.bake.BakeContext bakeContext = dev.diorama.bake.BakeContext.capture();
+	private static final java.util.concurrent.ConcurrentLinkedQueue<java.util.concurrent.CompletableFuture<Void>> SAVES = new java.util.concurrent.ConcurrentLinkedQueue<>();
+	private static final java.util.concurrent.ExecutorService SAVER = Executors.newSingleThreadExecutor(task -> {
+		Thread thread = new Thread(task, "diorama-session-saver");
+		thread.setDaemon(true);
+		return thread;
+	});
 
 	/**
 	 * The chunks the game saved, in singleplayer: tiles whose chunks aren't loaded are redrawn from
@@ -205,18 +205,18 @@ public final class MapLevel implements ChunkSource {
 
 	/** See {@link ChunkSource#roof()}. */
 	private final int roof;
-    private final boolean nightLighting;
-    @Override public boolean nightLighting() { return this.nightLighting; }
+	private final boolean nightLighting;
+	@Override public boolean nightLighting() { return this.nightLighting; }
 
 	public MapLevel(int minY, int maxY, int roof, @Nullable Path folder) {
-        this(minY, maxY, roof, folder, true);
-    }
+		this(minY, maxY, roof, folder, true);
+	}
 
-    public MapLevel(int minY, int maxY, int roof, @Nullable Path folder, boolean nightLighting) {
+	public MapLevel(int minY, int maxY, int roof, @Nullable Path folder, boolean nightLighting) {
 		this.minY = minY;
 		this.maxY = maxY;
 		this.roof = roof;
-        this.nightLighting = nightLighting;
+		this.nightLighting = nightLighting;
 		this.folder = folder;
 		this.store = this.openStore();
 		this.seen = folder == null ? new SeenBlocks() : SeenBlocks.load(folder.resolve("seen.bin"));
@@ -290,8 +290,8 @@ public final class MapLevel implements ChunkSource {
 		if (overlays == null) {
 			return;
 		}
-        // New overlay data is published as a complete revision too.
-        this.colorsChanged();
+		// New overlay data is published as a complete revision too.
+		this.colorsChanged();
 	}
 
 	/** Whether spawn spots are recorded, so light changes have to refresh the surface. */
@@ -341,13 +341,13 @@ public final class MapLevel implements ChunkSource {
 		return Math.round(dev.diorama.MapStyle.get().pitchDegrees());
 	}
 
-    private Path stampsFile() {
-        return this.folder.resolve(this.storeName).resolve("appearance.bin");
-    }
+	private Path stampsFile() {
+		return this.folder.resolve(this.storeName).resolve("appearance.bin");
+	}
 
-    private static String directionSuffix() {
-        return Projection.direction() == dev.diorama.MapDirection.NORTH ? "" : "-" + Projection.direction().name().toLowerCase(java.util.Locale.ROOT);
-    }
+	private static String directionSuffix() {
+		return Projection.direction() == dev.diorama.MapDirection.NORTH ? "" : "-" + Projection.direction().name().toLowerCase(java.util.Locale.ROOT);
+	}
 
 	/** Moves to another folder if the kind of view changed, and queues everything loaded to be saved there. */
 	private void switchStoreIfNeeded() {
@@ -367,42 +367,42 @@ public final class MapLevel implements ChunkSource {
 	}
 
 	/** Refresh pixels in place; only a different camera requires throwing away their geometry. */
-    public void colorsChanged() {
-        this.onDisk.clear();
-        var next = dev.diorama.bake.BakeContext.capture();
-        boolean reproject = !this.bakeContext.sameProjection(next);
-        this.surfaceGeneration++;
-        this.caveGeneration++;
-        this.appearanceRefresh = null;
-        // Projection changes switch stores below, which bring their own stamps.
-        if (this.stamps != null && !reproject) this.stamps.reset(next.appearance());
-        this.restartStaleScan();
-        if (reproject) {
-            this.dropTiles(false);
-            this.bakeContext = next;
-            this.switchStoreIfNeeded();
-        } else {
-            // Keep both texture and exploration coverage until their replacements are uploaded.
-            // Pending old jobs must not erase these tiles when their generations are rejected.
-            Set<TileKey> refresh = new HashSet<>(this.tiles.keySet());
-            refresh.addAll(this.inFlight);
-            refresh.removeAll(this.backgroundBakes);
-            this.appearanceRefresh = new AppearanceRefresh(refresh);
-            this.requestAppearanceSources(this.appearanceRefresh);
-            int blocks = (Projection.TILE_PIXELS / TileImage.BLOCK) * (Projection.TILE_PIXELS / TileImage.BLOCK);
-            for (TileKey key : refresh) {
-                this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, blocks);
-            }
-        }
-        this.bakeContext = next;
-    }
+	public void colorsChanged() {
+		this.onDisk.clear();
+		var next = dev.diorama.bake.BakeContext.capture();
+		boolean reproject = !this.bakeContext.sameProjection(next);
+		this.surfaceGeneration++;
+		this.caveGeneration++;
+		this.appearanceRefresh = null;
+		// Projection changes switch stores below, which bring their own stamps.
+		if (this.stamps != null && !reproject) this.stamps.reset(next.appearance());
+		this.restartStaleScan();
+		if (reproject) {
+			this.dropTiles(false);
+			this.bakeContext = next;
+			this.switchStoreIfNeeded();
+		} else {
+			// Keep both texture and exploration coverage until their replacements are uploaded.
+			// Pending old jobs must not erase these tiles when their generations are rejected.
+			Set<TileKey> refresh = new HashSet<>(this.tiles.keySet());
+			refresh.addAll(this.inFlight);
+			refresh.removeAll(this.backgroundBakes);
+			this.appearanceRefresh = new AppearanceRefresh(refresh);
+			this.requestAppearanceSources(this.appearanceRefresh);
+			int blocks = (Projection.TILE_PIXELS / TileImage.BLOCK) * (Projection.TILE_PIXELS / TileImage.BLOCK);
+			for (TileKey key : refresh) {
+				this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, blocks);
+			}
+		}
+		this.bakeContext = next;
+	}
 
 	private void dropTiles(boolean cavesOnly) {
 		Iterator<Map.Entry<TileKey, MapTile>> it = this.tiles.entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry<TileKey, MapTile> e = it.next();
 			if (!cavesOnly || e.getKey().isCave() || this.roofless()) {
-                if (this.appearanceRefresh != null) this.appearanceRefresh.forget(e.getKey());
+				if (this.appearanceRefresh != null) this.appearanceRefresh.forget(e.getKey());
 				e.getValue().close();
 				it.remove();
 				this.dirty.remove(e.getKey());
@@ -449,8 +449,8 @@ public final class MapLevel implements ChunkSource {
 	 *     the whole chunk is new
 	 */
 	public void put(ChunkSnapshot snapshot, @Nullable ChangeBounds changed, int playerChunkX, int playerChunkZ) {
-        ChunkSnapshot previous = this.chunks.put(snapshot.key(), snapshot);
-        if (previous != null && changed != null && changed.flags() == CHANGED_SURFACE_LIGHT && snapshot.sameLighting(previous)) return;
+		ChunkSnapshot previous = this.chunks.put(snapshot.key(), snapshot);
+		if (previous != null && changed != null && changed.flags() == CHANGED_SURFACE_LIGHT && snapshot.sameLighting(previous)) return;
 		if (snapshot.maxY != Integer.MIN_VALUE && snapshot.maxY + 1 > this.topY) {
 			this.topY = Math.min(this.maxY, snapshot.maxY + 1);
 		}
@@ -464,7 +464,7 @@ public final class MapLevel implements ChunkSource {
 			// Both surface lighting endpoints are saved, including light-only changes.
 			boolean terrain = (changed.flags() & (CHANGED_SURFACE | CHANGED_SURFACE_LIGHT)) != 0;
 			boolean surface = terrain || (changed.flags() & CHANGED_SURFACE_LIGHT) != 0;
-            this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain, (changed.flags() & (CHANGED_SURFACE | CHANGED_BLOCKS)) == 0);
+			this.invalidate(changed.minX(), changed.minY(), changed.minY(), changed.minZ(), changed.maxX(), changed.maxY(), changed.maxZ(), surface, terrain, (changed.flags() & (CHANGED_SURFACE | CHANGED_BLOCKS)) == 0);
 		}
 		this.playerChunkX = playerChunkX;
 		this.playerChunkZ = playerChunkZ;
@@ -477,8 +477,8 @@ public final class MapLevel implements ChunkSource {
 	public static final int CHANGED_SURFACE = 1;
 	/** Change flag: block or sky light changed, including the surface night endpoint. */
 	public static final int CHANGED_SURFACE_LIGHT = 2;
-    /** A block changed even when hidden from the sky; prevents deduplicating a mixed cave edit. */
-    public static final int CHANGED_BLOCKS = 4;
+	/** A block changed even when hidden from the sky; prevents deduplicating a mixed cave edit. */
+	public static final int CHANGED_BLOCKS = 4;
 
 	/** Light from a changed block reaches this far, which matters for cave slices. */
 	private static final int LIGHT_REACH = 15;
@@ -489,17 +489,17 @@ public final class MapLevel implements ChunkSource {
 	 * false when the change only reveals cave visibility and has no surface data to save.
 	 */
 	private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain) {
-        this.invalidate(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, terrain, false);
-    }
+		this.invalidate(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, terrain, false);
+	}
 
-    private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain, boolean lightOnly) {
-        Set<Integer> layers = new HashSet<>();
-        for (TileKey key : this.tiles.keySet()) layers.add(key.layer());
-        for (TileKey key : this.inFlight) layers.add(key.layer());
-        if (this.store != null) layers.add(TileKey.SURFACE);
-        long now = System.currentTimeMillis();
-        for (var region : TileInvalidation.regions(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, this.roofless(), this.roof, layers, Projection.direction(), lightOnly))
-            this.markDirty(region.layer(), region.minU(), region.minV(), region.maxU(), region.maxV(), now, terrain, lightOnly);
+	private void invalidate(int x0, int y0, int caveY0, int z0, int x1, int y1, int z1, boolean visibleFromSky, boolean terrain, boolean lightOnly) {
+		Set<Integer> layers = new HashSet<>();
+		for (TileKey key : this.tiles.keySet()) layers.add(key.layer());
+		for (TileKey key : this.inFlight) layers.add(key.layer());
+		if (this.store != null) layers.add(TileKey.SURFACE);
+		long now = System.currentTimeMillis();
+		for (var region : TileInvalidation.regions(x0, y0, caveY0, z0, x1, y1, z1, visibleFromSky, this.roofless(), this.roof, layers, Projection.direction(), lightOnly))
+			this.markDirty(region.layer(), region.minU(), region.minV(), region.maxU(), region.maxV(), now, terrain, lightOnly);
 	}
 
 	private void markDirty(int layer, double u0, double v0, double u1, double v1, long now, boolean terrain, boolean lightOnly) {
@@ -517,8 +517,8 @@ public final class MapLevel implements ChunkSource {
 				if (layer == TileKey.SURFACE && this.store != null && terrain) {
 					this.unsaved.put(key, now);
 				}
-                boolean refreshSource = this.appearanceRefresh != null && this.appearanceRefresh.tracks(key);
-                if (refreshSource) this.appearanceRefresh.pending.add(key);
+				boolean refreshSource = this.appearanceRefresh != null && this.appearanceRefresh.tracks(key);
+				if (refreshSource) this.appearanceRefresh.pending.add(key);
 				if (!this.tiles.containsKey(key) && !this.inFlight.contains(key) && !refreshSource) {
 					continue;
 				}
@@ -527,7 +527,7 @@ public final class MapLevel implements ChunkSource {
 				int by0 = Math.max(0, (int) Math.floor((v0 - tv * units) / blockUnits));
 				int by1 = Math.min(perRow - 1, (int) Math.floor((v1 - tv * units) / blockUnits));
 				this.freshness.changed(key, lightOnly);
-                Dirty d = this.dirty.computeIfAbsent(key, k -> new Dirty(now));
+				Dirty d = this.dirty.computeIfAbsent(key, k -> new Dirty(now));
 				d.last = now;
 				for (int by = by0; by <= by1; by++) {
 					d.blocks.set(by * perRow + bx0, by * perRow + bx1 + 1);
@@ -577,13 +577,13 @@ public final class MapLevel implements ChunkSource {
 		int x0 = snapshot.chunkX << 4;
 		int z0 = snapshot.chunkZ << 4;
 		dev.diorama.MapDirection direction = Projection.direction();
-        double u0 = Math.min(direction.u(x0, z0), direction.u(x0 + 16, z0 + 16));
-        double u1 = Math.max(direction.u(x0, z0), direction.u(x0 + 16, z0 + 16));
-        double d0 = Math.min(direction.depth(x0, z0), direction.depth(x0 + 16, z0 + 16));
-        double d1 = Math.max(direction.depth(x0, z0), direction.depth(x0 + 16, z0 + 16));
-        int tu0 = (int) Math.floor(u0 / units), tu1 = (int) Math.floor(u1 / units);
-        int tv0 = (int) Math.floor(Projection.v(snapshot.maxY + 1, d0) / units);
-        int tv1 = (int) Math.floor(Projection.v(snapshot.floorY, d1) / units);
+		double u0 = Math.min(direction.u(x0, z0), direction.u(x0 + 16, z0 + 16));
+		double u1 = Math.max(direction.u(x0, z0), direction.u(x0 + 16, z0 + 16));
+		double d0 = Math.min(direction.depth(x0, z0), direction.depth(x0 + 16, z0 + 16));
+		double d1 = Math.max(direction.depth(x0, z0), direction.depth(x0 + 16, z0 + 16));
+		int tu0 = (int) Math.floor(u0 / units), tu1 = (int) Math.floor(u1 / units);
+		int tv0 = (int) Math.floor(Projection.v(snapshot.maxY + 1, d0) / units);
+		int tv1 = (int) Math.floor(Projection.v(snapshot.floorY, d1) / units);
 		for (int tu = tu0; tu <= tu1; tu++) {
 			for (int tv = tv0; tv <= tv1; tv++) {
 				TileKey key = new TileKey(TileKey.SURFACE, tu, tv);
@@ -604,10 +604,10 @@ public final class MapLevel implements ChunkSource {
 	 * {@code priority} is lower for tiles that matter more, such as those near the view center.
 	 */
 	public @Nullable MapTile want(TileKey key, double priority) {
-        if (this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.remove(key)) {
-            this.appearanceRefresh.pending.add(key);
-            this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
-        }
+		if (this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.remove(key)) {
+			this.appearanceRefresh.pending.add(key);
+			this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
+		}
 		this.wanted.merge(key, priority, Math::min);
 		MapTile tile = this.tiles.get(key);
 		if (tile != null) {
@@ -645,57 +645,57 @@ public final class MapLevel implements ChunkSource {
 				this.dirty.computeIfAbsent(changedOverview, k -> new Dirty(0)).blocks.set(0);
 			}
 		}
-        BakeScheduler.Result result;
-        int uploads = 0;
-        while (uploads < 3 && MapUploads.available() && (result = this.scheduler.poll()) != null) {
-            TileKey completedKey = result.key();
-            TileFreshness.Version version = this.jobVersions.remove(completedKey);
-            this.staleInFlight.remove(completedKey);
-            Integer completeGeneration = this.completeBakes.remove(completedKey);
-            boolean complete = completeGeneration != null && completeGeneration == result.generation();
-            if (result.failure() != null) {
-                this.inFlight.remove(completedKey);
-                boolean wasBackground = this.backgroundBakes.remove(completedKey);
-                if (result.generation() == this.generation(completedKey)) {
-                    Diorama.LOGGER.error("Failed to process tile {}; retrying with backoff", completedKey, result.failure());
-                    this.retries.failed(completedKey, System.currentTimeMillis());
-                    this.dirty.computeIfAbsent(completedKey, k -> new Dirty(0)).blocks.set(0, 256);
-                    if (wasBackground) this.unsaved.put(completedKey, 0L);
-                }
-                continue;
-            }
-            TileImage image = result.image();
-            this.retries.succeeded(completedKey);
+		BakeScheduler.Result result;
+		int uploads = 0;
+		while (uploads < 3 && MapUploads.available() && (result = this.scheduler.poll()) != null) {
+			TileKey completedKey = result.key();
+			TileFreshness.Version version = this.jobVersions.remove(completedKey);
+			this.staleInFlight.remove(completedKey);
+			Integer completeGeneration = this.completeBakes.remove(completedKey);
+			boolean complete = completeGeneration != null && completeGeneration == result.generation();
+			if (result.failure() != null) {
+				this.inFlight.remove(completedKey);
+				boolean wasBackground = this.backgroundBakes.remove(completedKey);
+				if (result.generation() == this.generation(completedKey)) {
+					Diorama.LOGGER.error("Failed to process tile {}; retrying with backoff", completedKey, result.failure());
+					this.retries.failed(completedKey, System.currentTimeMillis());
+					this.dirty.computeIfAbsent(completedKey, k -> new Dirty(0)).blocks.set(0, 256);
+					if (wasBackground) this.unsaved.put(completedKey, 0L);
+				}
+				continue;
+			}
+			TileImage image = result.image();
+			this.retries.succeeded(completedKey);
 			this.inFlight.remove(image.key());
 			boolean background = this.backgroundBakes.remove(image.key());
 			if (this.closed) {
 				continue;
 			}
 			if (image.generation() != this.generation(image.key()) || !this.freshness.accepts(image.key(), version)) {
-                // Requeue every part of a rejected result, including patches dirtied before that job.
-                this.dirty.computeIfAbsent(image.key(), k -> new Dirty(0)).blocks.set(0, 256);
+				// Requeue every part of a rejected result, including patches dirtied before that job.
+				this.dirty.computeIfAbsent(image.key(), k -> new Dirty(0)).blocks.set(0, 256);
 				// Baked under old colours or the other cave mode; bake it again.
 				if (background) {
 					this.unsaved.put(image.key(), 0L);
 				}
 				continue;
 			}
-            if (this.appearanceRefresh != null && !this.appearanceRefresh.swapped.contains(image.key())
-                && (!background || this.appearanceRefresh.pending.contains(image.key()))) {
-                // Hold the old map intact while this revision is prepared in the background.
-                if (image.key().lod() > 0 && (this.appearanceRefresh.overviewBarrier == null
-                    || !this.appearanceRefresh.overviewBarrier.isDone())) {
-                    this.dirty.computeIfAbsent(image.key(), k -> new Dirty(0)).blocks.set(0);
-                } else if (image.isFull()) {
-                    boolean diskOnly = this.appearanceRefresh.diskOnly.contains(image.key());
-                    this.appearanceRefresh.stage(image, version, !diskOnly);
-                    if (complete) this.appearanceRefresh.complete.add(image.key());
-                    else this.appearanceRefresh.complete.remove(image.key());
-                    if (diskOnly && this.store != null) { this.store.baked(image); this.persisted(image.key(), complete); }
-                }
-                else this.appearanceRefresh.forget(image.key());
-                continue;
-            }
+			if (this.appearanceRefresh != null && !this.appearanceRefresh.swapped.contains(image.key())
+				&& (!background || this.appearanceRefresh.pending.contains(image.key()))) {
+				// Hold the old map intact while this revision is prepared in the background.
+				if (image.key().lod() > 0 && (this.appearanceRefresh.overviewBarrier == null
+					|| !this.appearanceRefresh.overviewBarrier.isDone())) {
+					this.dirty.computeIfAbsent(image.key(), k -> new Dirty(0)).blocks.set(0);
+				} else if (image.isFull()) {
+					boolean diskOnly = this.appearanceRefresh.diskOnly.contains(image.key());
+					this.appearanceRefresh.stage(image, version, !diskOnly);
+					if (complete) this.appearanceRefresh.complete.add(image.key());
+					else this.appearanceRefresh.complete.remove(image.key());
+					if (diskOnly && this.store != null) { this.store.baked(image); this.persisted(image.key(), complete); }
+				}
+				else this.appearanceRefresh.forget(image.key());
+				continue;
+			}
 			MapTile tile = this.tiles.get(image.key());
 			if (background && tile == null) {
 				// Baked only to be saved; a map that wants it will bake it again.
@@ -720,8 +720,8 @@ public final class MapLevel implements ChunkSource {
 				this.tiles.put(image.key(), tile);
 			}
 			tile.upload(image);
-            MapUploads.take();
-            uploads++;
+			MapUploads.take();
+			uploads++;
 			this.coverageVersion++;
 			if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {
 				this.store.baked(image);
@@ -733,18 +733,18 @@ public final class MapLevel implements ChunkSource {
 			this.trimChunks();
 		}
 
-        this.finishAppearanceRefresh();
+		this.finishAppearanceRefresh();
 		BlockLooks looks = BlockLooks.get();
 		if (looks != null && this.topY != Integer.MIN_VALUE) {
 			long now = System.currentTimeMillis();
 			// Enough queued work to keep every baker busy while uploads drain; disk-only tiles are quick.
 			int limit = Math.max(6, BAKER_COUNT * 3);
-            if (this.appearanceRefresh != null) {
-                for (TileKey key : this.appearanceRefresh.pending) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
-                if (this.appearanceRefresh.overviewBarrier != null && this.appearanceRefresh.overviewBarrier.isDone()) {
-                    for (TileKey key : this.appearanceRefresh.overviews) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
-                }
-            }
+			if (this.appearanceRefresh != null) {
+				for (TileKey key : this.appearanceRefresh.pending) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
+				if (this.appearanceRefresh.overviewBarrier != null && this.appearanceRefresh.overviewBarrier.isDone()) {
+					for (TileKey key : this.appearanceRefresh.overviews) this.wanted.putIfAbsent(key, Double.MAX_VALUE);
+				}
+			}
 			List<Map.Entry<TileKey, Double>> order = new ArrayList<>(this.wanted.entrySet());
 			order.sort(Map.Entry.comparingByValue());
 			for (Map.Entry<TileKey, Double> entry : order) {
@@ -755,13 +755,13 @@ public final class MapLevel implements ChunkSource {
 				if (this.inFlight.contains(key) || !this.retries.ready(key, now)) {
 					continue;
 				}
-                // Staged cache misses are ready for the transaction, even though the old
-                // visible cache deliberately has no entry for them yet.
-                if (this.appearanceRefresh != null && this.appearanceRefresh.ready(key) && !this.dirty.containsKey(key)) continue;
+				// Staged cache misses are ready for the transaction, even though the old
+				// visible cache deliberately has no entry for them yet.
+				if (this.appearanceRefresh != null && this.appearanceRefresh.ready(key) && !this.dirty.containsKey(key)) continue;
 				boolean missing = !this.tiles.containsKey(key);
 				if (key.lod() > 0) {
-                    if (this.appearanceRefresh != null && (this.appearanceRefresh.overviewBarrier == null
-                        || !this.appearanceRefresh.overviewBarrier.isDone())) continue;
+					if (this.appearanceRefresh != null && (this.appearanceRefresh.overviewBarrier == null
+						|| !this.appearanceRefresh.overviewBarrier.isDone())) continue;
 					// Overview tiles come from disk, shrunk from saved tiles; nothing to bake.
 					if ((missing || this.dirty.containsKey(key)) && this.store != null && !this.emptyOverviews.contains(key)) {
 						this.dirty.remove(key);
@@ -774,7 +774,7 @@ public final class MapLevel implements ChunkSource {
 				if (missing || ready) {
 					this.dirty.remove(key);
 					this.unsaved.remove(key);
-                    if (this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.contains(key)) this.backgroundBakes.add(key);
+					if (this.appearanceRefresh != null && this.appearanceRefresh.diskOnly.contains(key)) this.backgroundBakes.add(key);
 					this.bake(key, looks, this.appearanceRefresh != null || missing || d.blocks.cardinality() > 160 ? null : d.blocks);
 				}
 			}
@@ -785,133 +785,133 @@ public final class MapLevel implements ChunkSource {
 		this.evict();
 	}
 
-    /** A distant view may have no detailed GPU tiles. Refresh its loaded children on disk too. */
-    private void requestAppearanceSources(AppearanceRefresh refresh) {
-        if (this.store == null || refresh.overviews.isEmpty()) return;
-        for (ChunkSnapshot snapshot : this.chunks.values()) {
-            if (snapshot.maxY == Integer.MIN_VALUE) continue;
-            int x = snapshot.chunkX << 4, z = snapshot.chunkZ << 4;
-            for (var region : TileInvalidation.regions(x, Math.min(snapshot.floorY, this.topY), this.minY,
-                z, x + 15, this.topY, z + 15, true, this.roofless(), this.roof,
-                Set.of(TileKey.SURFACE), Projection.direction())) {
-                for (int u = (int) Math.floor(region.minU() / Projection.TILE_UNITS); u <= (int) Math.floor(region.maxU() / Projection.TILE_UNITS); u++) {
-                    for (int v = (int) Math.floor(region.minV() / Projection.TILE_UNITS); v <= (int) Math.floor(region.maxV() / Projection.TILE_UNITS); v++) {
-                        var key = new TileKey(TileKey.SURFACE, u, v);
-                        for (TileKey overview : refresh.overviews) {
-                            if (Math.floorDiv(u, 1 << overview.lod()) == overview.tileU()
-                                && Math.floorDiv(v, 1 << overview.lod()) == overview.tileV()) {
-                                if (refresh.pending.add(key)) refresh.diskOnly.add(key);
-                                this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+	/** A distant view may have no detailed GPU tiles. Refresh its loaded children on disk too. */
+	private void requestAppearanceSources(AppearanceRefresh refresh) {
+		if (this.store == null || refresh.overviews.isEmpty()) return;
+		for (ChunkSnapshot snapshot : this.chunks.values()) {
+			if (snapshot.maxY == Integer.MIN_VALUE) continue;
+			int x = snapshot.chunkX << 4, z = snapshot.chunkZ << 4;
+			for (var region : TileInvalidation.regions(x, Math.min(snapshot.floorY, this.topY), this.minY,
+				z, x + 15, this.topY, z + 15, true, this.roofless(), this.roof,
+				Set.of(TileKey.SURFACE), Projection.direction())) {
+				for (int u = (int) Math.floor(region.minU() / Projection.TILE_UNITS); u <= (int) Math.floor(region.maxU() / Projection.TILE_UNITS); u++) {
+					for (int v = (int) Math.floor(region.minV() / Projection.TILE_UNITS); v <= (int) Math.floor(region.maxV() / Projection.TILE_UNITS); v++) {
+						var key = new TileKey(TileKey.SURFACE, u, v);
+						for (TileKey overview : refresh.overviews) {
+							if (Math.floorDiv(u, 1 << overview.lod()) == overview.tileU()
+								&& Math.floorDiv(v, 1 << overview.lod()) == overview.tileV()) {
+								if (refresh.pending.add(key)) refresh.diskOnly.add(key);
+								this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
-    /**
-     * Shows the new look as it is ready: all the tiles on screen in one frame, the rest a few per
-     * frame where no view sees them change, and last every overview together, after their barrier.
-     */
-    private void finishAppearanceRefresh() {
-        AppearanceRefresh refresh = this.appearanceRefresh;
-        if (refresh == null) return;
-        this.swapStaged(refresh);
-        if (!refresh.detailDone()) return;
-        for (TileKey key : new HashSet<>(refresh.versions.keySet())) {
-            if (this.staleStaged(refresh, key)) this.requeueStaged(refresh, key);
-        }
-        if (!refresh.pending.isEmpty()) return;
-        if (!refresh.overviews.isEmpty()) {
-            if (refresh.overviewBarrier == null) {
-                if (this.inFlight.stream().anyMatch(key -> key.lod() > 0)) return;
-                // Swapped children already went to the writer; derive every requested overview from them.
-                refresh.overviewBarrier = this.store != null ? this.store.refreshOverviews()
-                    : java.util.concurrent.CompletableFuture.completedFuture(null);
-                return;
-            }
-            if (!refresh.overviewBarrier.isDone()) return;
-            if (refresh.overviewBarrier.isCompletedExceptionally()) {
-                Diorama.LOGGER.error("Couldn't refresh map overviews; retaining the previous appearance");
-                refresh.overviewBarrier = null;
-                return;
-            }
-            for (TileKey key : refresh.overviews) if (!refresh.images.containsKey(key)) return;
-        }
-        // Updating existing textures avoids a second GPU cache. The bounded overview set is
-        // uploaded together here, deliberately outside the incremental terrain-upload budget.
-        long start = System.nanoTime();
-        for (TileImage image : refresh.images.values()) {
-            MapTile tile = this.tiles.get(image.key());
-            if (tile == null) { tile = new MapTile(); tile.lastDrawn = this.frame; this.tiles.put(image.key(), tile); }
-            tile.upload(image);
-        }
-        this.appearanceRefresh = null;
-        this.appearanceVersion++;
-        this.coverageVersion++;
-        Diorama.LOGGER.info("Committed appearance revision {}: {} overviews together in {} ms",
-            this.appearanceVersion, refresh.images.size(), (System.nanoTime() - start) / 1_000_000.0);
-    }
+	/**
+	 * Shows the new look as it is ready: all the tiles on screen in one frame, the rest a few per
+	 * frame where no view sees them change, and last every overview together, after their barrier.
+	 */
+	private void finishAppearanceRefresh() {
+		AppearanceRefresh refresh = this.appearanceRefresh;
+		if (refresh == null) return;
+		this.swapStaged(refresh);
+		if (!refresh.detailDone()) return;
+		for (TileKey key : new HashSet<>(refresh.versions.keySet())) {
+			if (this.staleStaged(refresh, key)) this.requeueStaged(refresh, key);
+		}
+		if (!refresh.pending.isEmpty()) return;
+		if (!refresh.overviews.isEmpty()) {
+			if (refresh.overviewBarrier == null) {
+				if (this.inFlight.stream().anyMatch(key -> key.lod() > 0)) return;
+				// Swapped children already went to the writer; derive every requested overview from them.
+				refresh.overviewBarrier = this.store != null ? this.store.refreshOverviews()
+					: java.util.concurrent.CompletableFuture.completedFuture(null);
+				return;
+			}
+			if (!refresh.overviewBarrier.isDone()) return;
+			if (refresh.overviewBarrier.isCompletedExceptionally()) {
+				Diorama.LOGGER.error("Couldn't refresh map overviews; retaining the previous appearance");
+				refresh.overviewBarrier = null;
+				return;
+			}
+			for (TileKey key : refresh.overviews) if (!refresh.images.containsKey(key)) return;
+		}
+		// Updating existing textures avoids a second GPU cache. The bounded overview set is
+		// uploaded together here, deliberately outside the incremental terrain-upload budget.
+		long start = System.nanoTime();
+		for (TileImage image : refresh.images.values()) {
+			MapTile tile = this.tiles.get(image.key());
+			if (tile == null) { tile = new MapTile(); tile.lastDrawn = this.frame; this.tiles.put(image.key(), tile); }
+			tile.upload(image);
+		}
+		this.appearanceRefresh = null;
+		this.appearanceVersion++;
+		this.coverageVersion++;
+		Diorama.LOGGER.info("Committed appearance revision {}: {} overviews together in {} ms",
+			this.appearanceVersion, refresh.images.size(), (System.nanoTime() - start) / 1_000_000.0);
+	}
 
-    /**
-     * Uploads the staged detailed tiles {@link AppearanceRefresh#swappable} allows this frame. The
-     * tiles on screen go together, outside the incremental upload budget: a view's worth of
-     * textures, uploaded once per look change.
-     */
-    private void swapStaged(AppearanceRefresh refresh) {
-        // Ticks can run with no frame between them, and no view asking: the screen is unchanged.
-        Set<TileKey> onScreen = this.onScreen;
-        if (!this.wanted.isEmpty()) {
-            onScreen = new HashSet<>();
-            for (Map.Entry<TileKey, Double> entry : this.wanted.entrySet())
-                if (entry.getKey().lod() == 0 && entry.getValue() < OFF_SCREEN) onScreen.add(entry.getKey());
-            this.onScreen = onScreen;
-        }
-        List<TileKey> group = refresh.swappable(onScreen, OFF_SCREEN_SWAPS);
-        if (group.isEmpty()) return;
-        // A result older than the terrain or light under it goes back to the queue instead.
-        boolean stale = false;
-        for (TileKey key : group) if (this.staleStaged(refresh, key)) { this.requeueStaged(refresh, key); stale = true; }
-        if (stale) group = refresh.swappable(onScreen, OFF_SCREEN_SWAPS);
-        long start = System.nanoTime();
-        int shown = 0;
-        for (TileKey key : group) {
-            boolean complete = refresh.complete.contains(key);
-            TileImage image = refresh.swap(key);
-            MapTile tile = this.tiles.get(key);
-            if (tile == null) { tile = new MapTile(); tile.lastDrawn = this.frame; this.tiles.put(key, tile); }
-            tile.upload(image);
-            if (onScreen.contains(key)) shown++;
-            if (this.store != null && !key.isCave()) {
-                this.store.baked(image);
-                this.persisted(key, complete);
-            }
-        }
-        this.coverageVersion++;
-        if (shown > 0) Diorama.LOGGER.info("Swapped the {} tiles on screen to the new look together in {} ms; {} still pending",
-            shown, (System.nanoTime() - start) / 1_000_000.0, refresh.pending.size());
-    }
+	/**
+	 * Uploads the staged detailed tiles {@link AppearanceRefresh#swappable} allows this frame. The
+	 * tiles on screen go together, outside the incremental upload budget: a view's worth of
+	 * textures, uploaded once per look change.
+	 */
+	private void swapStaged(AppearanceRefresh refresh) {
+		// Ticks can run with no frame between them, and no view asking: the screen is unchanged.
+		Set<TileKey> onScreen = this.onScreen;
+		if (!this.wanted.isEmpty()) {
+			onScreen = new HashSet<>();
+			for (Map.Entry<TileKey, Double> entry : this.wanted.entrySet())
+				if (entry.getKey().lod() == 0 && entry.getValue() < OFF_SCREEN) onScreen.add(entry.getKey());
+			this.onScreen = onScreen;
+		}
+		List<TileKey> group = refresh.swappable(onScreen, OFF_SCREEN_SWAPS);
+		if (group.isEmpty()) return;
+		// A result older than the terrain or light under it goes back to the queue instead.
+		boolean stale = false;
+		for (TileKey key : group) if (this.staleStaged(refresh, key)) { this.requeueStaged(refresh, key); stale = true; }
+		if (stale) group = refresh.swappable(onScreen, OFF_SCREEN_SWAPS);
+		long start = System.nanoTime();
+		int shown = 0;
+		for (TileKey key : group) {
+			boolean complete = refresh.complete.contains(key);
+			TileImage image = refresh.swap(key);
+			MapTile tile = this.tiles.get(key);
+			if (tile == null) { tile = new MapTile(); tile.lastDrawn = this.frame; this.tiles.put(key, tile); }
+			tile.upload(image);
+			if (onScreen.contains(key)) shown++;
+			if (this.store != null && !key.isCave()) {
+				this.store.baked(image);
+				this.persisted(key, complete);
+			}
+		}
+		this.coverageVersion++;
+		if (shown > 0) Diorama.LOGGER.info("Swapped the {} tiles on screen to the new look together in {} ms; {} still pending",
+			shown, (System.nanoTime() - start) / 1_000_000.0, refresh.pending.size());
+	}
 
-    /** Whether a staged result was baked under an older generation, terrain or light. */
-    private boolean staleStaged(AppearanceRefresh refresh, TileKey key) {
-        return refresh.generations.get(key) != this.generation(key) || !this.freshness.accepts(key, refresh.versions.get(key));
-    }
+	/** Whether a staged result was baked under an older generation, terrain or light. */
+	private boolean staleStaged(AppearanceRefresh refresh, TileKey key) {
+		return refresh.generations.get(key) != this.generation(key) || !this.freshness.accepts(key, refresh.versions.get(key));
+	}
 
-    /** Bakes a stale staged result again; overviews then wait for it behind a new barrier. */
-    private void requeueStaged(AppearanceRefresh refresh, TileKey key) {
-        refresh.images.remove(key);
-        refresh.versions.remove(key);
-        refresh.generations.remove(key);
-        if (key.lod() == 0) refresh.pending.add(key);
-        refresh.overviewBarrier = null;
-        for (TileKey overview : refresh.overviews) {
-            refresh.images.remove(overview);
-            this.dirty.computeIfAbsent(overview, k -> new Dirty(0)).blocks.set(0);
-        }
-        this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
-    }
+	/** Bakes a stale staged result again; overviews then wait for it behind a new barrier. */
+	private void requeueStaged(AppearanceRefresh refresh, TileKey key) {
+		refresh.images.remove(key);
+		refresh.versions.remove(key);
+		refresh.generations.remove(key);
+		if (key.lod() == 0) refresh.pending.add(key);
+		refresh.overviewBarrier = null;
+		for (TileKey overview : refresh.overviews) {
+			refresh.images.remove(overview);
+			this.dirty.computeIfAbsent(overview, k -> new Dirty(0)).blocks.set(0);
+		}
+		this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, 256);
+	}
 
 	/** Bakes one tile on a baker thread: all of it if {@code blocks} is null, else those blocks. */
 	private void bake(TileKey key, BlockLooks looks, @Nullable BitSet blocks) {
@@ -924,155 +924,155 @@ public final class MapLevel implements ChunkSource {
 	 */
 	private void bake(TileKey key, BlockLooks looks, @Nullable BitSet blocks, boolean redraw) {
 		this.inFlight.add(key);
-        this.jobVersions.put(key, this.freshness.get(key));
-        this.submittedJobs++;
+		this.jobVersions.put(key, this.freshness.get(key));
+		this.submittedJobs++;
 		int generation = this.generation(key);
 		boolean fog = this.fogOfWar;
 		Overlays overlays = this.overlays;
 		TileStore store = key.isCave() ? null : this.store;
-        dev.diorama.bake.BakeContext context = dev.diorama.bake.BakeContext.capture();
-        ChunkSource fallback = store != null && key.lod() == 0 && this.terrain != null
-            && (redraw || this.appearanceRefresh != null) ? this.withSaved : null;
-        // Overlay bits aren't saved, so a tile drawn with them is traced again.
-        boolean current = blocks == null && fallback == null && overlays == null && store != null && this.onDisk.contains(key);
-        this.completeBakes.remove(key);
-        this.scheduler.submit(key, generation, () -> {
-            // Superseded while queued, as by a new look: the result would be dropped anyway.
-            if (generation != this.generation(key)) return TileImage.partial(key, List.of());
-            long start = System.nanoTime();
-            var saved = store == null ? null : store.readPixels(key);
-            if (blocks == null && fallback == null && (current || !this.chunksReach(key))) {
-                // Nothing loaded can change a pixel: the bake would trace a quarter million empty
-                // rays only to keep every saved pixel. Reopening a map is then just a disk read.
-                if (saved == null) this.completeBakes.put(key, generation);
-                return TileBaker.imagePaired(key, saved == null ? new dev.diorama.bake.TilePixels(new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS], null) : saved);
-            }
-            if (blocks == null) {
-                TileBaker.Baked baked = TileBaker.bakeFull(key, this, looks, fog, saved, overlays, context, fallback);
-                if (baked.complete()) this.completeBakes.put(key, generation);
-                logBakeTime(System.nanoTime() - start, true);
-                return baked.image();
-            }
-            TileImage image = TileBaker.bakePaired(key, this, looks, blocks, fog, saved, overlays, context);
-            logBakeTime(System.nanoTime() - start, blocks == null);
-            return image;
-        });
+		dev.diorama.bake.BakeContext context = dev.diorama.bake.BakeContext.capture();
+		ChunkSource fallback = store != null && key.lod() == 0 && this.terrain != null
+			&& (redraw || this.appearanceRefresh != null) ? this.withSaved : null;
+		// Overlay bits aren't saved, so a tile drawn with them is traced again.
+		boolean current = blocks == null && fallback == null && overlays == null && store != null && this.onDisk.contains(key);
+		this.completeBakes.remove(key);
+		this.scheduler.submit(key, generation, () -> {
+			// Superseded while queued, as by a new look: the result would be dropped anyway.
+			if (generation != this.generation(key)) return TileImage.partial(key, List.of());
+			long start = System.nanoTime();
+			var saved = store == null ? null : store.readPixels(key);
+			if (blocks == null && fallback == null && (current || !this.chunksReach(key))) {
+				// Nothing loaded can change a pixel: the bake would trace a quarter million empty
+				// rays only to keep every saved pixel. Reopening a map is then just a disk read.
+				if (saved == null) this.completeBakes.put(key, generation);
+				return TileBaker.imagePaired(key, saved == null ? new dev.diorama.bake.TilePixels(new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS], null) : saved);
+			}
+			if (blocks == null) {
+				TileBaker.Baked baked = TileBaker.bakeFull(key, this, looks, fog, saved, overlays, context, fallback);
+				if (baked.complete()) this.completeBakes.put(key, generation);
+				logBakeTime(System.nanoTime() - start, true);
+				return baked.image();
+			}
+			TileImage image = TileBaker.bakePaired(key, this, looks, blocks, fog, saved, overlays, context);
+			logBakeTime(System.nanoTime() - start, blocks == null);
+			return image;
+		});
 	}
 
-    /** A full image went to the store: until something changes under it, the store holds the tile as it is. */
-    private void stored(TileImage image) {
-        TileKey key = image.key();
-        if (image.isFull() && key.lod() == 0 && !key.isCave() && !this.dirty.containsKey(key) && !this.unsaved.containsKey(key)) {
-            this.onDisk.add(key);
-        }
-    }
+	/** A full image went to the store: until something changes under it, the store holds the tile as it is. */
+	private void stored(TileImage image) {
+		TileKey key = image.key();
+		if (image.isFull() && key.lod() == 0 && !key.isCave() && !this.dirty.containsKey(key) && !this.unsaved.containsKey(key)) {
+			this.onDisk.add(key);
+		}
+	}
 
-    /** A tile's new pixels went to the store; {@code complete} ones show the current look throughout. */
-    private void persisted(TileKey key, boolean complete) {
-        if (complete && this.stamps != null && !key.isCave() && key.lod() == 0) {
-            this.stamps.markFresh(key, this.stamps.fingerprint());
-            this.staleSaved.remove(key);
-        }
-    }
+	/** A tile's new pixels went to the store; {@code complete} ones show the current look throughout. */
+	private void persisted(TileKey key, boolean complete) {
+		if (complete && this.stamps != null && !key.isCave() && key.lod() == 0) {
+			this.stamps.markFresh(key, this.stamps.fingerprint());
+			this.staleSaved.remove(key);
+		}
+	}
 
-    /**
-     * Redraws, in the background and nearest the views first, saved tiles that don't show the
-     * current look yet: shown tiles, and the tiles under the overviews shown when zoomed out. Waits
-     * for an appearance refresh to finish, and leaves bakers free for tiles a view is missing.
-     */
-    private void redrawStale(BlockLooks looks) {
-        TileStore store = this.store;
-        var stamps = this.stamps;
-        if (this.terrain == null || store == null || stamps == null || this.appearanceRefresh != null || this.closed) {
-            return;
-        }
-        if (!this.staleScanned) {
-            this.staleScanned = true;
-            int scan = this.staleScan;
-            SAVER.execute(() -> {
-                Set<TileKey> saved = store.savedTiles();
-                saved.removeIf(stamps::isFresh);
-                Minecraft.getInstance().execute(() -> {
-                    if (scan == this.staleScan && store == this.store) this.staleSaved.addAll(saved);
-                });
-            });
-            return;
-        }
-        if (this.staleSaved.isEmpty()) {
-            return;
-        }
-        if (this.frame % 15 == 0 || this.staleOrder.isEmpty()) {
-            // Rank by the nearest view that shows the tile itself or an overview over it.
-            this.staleOrder.clear();
-            for (TileKey key : this.staleSaved) {
-                double best = Double.MAX_VALUE;
-                TileKey at = key;
-                for (int lod = 0; lod <= TileKey.MAX_LOD; lod++, at = at.parent()) {
-                    Double priority = this.wanted.get(at);
-                    if (priority != null) best = Math.min(best, priority);
-                }
-                if (best < Double.MAX_VALUE) this.staleOrder.add(Map.entry(key, best));
-            }
-            this.staleOrder.sort(Map.Entry.comparingByValue());
-        }
-        boolean missing = false;
-        for (TileKey key : this.wanted.keySet()) {
-            if (key.lod() == 0 && !this.tiles.containsKey(key)) { missing = true; break; }
-        }
-        int limit = missing ? 1 : Math.max(1, BAKER_COUNT - 1);
-        Iterator<Map.Entry<TileKey, Double>> it = this.staleOrder.iterator();
-        while (it.hasNext() && this.staleInFlight.size() < limit && this.inFlight.size() < Math.max(6, BAKER_COUNT * 3)) {
-            TileKey key = it.next().getKey();
-            it.remove();
-            if (this.inFlight.contains(key) || stamps.isFresh(key) || !this.staleSaved.remove(key)) {
-                continue;
-            }
-            this.staleInFlight.add(key);
-            if (!this.tiles.containsKey(key)) this.backgroundBakes.add(key);
-            this.dirty.remove(key);
-            this.bake(key, looks, null, true);
-        }
-    }
+	/**
+	 * Redraws, in the background and nearest the views first, saved tiles that don't show the
+	 * current look yet: shown tiles, and the tiles under the overviews shown when zoomed out. Waits
+	 * for an appearance refresh to finish, and leaves bakers free for tiles a view is missing.
+	 */
+	private void redrawStale(BlockLooks looks) {
+		TileStore store = this.store;
+		var stamps = this.stamps;
+		if (this.terrain == null || store == null || stamps == null || this.appearanceRefresh != null || this.closed) {
+			return;
+		}
+		if (!this.staleScanned) {
+			this.staleScanned = true;
+			int scan = this.staleScan;
+			SAVER.execute(() -> {
+				Set<TileKey> saved = store.savedTiles();
+				saved.removeIf(stamps::isFresh);
+				Minecraft.getInstance().execute(() -> {
+					if (scan == this.staleScan && store == this.store) this.staleSaved.addAll(saved);
+				});
+			});
+			return;
+		}
+		if (this.staleSaved.isEmpty()) {
+			return;
+		}
+		if (this.frame % 15 == 0 || this.staleOrder.isEmpty()) {
+			// Rank by the nearest view that shows the tile itself or an overview over it.
+			this.staleOrder.clear();
+			for (TileKey key : this.staleSaved) {
+				double best = Double.MAX_VALUE;
+				TileKey at = key;
+				for (int lod = 0; lod <= TileKey.MAX_LOD; lod++, at = at.parent()) {
+					Double priority = this.wanted.get(at);
+					if (priority != null) best = Math.min(best, priority);
+				}
+				if (best < Double.MAX_VALUE) this.staleOrder.add(Map.entry(key, best));
+			}
+			this.staleOrder.sort(Map.Entry.comparingByValue());
+		}
+		boolean missing = false;
+		for (TileKey key : this.wanted.keySet()) {
+			if (key.lod() == 0 && !this.tiles.containsKey(key)) { missing = true; break; }
+		}
+		int limit = missing ? 1 : Math.max(1, BAKER_COUNT - 1);
+		Iterator<Map.Entry<TileKey, Double>> it = this.staleOrder.iterator();
+		while (it.hasNext() && this.staleInFlight.size() < limit && this.inFlight.size() < Math.max(6, BAKER_COUNT * 3)) {
+			TileKey key = it.next().getKey();
+			it.remove();
+			if (this.inFlight.contains(key) || stamps.isFresh(key) || !this.staleSaved.remove(key)) {
+				continue;
+			}
+			this.staleInFlight.add(key);
+			if (!this.tiles.containsKey(key)) this.backgroundBakes.add(key);
+			this.dirty.remove(key);
+			this.bake(key, looks, null, true);
+		}
+	}
 
-    /** Blocks around a tile a bake may read beyond its rays: shadows, sky occlusion, biome blending and outlines. */
-    private static final int BAKE_REACH = 64;
+	/** Blocks around a tile a bake may read beyond its rays: shadows, sky occlusion, biome blending and outlines. */
+	private static final int BAKE_REACH = 64;
 
-    /**
-     * Whether any loaded chunk could change a pixel of this level-0 tile. Conservative: covers every
-     * height a ray crosses plus {@link #BAKE_REACH}. Safe on bake threads; snapshots are concurrent.
-     */
-    boolean chunksReach(TileKey key) {
-        if (this.chunks.isEmpty()) return false;
-        double sin = Projection.zScale(), cos = Projection.yScale();
-        double u0 = key.minU() - BAKE_REACH, u1 = key.minU() + Projection.TILE_UNITS + BAKE_REACH;
-        double v0 = key.minV(), v1 = key.minV() + Projection.TILE_UNITS;
-        double d0 = (v0 + this.minY * cos) / sin - BAKE_REACH, d1 = (v1 + this.maxY * cos) / sin + BAKE_REACH;
-        dev.diorama.MapDirection direction = Projection.direction();
-        double x0 = Math.min(direction.worldX(u0, d0), direction.worldX(u1, d1)), x1 = Math.max(direction.worldX(u0, d0), direction.worldX(u1, d1));
-        double z0 = Math.min(direction.worldZ(u0, d0), direction.worldZ(u1, d1)), z1 = Math.max(direction.worldZ(u0, d0), direction.worldZ(u1, d1));
-        int cx0 = (int) Math.floor(x0) >> 4, cx1 = (int) Math.floor(x1) >> 4;
-        int cz0 = (int) Math.floor(z0) >> 4, cz1 = (int) Math.floor(z1) >> 4;
-        if ((long) (cx1 - cx0 + 1) * (cz1 - cz0 + 1) > this.chunks.size()) {
-            for (ChunkSnapshot snapshot : this.chunks.values()) {
-                if (snapshot.chunkX >= cx0 && snapshot.chunkX <= cx1 && snapshot.chunkZ >= cz0 && snapshot.chunkZ <= cz1) return true;
-            }
-            return false;
-        }
-        for (int cx = cx0; cx <= cx1; cx++) for (int cz = cz0; cz <= cz1; cz++) {
-            if (this.chunks.containsKey(ChunkSnapshot.key(cx, cz))) return true;
-        }
-        return false;
-    }
+	/**
+	 * Whether any loaded chunk could change a pixel of this level-0 tile. Conservative: covers every
+	 * height a ray crosses plus {@link #BAKE_REACH}. Safe on bake threads; snapshots are concurrent.
+	 */
+	boolean chunksReach(TileKey key) {
+		if (this.chunks.isEmpty()) return false;
+		double sin = Projection.zScale(), cos = Projection.yScale();
+		double u0 = key.minU() - BAKE_REACH, u1 = key.minU() + Projection.TILE_UNITS + BAKE_REACH;
+		double v0 = key.minV(), v1 = key.minV() + Projection.TILE_UNITS;
+		double d0 = (v0 + this.minY * cos) / sin - BAKE_REACH, d1 = (v1 + this.maxY * cos) / sin + BAKE_REACH;
+		dev.diorama.MapDirection direction = Projection.direction();
+		double x0 = Math.min(direction.worldX(u0, d0), direction.worldX(u1, d1)), x1 = Math.max(direction.worldX(u0, d0), direction.worldX(u1, d1));
+		double z0 = Math.min(direction.worldZ(u0, d0), direction.worldZ(u1, d1)), z1 = Math.max(direction.worldZ(u0, d0), direction.worldZ(u1, d1));
+		int cx0 = (int) Math.floor(x0) >> 4, cx1 = (int) Math.floor(x1) >> 4;
+		int cz0 = (int) Math.floor(z0) >> 4, cz1 = (int) Math.floor(z1) >> 4;
+		if ((long) (cx1 - cx0 + 1) * (cz1 - cz0 + 1) > this.chunks.size()) {
+			for (ChunkSnapshot snapshot : this.chunks.values()) {
+				if (snapshot.chunkX >= cx0 && snapshot.chunkX <= cx1 && snapshot.chunkZ >= cz0 && snapshot.chunkZ <= cz1) return true;
+			}
+			return false;
+		}
+		for (int cx = cx0; cx <= cx1; cx++) for (int cz = cz0; cz <= cz1; cz++) {
+			if (this.chunks.containsKey(ChunkSnapshot.key(cx, cz))) return true;
+		}
+		return false;
+	}
 
 	private void loadOverview(TileKey key, TileStore store) {
 		this.inFlight.add(key);
-        this.jobVersions.put(key, this.freshness.get(key));
-        this.submittedJobs++;
+		this.jobVersions.put(key, this.freshness.get(key));
+		this.submittedJobs++;
 		int generation = this.generation(key);
-        this.scheduler.submit(key, generation, () -> {
-            var pixels = store.readPixels(key);
-            return pixels == null ? TileImage.partial(key, List.of()) : TileBaker.imagePaired(key, pixels);
-        });
+		this.scheduler.submit(key, generation, () -> {
+			var pixels = store.readPixels(key);
+			return pixels == null ? TileImage.partial(key, List.of()) : TileBaker.imagePaired(key, pixels);
+		});
 	}
 
 	/**
@@ -1119,18 +1119,18 @@ public final class MapLevel implements ChunkSource {
 		}
 	}
 
-    private void evict() {
-        // Tiles drawn since the last two updates are in use: updates run per tick, frames between them.
-        this.tiles.evict(this.frame, this.frame - 2, MAX_GPU_TILES, key -> {
-            if (this.appearanceRefresh != null) this.appearanceRefresh.evicted(key, image -> {
-                if (this.store != null) this.store.baked(image);
-            });
-            this.coverageVersion++;
-            if (!this.inFlight.contains(key)) this.freshness.remove(key);
-            if (this.dirty.remove(key) != null && this.store != null && !key.isCave() && key.lod() == 0)
-                this.unsaved.put(key, 0L);
-        });
-    }
+	private void evict() {
+		// Tiles drawn since the last two updates are in use: updates run per tick, frames between them.
+		this.tiles.evict(this.frame, this.frame - 2, MAX_GPU_TILES, key -> {
+			if (this.appearanceRefresh != null) this.appearanceRefresh.evicted(key, image -> {
+				if (this.store != null) this.store.baked(image);
+			});
+			this.coverageVersion++;
+			if (!this.inFlight.contains(key)) this.freshness.remove(key);
+			if (this.dirty.remove(key) != null && this.store != null && !key.isCave() && key.lod() == 0)
+				this.unsaved.put(key, 0L);
+		});
+	}
 
 	/** Saves fog-of-war progress if it changed. Call now and then; tiles save themselves. */
 	public void saveSeen() {
@@ -1139,71 +1139,71 @@ public final class MapLevel implements ChunkSource {
 		}
 	}
 
-    public void close() {
-        if (this.closed) return;
-        this.closed = true;
-        if (this.store != null) this.retireStore(this.store, true);
-        else this.saveSeen();
-        if (this.terrain != null) { this.terrain.close(); this.terrain = null; }
-        for (MapTile tile : this.tiles.values()) tile.close();
-        this.tiles.clear();
-        this.coverageVersion++;
-        this.scheduler.idle().whenComplete((ignored, failure) -> this.chunks.clear());
-    }
+	public void close() {
+		if (this.closed) return;
+		this.closed = true;
+		if (this.store != null) this.retireStore(this.store, true);
+		else this.saveSeen();
+		if (this.terrain != null) { this.terrain.close(); this.terrain = null; }
+		for (MapTile tile : this.tiles.values()) tile.close();
+		this.tiles.clear();
+		this.coverageVersion++;
+		this.scheduler.idle().whenComplete((ignored, failure) -> this.chunks.clear());
+	}
 
-    /** Freeze ownership now; finish all pending surface work away from the client thread. */
-    private void retireStore(TileStore retiring, boolean saveVisibility) {
-        Set<TileKey> pending = new HashSet<>(this.unsaved.keySet());
-        for (TileKey key : this.inFlight) if (!key.isCave() && key.lod() == 0) pending.add(key);
-        // Dirty visible tiles also need a final full bake, even if their debounce hasn't elapsed.
-        for (TileKey key : this.dirty.keySet()) if (!key.isCave() && key.lod() == 0) pending.add(key);
-        if (saveVisibility && this.folder != null) this.seen.saveFinalAsync(this.folder.resolve("seen.bin"));
-        var visibility = this.seen.snapshot();
-        var source = new dev.diorama.bake.FrozenChunks(this.chunks, this.minY, this.maxY, this.topY, this.roof, visibility, this.nightLighting);
-        var context = this.bakeContext;
-        BlockLooks looks = BlockLooks.get();
-        boolean fog = this.roofless() ? this.storeName.contains("-fog") : this.fogOfWar;
-        Overlays overlays = this.overlays;
-        java.util.List<TileImage> completed = new ArrayList<>();
-        if (this.appearanceRefresh != null) for (TileImage image : this.appearanceRefresh.images.values())
-            if (!image.key().isCave() && image.key().lod() == 0) completed.add(image);
-        BakeScheduler.Result result;
-        while ((result = this.scheduler.poll()) != null) {
-            this.inFlight.remove(result.key());
-            this.backgroundBakes.remove(result.key());
-            if (result.failure() == null && !result.key().isCave() && result.key().lod() == 0
-                && result.generation() == this.generation(result.key())) completed.add(result.image());
-        }
-        var save = java.util.concurrent.CompletableFuture.allOf(this.scheduler.idle(), this.seen.saving()).handle((ignored, failure) -> null).thenRunAsync(() -> {
-            for (TileImage image : completed) retiring.baked(image);
-            for (TileKey key : pending) {
-                if (looks == null) break;
-                try {
-                    var saved = retiring.readPixels(key);
-                    retiring.baked(TileBaker.bakePaired(key, source, looks, null, fog, saved, overlays, context));
-                } catch (RuntimeException failure) {
-                    Diorama.LOGGER.error("Couldn't finish pending map tile {}", key, failure);
-                }
-            }
-        }, SAVER).thenCompose(ignored -> retiring.closeAsync());
-        // Stamps vouch for pixels on disk, so they're written only once the tiles are.
-        var stamps = this.stamps;
-        Path stampsFile = this.folder == null ? null : this.stampsFile();
-        if (stamps != null && stampsFile != null) save = save.thenRun(() -> stamps.save(stampsFile));
-        retiring.finishing(save);
-        SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
-        SAVES.add(save);
-        save.exceptionally(failure -> { Diorama.LOGGER.error("Couldn't finish saving map", failure); return null; });
-    }
+	/** Freeze ownership now; finish all pending surface work away from the client thread. */
+	private void retireStore(TileStore retiring, boolean saveVisibility) {
+		Set<TileKey> pending = new HashSet<>(this.unsaved.keySet());
+		for (TileKey key : this.inFlight) if (!key.isCave() && key.lod() == 0) pending.add(key);
+		// Dirty visible tiles also need a final full bake, even if their debounce hasn't elapsed.
+		for (TileKey key : this.dirty.keySet()) if (!key.isCave() && key.lod() == 0) pending.add(key);
+		if (saveVisibility && this.folder != null) this.seen.saveFinalAsync(this.folder.resolve("seen.bin"));
+		var visibility = this.seen.snapshot();
+		var source = new dev.diorama.bake.FrozenChunks(this.chunks, this.minY, this.maxY, this.topY, this.roof, visibility, this.nightLighting);
+		var context = this.bakeContext;
+		BlockLooks looks = BlockLooks.get();
+		boolean fog = this.roofless() ? this.storeName.contains("-fog") : this.fogOfWar;
+		Overlays overlays = this.overlays;
+		java.util.List<TileImage> completed = new ArrayList<>();
+		if (this.appearanceRefresh != null) for (TileImage image : this.appearanceRefresh.images.values())
+			if (!image.key().isCave() && image.key().lod() == 0) completed.add(image);
+		BakeScheduler.Result result;
+		while ((result = this.scheduler.poll()) != null) {
+			this.inFlight.remove(result.key());
+			this.backgroundBakes.remove(result.key());
+			if (result.failure() == null && !result.key().isCave() && result.key().lod() == 0
+				&& result.generation() == this.generation(result.key())) completed.add(result.image());
+		}
+		var save = java.util.concurrent.CompletableFuture.allOf(this.scheduler.idle(), this.seen.saving()).handle((ignored, failure) -> null).thenRunAsync(() -> {
+			for (TileImage image : completed) retiring.baked(image);
+			for (TileKey key : pending) {
+				if (looks == null) break;
+				try {
+					var saved = retiring.readPixels(key);
+					retiring.baked(TileBaker.bakePaired(key, source, looks, null, fog, saved, overlays, context));
+				} catch (RuntimeException failure) {
+					Diorama.LOGGER.error("Couldn't finish pending map tile {}", key, failure);
+				}
+			}
+		}, SAVER).thenCompose(ignored -> retiring.closeAsync());
+		// Stamps vouch for pixels on disk, so they're written only once the tiles are.
+		var stamps = this.stamps;
+		Path stampsFile = this.folder == null ? null : this.stampsFile();
+		if (stamps != null && stampsFile != null) save = save.thenRun(() -> stamps.save(stampsFile));
+		retiring.finishing(save);
+		SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
+		SAVES.add(save);
+		save.exceptionally(failure -> { Diorama.LOGGER.error("Couldn't finish saving map", failure); return null; });
+	}
 
-    /** Only the application shutdown hook waits; changing worlds and settings stays asynchronous. */
-    public static void awaitSaves() {
-        for (var save : SAVES) {
-            try { save.join(); }
-            catch (java.util.concurrent.CompletionException failure) { Diorama.LOGGER.error("Map save failed", failure); }
-        }
-        SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
-    }
+	/** Only the application shutdown hook waits; changing worlds and settings stays asynchronous. */
+	public static void awaitSaves() {
+		for (var save : SAVES) {
+			try { save.join(); }
+			catch (java.util.concurrent.CompletionException failure) { Diorama.LOGGER.error("Map save failed", failure); }
+		}
+		SAVES.removeIf(java.util.concurrent.CompletableFuture::isDone);
+	}
 
 	public int bakingCount() {
 		return this.inFlight.size();

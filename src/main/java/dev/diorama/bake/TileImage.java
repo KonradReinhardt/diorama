@@ -24,13 +24,13 @@ public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] 
 		return full(key, mips, coverage, info, null);
 	}
 
-    public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
-        return full(key, mips, coverage, info, nightMips, null);
-    }
+	public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
+		return full(key, mips, coverage, info, nightMips, null);
+	}
 
-    public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips, byte @Nullable [] surface) {
-        return new TileImage(key, mips, coverage, info, List.of(), 0, nightMips, surface);
-    }
+	public static TileImage full(TileKey key, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips, byte @Nullable [] surface) {
+		return new TileImage(key, mips, coverage, info, List.of(), 0, nightMips, surface);
+	}
 
 	public static TileImage partial(TileKey key, List<Patch> patches) {
 		return new TileImage(key, null, null, null, patches, 0, null, null);
@@ -47,12 +47,12 @@ public record TileImage(TileKey key, int @Nullable [][] mips, byte @Nullable [] 
 
 	/** One re-baked block at block coordinates {@code (blockX, blockY)} within the tile. */
 	public record Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips, byte @Nullable [] surface) {
-        public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info) {
-            this(blockX, blockY, mips, coverage, info, null, null);
-        }
+		public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info) {
+			this(blockX, blockY, mips, coverage, info, null, null);
+		}
 
-        public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
-            this(blockX, blockY, mips, coverage, info, nightMips, null);
-        }
+		public Patch(int blockX, int blockY, int[][] mips, byte[] coverage, byte @Nullable [] info, int @Nullable [][] nightMips) {
+			this(blockX, blockY, mips, coverage, info, nightMips, null);
+		}
 	}
 }

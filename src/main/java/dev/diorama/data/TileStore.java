@@ -66,9 +66,9 @@ public final class TileStore {
 	});
 
 	private static final ConcurrentHashMap<Path, CompletableFuture<Void>> CLOSING = new ConcurrentHashMap<>();
-    private final CompletableFuture<Void> previousClose;
-    private CompletableFuture<Void> closeFuture;
-    private final Path folder;
+	private final CompletableFuture<Void> previousClose;
+	private CompletableFuture<Void> closeFuture;
+	private final Path folder;
 	/** Set by close(), whose flush writes everything; writes still scheduled then do nothing. */
 	private volatile boolean closed;
 	/**
@@ -101,7 +101,7 @@ public final class TileStore {
 
 	public TileStore(Path folder) {
 		this.folder = folder.toAbsolutePath().normalize();
-        this.previousClose = CLOSING.getOrDefault(this.folder, CompletableFuture.completedFuture(null));
+		this.previousClose = CLOSING.getOrDefault(this.folder, CompletableFuture.completedFuture(null));
 	}
 
 	public void onOverviewChanged(Consumer<TileKey> listener) {
@@ -113,14 +113,14 @@ public final class TileStore {
 		int size = Projection.TILE_PIXELS;
 		int half = size / 2;
 		int[] out = null;
-        int[] night = new int[size * size];
-        boolean hasNight = false;
-        byte[] surface = null;
+		int[] night = new int[size * size];
+		boolean hasNight = false;
+		byte[] surface = null;
 		for (int dy = 0; dy < 2; dy++) {
 			for (int dx = 0; dx < 2; dx++) {
 				TileKey child = new TileKey(key.layer(), key.tileU() * 2 + dx, key.tileV() * 2 + dy, key.lod() - 1);
 				TilePixels childPixels = this.readPixels(child);
-                int[] c = childPixels == null ? null : childPixels.day();
+				int[] c = childPixels == null ? null : childPixels.day();
 				if (c == null) {
 					continue;
 				}
@@ -132,15 +132,15 @@ public final class TileStore {
 					for (int x = 0; x < half; x++) {
 						int i = row + 2 * x;
 						out[(dy * half + y) * size + dx * half + x] = Mipmaps.average(c[i], c[i + 1], c[i + size], c[i + size + 1]);
-                        if (childPixels.night() != null) {
-                            int[] n = childPixels.night(); hasNight = true;
-                            night[(dy * half + y) * size + dx * half + x] = Mipmaps.average(n[i], n[i + 1], n[i + size], n[i + size + 1]);
-                        }
-                        byte[] s = childPixels.surface();
-                        if (s != null) {
-                            if (surface == null) surface = new byte[size * size];
-                            surface[(dy * half + y) * size + dx * half + x] = Surface.shrink(s[i], s[i + 1], s[i + size], s[i + size + 1]);
-                        }
+						if (childPixels.night() != null) {
+							int[] n = childPixels.night(); hasNight = true;
+							night[(dy * half + y) * size + dx * half + x] = Mipmaps.average(n[i], n[i + 1], n[i + size], n[i + size + 1]);
+						}
+						byte[] s = childPixels.surface();
+						if (s != null) {
+							if (surface == null) surface = new byte[size * size];
+							surface[(dy * half + y) * size + dx * half + x] = Surface.shrink(s[i], s[i + 1], s[i + size], s[i + size + 1]);
+						}
 					}
 				}
 			}
@@ -180,15 +180,15 @@ public final class TileStore {
 
 	/** Flush pending detail revisions, then derive their overview hierarchy on the writer. */
 	public CompletableFuture<Void> refreshOverviews() {
-        return this.previousClose.thenRunAsync(() -> {
-            Set<TileKey> keys;
-            synchronized (this) { keys = new HashSet<>(this.handedOver.keySet()); }
-            for (TileKey key : keys) this.merge(key);
-            synchronized (this) { keys = new HashSet<>(this.unwritten.keySet()); }
-            for (TileKey key : keys) this.write(key);
-            this.rebuildOverviews();
-        }, WRITER);
-    }
+		return this.previousClose.thenRunAsync(() -> {
+			Set<TileKey> keys;
+			synchronized (this) { keys = new HashSet<>(this.handedOver.keySet()); }
+			for (TileKey key : keys) this.merge(key);
+			synchronized (this) { keys = new HashSet<>(this.unwritten.keySet()); }
+			for (TileKey key : keys) this.write(key);
+			this.rebuildOverviews();
+		}, WRITER);
+	}
 
 	/** Rebuilds and writes every out-of-date overview tile, one level at a time. Writer thread. */
 	private void rebuildOverviews() {
@@ -248,12 +248,12 @@ public final class TileStore {
 	 * far. Not on the render thread: it can wait for the disk. Don't modify the array.
 	 */
 	public int @Nullable [] read(TileKey key) {
-        TilePixels pixels = readPixels(key);
-        return pixels == null ? null : pixels.day();
-    }
+		TilePixels pixels = readPixels(key);
+		return pixels == null ? null : pixels.day();
+	}
 
-    public @Nullable TilePixels readPixels(TileKey key) {
-        this.previousClose.join();
+	public @Nullable TilePixels readPixels(TileKey key) {
+		this.previousClose.join();
 		synchronized (this.io) {
 			this.merge(key);
 			return this.saved(key);
@@ -316,47 +316,47 @@ public final class TileStore {
 				images = List.copyOf(queue);
 			}
 			int size = Projection.TILE_PIXELS;
-            TilePixels saved = this.saved(key);
-            boolean changed = false;
-            for (TileImage image : images) {
-                int[] day;
-                int[] night;
-                byte[] surface;
-                if (image.isFull()) {
-                    day = image.mips()[0].clone();
-                    night = image.nightMips() == null ? null : image.nightMips()[0].clone();
-                    surface = image.surface() == null ? null : image.surface().clone();
-                } else {
-                    day = saved == null ? new int[size * size] : saved.day().clone();
-                    boolean hasNight = saved != null && saved.night() != null || image.patches().stream().anyMatch(p -> p.nightMips() != null);
-                    night = !hasNight ? null : saved != null && saved.night() != null ? saved.night().clone() : new int[size * size];
-                    boolean hasSurface = saved != null && saved.surface() != null || image.patches().stream().anyMatch(p -> p.surface() != null);
-                    surface = !hasSurface ? null : saved != null && saved.surface() != null ? saved.surface().clone() : new byte[size * size];
-                    for (TileImage.Patch patch : image.patches()) {
-                        int edge = TileImage.BLOCK;
-                        for (int y = 0; y < edge; y++) {
-                            int offset = (patch.blockY() * edge + y) * size + patch.blockX() * edge;
-                            System.arraycopy(patch.mips()[0], y * edge, day, offset, edge);
-                            if (night != null) {
-                                if (patch.nightMips() == null) java.util.Arrays.fill(night, offset, offset + edge, 0);
-                                else System.arraycopy(patch.nightMips()[0], y * edge, night, offset, edge);
-                            }
-                            if (surface != null) {
-                                if (patch.surface() == null) java.util.Arrays.fill(surface, offset, offset + edge, (byte) 0);
-                                else System.arraycopy(patch.surface(), y * edge, surface, offset, edge);
-                            }
-                        }
-                    }
-                }
-                TilePixels pixels = new TilePixels(day, night, surface);
-                if (saved != null ? saved.samePixels(pixels) : nothingKnown(day)) {
-                    count(true);
-                    continue;
-                }
-                count(false);
-                saved = pixels;
-                changed = true;
-            }
+			TilePixels saved = this.saved(key);
+			boolean changed = false;
+			for (TileImage image : images) {
+				int[] day;
+				int[] night;
+				byte[] surface;
+				if (image.isFull()) {
+					day = image.mips()[0].clone();
+					night = image.nightMips() == null ? null : image.nightMips()[0].clone();
+					surface = image.surface() == null ? null : image.surface().clone();
+				} else {
+					day = saved == null ? new int[size * size] : saved.day().clone();
+					boolean hasNight = saved != null && saved.night() != null || image.patches().stream().anyMatch(p -> p.nightMips() != null);
+					night = !hasNight ? null : saved != null && saved.night() != null ? saved.night().clone() : new int[size * size];
+					boolean hasSurface = saved != null && saved.surface() != null || image.patches().stream().anyMatch(p -> p.surface() != null);
+					surface = !hasSurface ? null : saved != null && saved.surface() != null ? saved.surface().clone() : new byte[size * size];
+					for (TileImage.Patch patch : image.patches()) {
+						int edge = TileImage.BLOCK;
+						for (int y = 0; y < edge; y++) {
+							int offset = (patch.blockY() * edge + y) * size + patch.blockX() * edge;
+							System.arraycopy(patch.mips()[0], y * edge, day, offset, edge);
+							if (night != null) {
+								if (patch.nightMips() == null) java.util.Arrays.fill(night, offset, offset + edge, 0);
+								else System.arraycopy(patch.nightMips()[0], y * edge, night, offset, edge);
+							}
+							if (surface != null) {
+								if (patch.surface() == null) java.util.Arrays.fill(surface, offset, offset + edge, (byte) 0);
+								else System.arraycopy(patch.surface(), y * edge, surface, offset, edge);
+							}
+						}
+					}
+				}
+				TilePixels pixels = new TilePixels(day, night, surface);
+				if (saved != null ? saved.samePixels(pixels) : nothingKnown(day)) {
+					count(true);
+					continue;
+				}
+				count(false);
+				saved = pixels;
+				changed = true;
+			}
 			synchronized (this) {
 				// Bakes handed over meanwhile stay queued; their own merge comes next.
 				ArrayDeque<TileImage> queue = this.handedOver.get(key);
@@ -379,19 +379,19 @@ public final class TileStore {
 	}
 
 	/** Writes everything pending and waits until it's on disk. Call when leaving the world. */
-    /** Publish retirement before a view can reopen this folder, including its pending bake time. */
-    public void finishing(java.util.concurrent.CompletableFuture<Void> completion) {
-        CLOSING.put(this.folder, completion);
-        completion.whenComplete((ignored, failure) -> CLOSING.remove(this.folder, completion));
-    }
+	/** Publish retirement before a view can reopen this folder, including its pending bake time. */
+	public void finishing(java.util.concurrent.CompletableFuture<Void> completion) {
+		CLOSING.put(this.folder, completion);
+		completion.whenComplete((ignored, failure) -> CLOSING.remove(this.folder, completion));
+	}
 
-    public void close() { this.closeAsync().join(); }
+	public void close() { this.closeAsync().join(); }
 
-    /** Schedule the final flush without blocking a render or client thread. */
-    public synchronized CompletableFuture<Void> closeAsync() {
-        if (this.closeFuture != null) return this.closeFuture;
-        this.closed = true;
-        this.closeFuture = this.previousClose.thenRunAsync(() -> {
+	/** Schedule the final flush without blocking a render or client thread. */
+	public synchronized CompletableFuture<Void> closeAsync() {
+		if (this.closeFuture != null) return this.closeFuture;
+		this.closed = true;
+		this.closeFuture = this.previousClose.thenRunAsync(() -> {
 			Set<TileKey> handed;
 			synchronized (this) {
 				handed = new HashSet<>(this.handedOver.keySet());
@@ -416,11 +416,11 @@ public final class TileStore {
 				this.unwritten.clear();
 				this.cache.clear();
 			}
-        }, WRITER);
-        CLOSING.put(this.folder, this.closeFuture);
-        this.closeFuture.whenComplete((ignored, failure) -> CLOSING.remove(this.folder, this.closeFuture));
-        return this.closeFuture;
-    }
+		}, WRITER);
+		CLOSING.put(this.folder, this.closeFuture);
+		this.closeFuture.whenComplete((ignored, failure) -> CLOSING.remove(this.folder, this.closeFuture));
+		return this.closeFuture;
+	}
 
 	/** Writes the newest pixels of a tile. Writer thread. */
 	void write(TileKey key) {
@@ -517,16 +517,16 @@ public final class TileStore {
 	}
 
 	private @Nullable TilePixels load(TileKey key) {
-        Path bundle = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
-        if (Files.isRegularFile(bundle)) {
-            try {
-                TilePixels pixels = TileBundle.read(bundle, key);
-                byte[] surface = SurfaceFile.read(this.surfaceFile(key), key, pixels.day());
-                if (surface == null && key.lod() > 0) this.overviewWithoutSurface(key);
-                return pixels.withSurface(surface);
-            }
-            catch (IOException | RuntimeException failure) { Diorama.LOGGER.warn("Invalid lighting bundle {}; trying legacy map", bundle, failure); }
-        }
+		Path bundle = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
+		if (Files.isRegularFile(bundle)) {
+			try {
+				TilePixels pixels = TileBundle.read(bundle, key);
+				byte[] surface = SurfaceFile.read(this.surfaceFile(key), key, pixels.day());
+				if (surface == null && key.lod() > 0) this.overviewWithoutSurface(key);
+				return pixels.withSurface(surface);
+			}
+			catch (IOException | RuntimeException failure) { Diorama.LOGGER.warn("Invalid lighting bundle {}; trying legacy map", bundle, failure); }
+		}
 		Path file = this.file(key);
 		if (!Files.isRegularFile(file)) {
 			return null;
@@ -553,22 +553,22 @@ public final class TileStore {
 	 * Writes to a temporary file and moves it over the old one, so a crash can't leave half a tile.
 	 * Returns whether it worked.
 	 */
-    private boolean store(TileKey key, TilePixels pixels) {
-        Path file = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
-        try {
-            this.writtenBytes.addAndGet(TileBundle.write(file, key, pixels));
-            // After the bundle, which a crash between the two leaves without a matching plane.
-            SurfaceFile.write(this.surfaceFile(key), key, pixels.day(), pixels.surface());
-            this.writes.incrementAndGet();
-            return true;
-        } catch (IOException | RuntimeException e) {
-            Diorama.LOGGER.error("Couldn't save tile {}", file, e);
-            return false;
-        }
-    }
+	private boolean store(TileKey key, TilePixels pixels) {
+		Path file = this.file(key).resolveSibling(key.tileU() + "_" + key.tileV() + ".omt2");
+		try {
+			this.writtenBytes.addAndGet(TileBundle.write(file, key, pixels));
+			// After the bundle, which a crash between the two leaves without a matching plane.
+			SurfaceFile.write(this.surfaceFile(key), key, pixels.day(), pixels.surface());
+			this.writes.incrementAndGet();
+			return true;
+		} catch (IOException | RuntimeException e) {
+			Diorama.LOGGER.error("Couldn't save tile {}", file, e);
+			return false;
+		}
+	}
 
-    private final java.util.concurrent.atomic.AtomicLong writes = new java.util.concurrent.atomic.AtomicLong();
-    private final java.util.concurrent.atomic.AtomicLong writtenBytes = new java.util.concurrent.atomic.AtomicLong();
-    public long writes() { return this.writes.get(); }
-    public long writtenBytes() { return this.writtenBytes.get(); }
+	private final java.util.concurrent.atomic.AtomicLong writes = new java.util.concurrent.atomic.AtomicLong();
+	private final java.util.concurrent.atomic.AtomicLong writtenBytes = new java.util.concurrent.atomic.AtomicLong();
+	public long writes() { return this.writes.get(); }
+	public long writtenBytes() { return this.writtenBytes.get(); }
 }
