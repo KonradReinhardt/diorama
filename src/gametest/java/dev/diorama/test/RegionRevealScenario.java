@@ -80,10 +80,42 @@ final class RegionRevealScenario {
 			context.waitFor(mc -> coverage(mc, expected) > 0, 1200);
 			BookMapScenario.settle(context);
 			context.takeScreenshot("reveal-03-revealed");
+			zoomOutAndBack(context);
 		} finally {
 			context.runOnClient(mc -> RegionReveal.cancel());
 			context.setScreen(() -> null);
 		}
+	}
+
+	/**
+	 * Zooms out with the wheel past the overviews and back in, three times. Switching between
+	 * overviews and detailed tiles, and tiles of either reloading, shows ground already known: the
+	 * fog must never ease away from it again.
+	 */
+	private static void zoomOutAndBack(ClientGameTestContext context) {
+		int easing = 0;
+		for (int cycle = 0; cycle < 3; cycle++) {
+			for (int direction : new int[] {-1, 1}) {
+				for (int step = 0; step < 8; step++) {
+					context.runOnClient(mc -> {
+						MapScreen screen = (MapScreen) mc.gui.screen();
+						screen.mouseScrolled(screen.width / 2.0, screen.height / 2.0, 0, direction);
+					});
+					for (int tick = 0; tick < 3; tick++) {
+						context.waitTick();
+						easing += context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).fogEasing()) ? 1 : 0;
+					}
+				}
+				for (int tick = 0; tick < 60; tick++) {
+					context.waitTick();
+					easing += context.computeOnClient(mc -> ((MapScreen) mc.gui.screen()).fogEasing()) ? 1 : 0;
+				}
+			}
+		}
+		if (easing > 0) {
+			throw new AssertionError("The fog eased away from known ground for " + easing + " ticks while zooming out and back");
+		}
+		context.takeScreenshot("reveal-04-after-zooming");
 	}
 
 	/** The map point {u, v} at the middle of the region, on the player's height. */

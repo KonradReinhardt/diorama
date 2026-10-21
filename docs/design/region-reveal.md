@@ -56,5 +56,7 @@ chunks exist in the world from then on.
 
 `DIORAMA_TESTS=reveal-region DIORAMA_RENDER_DISTANCE=8 ./gradlew --configure-on-demand :26.3:runClientGameTest`
 picks a 4 × 4 chunk region 48 chunks from the player through the right-click menu, checks the
-region started is the one clicked, and that its middle goes from unexplored to covered.
-Screenshots: `reveal-01-unexplored`, `reveal-02-picking`, `reveal-03-revealed`.
+region started is the one clicked, and that its middle goes from unexplored to covered. It then
+zooms out past the overviews and back three times and checks the fog never eases away from the
+region again. Screenshots: `reveal-01-unexplored`, `reveal-02-picking`, `reveal-03-revealed`,
+`reveal-04-after-zooming`.

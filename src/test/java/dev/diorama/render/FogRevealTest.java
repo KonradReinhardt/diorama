@@ -52,4 +52,35 @@ class FogRevealTest {
         assertEquals(0, newLayer[0]);
         assertEquals(255, newLayer[2] >>> 24);
     }
+
+    @Test void coverageBorrowedFromAnotherLevelOfDetailIsNoDiscovery() {
+        // Zooming switches between overviews and detailed tiles; a tile of the new level that isn't
+        // loaded yet borrows the other level's coverage. Neither it nor its arrival may ease in.
+        var reveal = new FogReveal(2);
+        reveal.update(new int[4], 0, 0, 2, false, 0);
+        int[] borrowed = {200, 0, 0, 0};
+        reveal.update(borrowed, new boolean[]{true, false, false, false}, 0, 0, 2, false, 1);
+        assertEquals(200, borrowed[0] >>> 24);
+        assertEquals(1, reveal.progress(2));
+        int[] arrived = {255, 0, 0, 0};
+        reveal.update(arrived, new boolean[4], 0, 0, 2, false, 3);
+        assertEquals(255, arrived[0] >>> 24, "the tile replacing borrowed coverage eased in");
+        // Real discoveries next to it still ease.
+        int[] discovered = {255, 255, 0, 0};
+        reveal.update(discovered, new boolean[4], 0, 0, 2, false, 4);
+        assertEquals(255, discovered[0] >>> 24);
+        assertEquals(0, discovered[1] >>> 24);
+    }
+
+    @Test void borrowedCoverageFollowsAPanAndDropsAtOnce() {
+        var reveal = new FogReveal(2);
+        reveal.update(new int[]{0, 255, 0, 0}, new boolean[]{false, true, false, false}, 0, 0, 2, false, 0);
+        // Panned one texel: what was borrowed is now texel 0, and its tile arrived.
+        int[] moved = {255, 0, 0, 0};
+        reveal.update(moved, 2, 0, 2, false, 1);
+        assertEquals(255, moved[0] >>> 24);
+        int[] concealed = new int[4];
+        reveal.update(concealed, new boolean[]{true, true, true, true}, 2, 0, 2, false, 2);
+        assertArrayEquals(new int[4], concealed);
+    }
 }

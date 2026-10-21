@@ -143,6 +143,13 @@ uma transição ease-out cúbica de 420 ms nos dois estilos, com 64 passos de op
 Cada chegada de tile reinicia o relógio a partir do estado exibido; com smoothstep
 (velocidade zero no início) os reinícios frequentes ao abrir o mapa congelavam a
 revelação, enquanto a ease-out continua avançando a cada reinício.
+Trocar de nível de detalhe (overviews ↔ tiles detalhados) reinicia o `FogReveal` sem animar, como
+trocar o texel da máscara: os dois mudam em zooms diferentes, e animar a troca revelava a fronteira de
+novo a cada zoom. Enquanto um tile do nível mostrado não está na GPU, a máscara empresta a cobertura
+e o terreno dos tiles residentes de outro nível (o de baixo primeiro, depois os overviews acima); nem
+o empréstimo nem o tile que o substitui são animados. Só tiles residentes emprestam, então cobertura
+descartada pelo mapa (fog of war, outra pasta) não volta. Afastado (overviews), nada é animado: a
+cobertura ali só muda quando um overview é refeito a partir de tiles já mostrados de perto.
 Só aumentos de cobertura são animados. Reduções escondem imediatamente os dados;
 alterar camada, mundo ou direção descarta o histórico anterior. Mover o viewport
 reprojeta o histórico existente, evitando reiniciar a descoberta durante um pan.

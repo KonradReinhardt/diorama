@@ -102,7 +102,9 @@ screen change (together) and until the whole revision is done; see `docs/design/
 
 Reopening a map is fast: tiles no loaded chunk can change are shown straight from disk
 without tracing, up to three tile uploads per GUI frame, and new discoveries ease in
-with a 420 ms ease-out that keeps receding while tiles stream in.
+with a 420 ms ease-out that keeps receding while tiles stream in. Zooming between overviews and
+detailed tiles never eases known ground in again: a tile still loading borrows the other level's
+coverage and terrain, and zoomed out nothing eases.
 
 The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> MapTile/TileStore`.
 `BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.

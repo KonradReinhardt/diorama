@@ -37,6 +37,13 @@ public final class MapViewport {
 	private int[] maskPixels = new int[MASK * MASK];
     private FogReveal reveal = new FogReveal(MASK);
     private int[] columnTiles = new int[MASK], columnCells = new int[MASK];
+    private double[] columnU = new double[MASK];
+    /** Texels whose coverage was borrowed from another level of detail at the last build; see {@link #borrowedCoverage}. */
+    private boolean[] lent = new boolean[MASK * MASK];
+    /** The tile {@link #borrowedCoverage} last looked up at each level, so a texel row doesn't look it up again. */
+    private final @Nullable MapTile[] lendTile = new MapTile[TileKey.MAX_LOD + 1];
+    private final long[] lendKey = new long[TileKey.MAX_LOD + 1];
+    private final boolean[] lendLooked = new boolean[TileKey.MAX_LOD + 1];
 	private int[] notKnownCounts = new int[(MASK + 1) * (MASK + 1)];
 	private int[] notUnknownCounts = new int[(MASK + 1) * (MASK + 1)];
 	private float[] blurA = new float[MASK * MASK];
@@ -67,6 +74,8 @@ public final class MapViewport {
 		this.reveal = new FogReveal(size);
 		this.columnTiles = new int[size];
 		this.columnCells = new int[size];
+		this.columnU = new double[size];
+		this.lent = new boolean[size * size];
 		this.notKnownCounts = new int[(size + 1) * (size + 1)];
 		this.notUnknownCounts = new int[(size + 1) * (size + 1)];
 		this.blurA = new float[size * size];
@@ -242,6 +251,7 @@ public final class MapViewport {
 		Sampling sampling = magnified(view, lod) ? Sampling.TILE_CRISP : Sampling.TILE_SMOOTH;
 		MapCanvas canvas = MapCanvas.of(graphics);
 		float size = (float) (units * view.zoom());
+		boolean lends = view.layer() == TileKey.SURFACE && level.hasOverviews();
 		for (int tu = tu0 - 1; tu <= tu1 + 1; tu++) {
 			for (int tv = tv0 - 1; tv <= tv1 + 1; tv++) {
 				TileKey key = new TileKey(view.layer(), tu, tv, lod);
@@ -250,18 +260,62 @@ public final class MapViewport {
 				boolean visible = tu >= tu0 && tu <= tu1 && tv >= tv0 && tv <= tv1;
 				// Tiles just outside the view bake too, so panning finds them ready.
 				MapTile tile = level.want(key, Math.sqrt(du * du + dv * dv) + (visible ? 0 : MapLevel.OFF_SCREEN));
-				if (!visible || tile == null || tile.texture() == null) {
+				if (!visible) {
 					continue;
 				}
 				float sx = view.screenX(tu * units);
 				float sy = view.screenY(tv * units);
-                if (Settings.get().antiqueTint() && !dev.diorama.EnvironmentLighting.supported()) {
-                    // Reuse the common fog pipeline as a sepia tile pass on older day-only backends.
-                    canvas.antiqueTile(tile.texture(), FogTextures.parchment(), sampling, sx, sy, sx + size, sy + size);
-                } else canvas.lit(tile.texture(), tile.nightTexture(), sampling, sx, sy, sx + size, sy + size, lighting);
+				if (tile == null || tile.texture() == null) {
+					if (lends) {
+						this.drawBorrowed(canvas, level, tu, tv, lod, sampling, sx, sy, size, lighting);
+					}
+					continue;
+				}
+				drawTile(canvas, tile, sampling, sx, sy, sx + size, sy + size, 0, 0, 1, 1, lighting);
 				MapTexture overlay = overlays == 0 || lod > 0 ? null : tile.overlay(overlays);
 				if (overlay != null) {
 					canvas.rect(overlay, sampling, sx, sy, sx + size, sy + size, 0, 0, 1, 1, -1);
+				}
+			}
+		}
+	}
+
+	private static void drawTile(MapCanvas canvas, MapTile tile, Sampling sampling, float x0, float y0, float x1, float y1,
+		float u0, float v0, float u1, float v1, dev.diorama.EnvironmentLighting lighting) {
+		if (Settings.get().antiqueTint() && !dev.diorama.EnvironmentLighting.supported()) {
+			// Reuse the common fog pipeline as a sepia tile pass on older day-only backends.
+			canvas.antiqueTile(tile.texture(), FogTextures.parchment(), sampling, x0, y0, x1, y1, u0, v0, u1, v1);
+		} else canvas.lit(tile.texture(), tile.nightTexture(), sampling, x0, y0, x1, y1, u0, v0, u1, v1, lighting);
+	}
+
+	/**
+	 * A surface tile of this level that isn't on the GPU yet, drawn from the other levels that are,
+	 * as the fog mask borrows their coverage ({@link #borrowedCoverage}): its part of the nearest
+	 * overview above, then the tiles of the level below over it. Switching levels then never shows a
+	 * hole that fills in, nor fog that lifts again.
+	 */
+	private static void drawBorrowed(MapCanvas canvas, MapLevel level, int tu, int tv, int lod, Sampling sampling,
+		float sx, float sy, float size, dev.diorama.EnvironmentLighting lighting) {
+		for (int up = lod + 1; up <= TileKey.MAX_LOD; up++) {
+			int shift = up - lod;
+			MapTile parent = level.peek(new TileKey(TileKey.SURFACE, tu >> shift, tv >> shift, up));
+			if (parent != null && parent.texture() != null) {
+				float part = 1F / (1 << shift);
+				float u0 = (tu - (tu >> shift << shift)) * part, v0 = (tv - (tv >> shift << shift)) * part;
+				drawTile(canvas, parent, sampling, sx, sy, sx + size, sy + size, u0, v0, u0 + part, v0 + part, lighting);
+				break;
+			}
+		}
+		if (lod == 0) {
+			return;
+		}
+		float half = size / 2;
+		for (int dx = 0; dx < 2; dx++) {
+			for (int dy = 0; dy < 2; dy++) {
+				MapTile child = level.peek(new TileKey(TileKey.SURFACE, tu * 2 + dx, tv * 2 + dy, lod - 1));
+				if (child != null && child.texture() != null) {
+					float x = sx + dx * half, y = sy + dy * half;
+					drawTile(canvas, child, sampling, x, y, x + half, y + half, 0, 0, 1, 1, lighting);
 				}
 			}
 		}
@@ -390,8 +444,10 @@ public final class MapViewport {
         maskBuilds++;
 		boolean reset = this.maskLevel.get() != level || this.maskInputs == null || this.maskInputs.layer() != view.layer() || this.maskInputs.direction() != Projection.direction()
 			// A finer or coarser mask draws known ground in more or less detail; that isn't a
-			// discovery, and easing it in made every zoom step flicker along the frontier.
-			|| this.maskInputs.texel() != texel;
+			// discovery, and easing it in made every zoom step flicker along the frontier. Nor is
+			// another level of detail, whose coverage cells are coarser or finer: the two change at
+			// different zooms, and easing the switch revealed the frontier again on every zoom.
+			|| this.maskInputs.texel() != texel || this.maskInputs.lod() != lod;
 		this.maskInputs = inputs;
 		this.maskLevel = new WeakReference<>(level);
 		double units = (double) Projection.TILE_UNITS * (1 << lod);
@@ -401,8 +457,11 @@ public final class MapViewport {
 		// cell under the texel's centre and soften the rest.
 		int cellsAcross = antique ? (int) Math.max(1, Math.round(texel / cellUnits)) : 1;
 		int cellStep = Math.max(1, cellsAcross / 8);
+        java.util.Arrays.fill(this.lendLooked, false);
+        boolean lends = surface && level.hasOverviews();
         for (int i = 0; i < size; i++) {
             double u = originU + (antique ? i * texel + Math.min(texel, cellUnits) / 2 : (i + .5) * texel);
+            this.columnU[i] = u;
             int tu = (int)Math.floor(u / units);
             this.columnTiles[i] = tu;
             this.columnCells[i] = Math.min(Projection.COVERAGE_CELLS - 1, (int)((u - tu * units) / cellUnits));
@@ -423,7 +482,13 @@ public final class MapViewport {
 				}
 				float known = 0;
 				float any = 0;
-				if (tile != null && tile.hasCoverage()) {
+				// A tile of this level still loading shows what the other levels' tiles know there.
+				float borrowed = tile == null && lends ? this.borrowedCoverage(level, lod, this.columnU[i], v) : -1;
+				this.lent[j * size + i] = borrowed >= 0;
+				if (borrowed >= 0) {
+					known = borrowed;
+					any = borrowed;
+				} else if (tile != null && tile.hasCoverage()) {
 					int cellX = this.columnCells[i];
 					known = tile.coverage(cellX, cellY);
 					any = known;
@@ -448,7 +513,9 @@ public final class MapViewport {
 			// Explored or not: the outline is drawn where the shader's smooth field crosses between.
 			for (int i = 0; i < size * size; i++) this.maskPixels[i] = 0xFF000000 | ((this.maskPixels[i] & 0xFF) >= 230 ? 0xFF : 0);
 		}
-        this.reveal.update(this.maskPixels, originU, originV, texel, reset, now);
+        // Zoomed out, coverage only changes as overviews are rebuilt from tiles saved seconds
+        // before, already shown up close: easing it would reveal the same ground twice.
+        this.reveal.update(this.maskPixels, this.lent, originU, originV, texel, reset || lod > 0, now);
         this.settleFlags = !antique && this.reveal.progress(now) < 1;
         if (antique) {
             int[] carto = this.cartography(originU, originV, texel, preview);
@@ -467,6 +534,41 @@ public final class MapViewport {
 	private static final int ALL_EXPLORED = 8 << 8, NONE_EXPLORED = 16 << 8;
 	/** Coverage-only changes rebuild the mask at most this often. */
 	private static final long MASK_REBUILD_NANOS = 40_000_000L;
+
+	/**
+	 * The surface coverage at a map point from the tiles of other levels of detail on the GPU, for a
+	 * tile of level {@code lod} that isn't: the level below first, which draws it in more detail,
+	 * then the overviews above. -1 when none of them is there. Only tiles the map holds count, so
+	 * coverage the map drops (fog of war, another store) is never borrowed back.
+	 */
+	private float borrowedCoverage(MapLevel level, int lod, double u, double v) {
+		for (int other = lod - 1; other <= TileKey.MAX_LOD; other = other == lod - 1 ? lod + 1 : other + 1) {
+			if (other < 0) {
+				continue;
+			}
+			double units = (double) Projection.TILE_UNITS * (1 << other);
+			int tu = (int) Math.floor(u / units);
+			int tv = (int) Math.floor(v / units);
+			long key = (long) tu << 32 | (tv & 0xFFFFFFFFL);
+			if (!this.lendLooked[other] || this.lendKey[other] != key) {
+				this.lendTile[other] = level.peek(new TileKey(TileKey.SURFACE, tu, tv, other));
+				this.lendKey[other] = key;
+				this.lendLooked[other] = true;
+			}
+			MapTile tile = this.lendTile[other];
+			if (tile == null) {
+				continue;
+			}
+			if (!tile.hasCoverage()) {
+				return 0;
+			}
+			double cell = units / Projection.COVERAGE_CELLS;
+			int cx = Math.min(Projection.COVERAGE_CELLS - 1, (int) ((u - tu * units) / cell));
+			int cy = Math.min(Projection.COVERAGE_CELLS - 1, (int) ((v - tv * units) / cell));
+			return tile.coverage(cx, cy);
+		}
+		return -1;
+	}
 	private long lastMaskBuild;
 
 	/**
@@ -678,6 +780,11 @@ public final class MapViewport {
 
 	private static int index(int line, int k, boolean horizontal, int size) {
 		return horizontal ? line * size + k : k * size + line;
+	}
+
+	/** Whether the fog is easing away from newly discovered ground now. For tests. */
+	public boolean easingFog() {
+		return this.reveal.progress(System.nanoTime()) < 1;
 	}
 
 	public void close() {

@@ -534,6 +534,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 	}
 
+	/** For tests: whether the map's fog is easing away from ground it just discovered. */
+	public boolean fogEasing() {
+		return this.viewport.easingFog();
+	}
+
 	/** For tests: whether the other corner of a region to reveal is being picked. */
 	public boolean pickingReveal() {
 		return this.revealCorner != null;
