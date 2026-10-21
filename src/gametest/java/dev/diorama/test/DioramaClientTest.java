@@ -145,6 +145,7 @@ public class DioramaClientTest implements FabricClientGameTest {
             if (tests.contains("settings-refresh")) SettingsRefreshScenario.run(context);
             //? if >=26.3 {
             if (tests.contains("whole-map-refresh")) WholeMapRefreshScenario.run(context, world);
+            if (tests.contains("reveal-region")) RegionRevealScenario.run(context, world);
             //?}
 			if (tests.contains("settings")) {
 				settings(context, world);
