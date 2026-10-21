@@ -31,6 +31,8 @@ final class BookPages {
 		flow.heading(Component.translatable(render.key()));
 		flow.slots(pictures(render, true), THUMB_SLOT_W, THUMB_SLOT_H);
 		valueLine(flow, render);
+		// The look is baked into the tiles, so they are traced again; the view goes first.
+		flow.paragraph(Component.translatable("diorama.book.look.render_hint"));
 		Entry fog = entry("fog_style");
 		flow.heading(Component.translatable(fog.key()));
 		flow.slots(pictures(fog, false), THUMB_SLOT_W, THUMB_SLOT_H);

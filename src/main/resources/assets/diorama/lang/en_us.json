@@ -158,6 +158,7 @@
 	"diorama.book.surface": "Surface",
 	"diorama.book.caves": "Caves",
 	"diorama.book.slice": "Cave slice",
+	"diorama.book.look.render_hint": "Redrawing the map can take a few seconds.",
 	"diorama.book.layers.hint": "On the map, C switches between the surface and the caves, and Page Up and Page Down move the slice.",
 	"diorama.book.radar.about": "The radar",
 	"diorama.book.radar.hint": "The radar marks players and creatures near you on the minimap and on this map, within the height range above and below you.",

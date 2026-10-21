@@ -158,6 +158,7 @@
 	"diorama.book.surface": "Superfície",
 	"diorama.book.caves": "Cavernas",
 	"diorama.book.slice": "Fatia da caverna",
+	"diorama.book.look.render_hint": "Redesenhar o mapa pode levar alguns segundos.",
 	"diorama.book.layers.hint": "No mapa, C alterna entre superfície e cavernas, e Page Up e Page Down movem a fatia.",
 	"diorama.book.radar.about": "O radar",
 	"diorama.book.radar.hint": "O radar marca jogadores e criaturas perto de você no minimapa e neste mapa, dentro do alcance de altura acima e abaixo de você.",
