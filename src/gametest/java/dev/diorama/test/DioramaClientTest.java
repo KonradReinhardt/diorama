@@ -133,6 +133,7 @@ public class DioramaClientTest implements FabricClientGameTest {
             if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
             if (tests.contains("clouds")) MapCloudsScenario.run(context, world);
             if (tests.contains("coast")) CoastScenario.run(context, world);
+            if (tests.contains("regions")) RegionsScenario.run(context, world);
 			if (tests.contains("styles")) {
 				styleTour(context, world);
 			}

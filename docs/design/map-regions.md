@@ -1,6 +1,8 @@
 # Map regions — plan
 
-Status: plan written on 2026-10-21. Nothing implemented yet.
+Status: plan written on 2026-10-21. Steps 1–3 implemented the same day on the `feature/map-regions`
+branch; the "How it turned out" section at the end records where they departed from the plan.
+Steps 4–8 are still to do.
 
 ## Goal
 
@@ -273,3 +275,39 @@ Steps 1–3 give a usable feature in the Plain look; 5 and 6 carry most of the i
   the vertex cap keeps hand-drawn ones small.
 - Multiplayer: client-side only, nothing sent to servers, per server folder like waypoints. Sharing
   regions (a file export or a chat link) is not planned.
+
+## How it turned out (steps 1–3)
+
+- Classes: `region/MapRegion`, `region/Ring`, `region/RegionGeometry` (bounds, even-odd area and
+  inside test, polylabel, Douglas–Peucker on the half-block grid, scanline fill, `fromMap`),
+  `region/RegionJson`, `region/RegionStore` (with the undo/redo history), `region/RegionTool` (the
+  lasso and polygon strokes, pure), `render/RegionMask`, `shaders/core/regions.fsh`,
+  `MapEffect.REGIONS`/`DioramaPipelines.REGIONS`, and `ui/RegionMode` (the mode, its toolbar and
+  the stroke preview). `WaypointJson` now shares its UUID and banner adapters.
+- No `DistanceField`: the mask measures each texel's distance to the projected outline exactly
+  (segment by segment, in pieces no longer than the 8-texel band it cares about), instead of a
+  distance transform over the raster. The shader reads it smoothed between texels, so a region's
+  outer edge falls between texels and its line stays smooth at every zoom; where two regions meet
+  the line follows the texels. `CoastMask` is unchanged.
+- Mask texel: green holds the signed distance (eighths of a texel around 128), red the dye, fill,
+  highlight and inside bits, blue a tag per region. Texels just outside a region carry its dye and
+  tag, so the smoothed edge has a colour on both sides. Regions are filled biggest first.
+- The border is the art pixel inside a region with a 4-neighbour art pixel in another region or
+  none (one GUI pixel, or a block zoomed in, as the fog). The pass over the fog draws those lines
+  alone at 55%, everywhere; over explored land it lies on the same line drawn below.
+- Before 1.21.6 a plain texture (fills, edges solid at texel resolution) is drawn as a quad with
+  linear sampling.
+- Saving is immediate after each operation, as waypoints do; no debounce was needed.
+- Heights: a stroke point takes the ground's height only where its coverage cell is explored and
+  `MapPick` finds ground; otherwise the nearest known point's along the stroke, else the player's.
+- Entry points until the book has its ribbon (step 4): "Draw a region" on the right-click card,
+  and an unbound key binding (opens the map with the tools on, or toggles them). The toolbar sits
+  on a parchment strip at the bottom centre: lasso (lead), polygon (tripwire hook), eraser (brush),
+  the 16 dyes, the fill, undo/redo (the book's arrows) and Done. Keys 1–3 pick the tools, Enter
+  closes a polygon, Backspace removes its last corner, Escape lets the stroke go, then leaves the
+  mode. Opening the book or a cave slice leaves the mode. New regions are named "Region N".
+- Settings: `mapRegions` (Layers page) and `minimapRegions` (minimap settings) for now; they move
+  to the Regions ribbon's Options in step 4.
+- Tests: `RegionGeometryTest`, `RegionStoreTest`, `RegionToolTest` (JUnit) and
+  `DIORAMA_TESTS=regions` (captures `regions-zoom-*`, `regions-lasso-*`, `regions-polygon-*`,
+  `regions-eraser-pointing`, `regions-erased`, `regions-minimap`).
