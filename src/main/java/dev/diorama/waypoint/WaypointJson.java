@@ -18,21 +18,26 @@ import org.jspecify.annotations.Nullable;
  * versions of the mod ignore:
  * <pre>"banner": {"base": "black", "layers": [{"pattern": "minecraft:skull", "color": "white"}]}</pre>
  */
-final class WaypointJson {
+public final class WaypointJson {
+	/** Ids as their usual text. Shared with the regions file. */
+	public static final TypeAdapter<UUID> UUIDS = new TypeAdapter<UUID>() {
+		@Override
+		public void write(JsonWriter out, UUID value) throws IOException {
+			out.value(value.toString());
+		}
+
+		@Override
+		public UUID read(JsonReader in) throws IOException {
+			return UUID.fromString(in.nextString());
+		}
+	};
+	/** Banners as described above. Shared with the regions file. */
+	public static final TypeAdapter<BannerDesign> BANNERS = new BannerAdapter().nullSafe();
+
 	static final Gson GSON = new GsonBuilder()
 		.setPrettyPrinting()
-		.registerTypeAdapter(UUID.class, new TypeAdapter<UUID>() {
-			@Override
-			public void write(JsonWriter out, UUID value) throws IOException {
-				out.value(value.toString());
-			}
-
-			@Override
-			public UUID read(JsonReader in) throws IOException {
-				return UUID.fromString(in.nextString());
-			}
-		})
-		.registerTypeAdapter(BannerDesign.class, new BannerAdapter().nullSafe())
+		.registerTypeAdapter(UUID.class, UUIDS)
+		.registerTypeAdapter(BannerDesign.class, BANNERS)
 		.create();
 
 	private WaypointJson() {
