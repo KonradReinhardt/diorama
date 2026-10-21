@@ -250,7 +250,7 @@ final class BookMapScenario {
 		}
 	}
 
-	private static MapBook book(net.minecraft.client.Minecraft mc) {
+	static MapBook book(net.minecraft.client.Minecraft mc) {
 		return ((MapScreen) mc.gui.screen()).book();
 	}
 
@@ -295,7 +295,7 @@ final class BookMapScenario {
 	}
 
 	/** Clicks the page widget whose name is {@code label}. */
-	private static void clickWidget(ClientGameTestContext context, String label) {
+	static void clickWidget(ClientGameTestContext context, String label) {
 		clickWidget(context, label, true);
 	}
 
@@ -352,7 +352,7 @@ final class BookMapScenario {
 		});
 	}
 
-	private static void settle(ClientGameTestContext context) {
+	static void settle(ClientGameTestContext context) {
 		context.waitTicks(20);
 		int quiet = 0;
 		for (int i = 0; i < 1200 && quiet < 30; i++) {

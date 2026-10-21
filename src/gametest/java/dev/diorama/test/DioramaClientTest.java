@@ -109,6 +109,7 @@ public class DioramaClientTest implements FabricClientGameTest {
             if (tests.contains("painted")) PaintedStyleScenario.run(context, world);
             if (tests.contains("banner-waypoints")) BannerWaypointsScenario.run(context, world);
             if (tests.contains("book-map")) BookMapScenario.run(context, world);
+            if (tests.contains("style-swap")) StyleSwapScenario.run(context, world);
             if (tests.contains("day-night")) DayNightScenario.run(context, world);
             if (tests.contains("directions")) CardinalDirectionScenario.run(context, world);
 			if (tests.contains("styles")) {

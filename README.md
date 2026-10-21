@@ -92,6 +92,9 @@ appearance until revisited; their original geometry and lighting cannot be recov
 `DIORAMA_TESTS=whole-map-refresh` forgets the loaded snapshots, changes the look and checks the
 redraw from saved chunks reveals nothing new.
 
+`DIORAMA_TESTS=style-swap` times a render style picked in the map's book until the tiles on
+screen change (together) and until the whole revision is done; see `docs/design/painted-style.md`.
+
 Reopening a map is fast: tiles no loaded chunk can change are shown straight from disk
 without tracing, up to three tile uploads per GUI frame, and new discoveries ease in
 with a 420 ms ease-out that keeps receding while tiles stream in.

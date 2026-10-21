@@ -67,7 +67,8 @@ Recebe o patch rastreado com 12 px de borda e devolve só o miolo:
   cobertura nem revela terreno (`keepsEveryAlphaSoCoverageNeverGrows`).
 - O alcance extra (12 px, três blocos) fica dentro das margens já usadas por `TileInvalidation`
   (a sombra e a oclusão de céu já pedem bem mais), então edições redesenham tudo o que afetam.
-- Trocar de estilo preserva exploração e tiles residentes (cenário `settings-refresh`).
+- Trocar de estilo preserva exploração e tiles residentes (cenário `settings-refresh`), e os tiles
+  da tela mudam juntos (cenário `style-swap`; ver "Troca de estilo").
 - Simples e Contornos não usam nada do acabamento pintado; os três estilos compartilham a grade e o
   contorno geométrico.
 
@@ -89,6 +90,48 @@ pixel), 4 vizinhos e consultas de tabela. Medido num tile inteiro de 512² com d
 melhor de 8, nesta máquina): ~31 ms, contra ~0,2–0,34 s de bake médio por tile nos logs do teste de
 cliente com a grade. As tabelas de pincel, aguada e grão são geradas uma vez na carga da classe
 (256², 128², 128²).
+
+## Troca de estilo
+
+Como o estilo vem do bake e os tiles salvos guardam só RGB, trocar de estilo (ou de sombreamento
+de profundidade) re-rastreia os tiles residentes. Antes o refresh de aparência esperava *todos* os
+residentes e trocava tudo num único quadro; com dezenas ou centenas de tiles e ~0,2–0,3 s por tile
+por baker, o clique no livro levava segundos para aparecer. Agora a troca é **viewport-first**
+(`AppearanceRefresh.swappable`, `MapLevel.swapStaged`):
+
+- A fila já começa pelos tiles que as vistas desenham. Eles trocam **juntos, no mesmo quadro**,
+  assim que todos estiverem prontos: a tela nunca mostra metade num estilo e metade no outro.
+- Os residentes que nenhuma vista desenha (inclusive o anel pré-carregado fora da borda,
+  `MapLevel.OFF_SCREEN`) trocam conforme chegam, até 4 por quadro; ninguém os vê mudar.
+- Overviews continuam atrás da barreira do writer e trocam juntos por último, depois de todos os
+  tiles detalhados.
+- Antes de cada troca, geração e frescor de terreno/luz são conferidos de novo; um resultado velho
+  volta para a fila e segura o grupo da tela. Depois de trocado, o tile segue o caminho comum
+  (edições sobem direto) e não é rastreado de novo pela revisão. `appearance.bin` é carimbado na
+  troca, como antes no commit único.
+- Bakes que ainda estavam na fila quando a geração mudou (um estilo novo) pulam o trabalho ao
+  começar, em vez de rastrear um tile inteiro que seria descartado.
+
+Medição (`DIORAMA_TESTS=style-swap`, Fabric 26.3, janela 1600×900, nesta máquina, 20/10/2026): o
+cenário visita quatro lugares a 400 blocos para deixar 57 tiles residentes (109 MiB), volta ao ponto
+fixo (8,5; 8,5), abre o livro em Aparência e clica no estilo. Tempo do clique até os 4 tiles da tela
+mudarem, e até o fim da revisão inteira:
+
+| Troca | Antes (tela = revisão inteira) | Depois: tela | Depois: revisão inteira |
+| --- | --- | --- | --- |
+| Contornos → Pintado | 4421 ms | **875 ms** | 4223 ms |
+| Pintado → Contornos | 3148 ms | **448 ms** | 3150 ms |
+
+O cenário falha se só parte dos tiles da tela mudar, se um tile da tela perder textura ou
+cobertura, ou se o clique não escolher o estilo. O trabalho total não muda; só a ordem em que ele
+fica visível. Com mais tiles na tela (zoom afastado, janela maior) o tempo cresce com eles, não com
+os residentes.
+
+Manter as texturas do estilo anterior para voltar instantaneamente foi avaliado e **não** adotado:
+cada tile residente custa ~1,9 MiB de GPU (dia + noite), a volta já fica abaixo de meio segundo, e
+o cache não pouparia nenhum bake: o disco e `appearance.bin` ainda precisariam dos pixels no estilo
+escolhido, então os mesmos tiles seriam rastreados de qualquer jeito, agora com texturas fora do
+orçamento de 256 MiB.
 
 ## Limites
 

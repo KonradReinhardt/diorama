@@ -99,6 +99,7 @@ public final class MapLevel implements ChunkSource {
     public long appearanceVersion() { return appearanceVersion; }
     public boolean refreshingAppearance() { return appearanceRefresh != null; }
     public long submittedJobs() { return this.submittedJobs; }
+    public int residentTiles() { return this.tiles.size(); }
     public long gpuBytes() { return this.tiles.values().stream().mapToLong(MapTile::gpuBytes).sum(); }
     public long tileWrites() { return this.store == null ? 0 : this.store.writes(); }
     public long writtenBytes() { return this.store == null ? 0 : this.store.writtenBytes(); }
