@@ -5,7 +5,7 @@ plugins {
 
 version = "${property("mod_version")}+${sc.current.version}"
 group = property("mod_group") as String
-base.archivesName = "diorama"
+base.archivesName = "mappa-mundi"
 
 loom {
 	mods {

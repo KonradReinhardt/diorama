@@ -84,7 +84,7 @@ public final class Settings {
 	 * Replaces the old outlines toggle.
 	 */
 	public enum RenderStyle { PLAIN, OUTLINED, PAINTED, PAINTED_NO_OUTLINES }
-	public RenderStyle renderStyle = RenderStyle.PAINTED_NO_OUTLINES;
+	public RenderStyle renderStyle = RenderStyle.PAINTED;
 	/** The old outlines toggle, read once from an older config to pick {@link #renderStyle}; never written. */
 	private @org.jspecify.annotations.Nullable Boolean outlines;
 	/** Antique map draws its unknown ground in sepia inks; the colour variant tints biomes. */
@@ -125,10 +125,10 @@ public final class Settings {
 	 * them from the sun. The map itself is the same either way, one ray per pixel on the block grid.
 	 */
 	public Quality quality = Quality.FANCY;
-	public EnvironmentLighting.Mode lighting = EnvironmentLighting.Mode.DAY;
+	public EnvironmentLighting.Mode lighting = EnvironmentLighting.Mode.WORLD;
 	public boolean chunkGrid = false;
 	public boolean slimeChunks = false;
-	public SpawnSpots spawnSpots = SpawnSpots.ALWAYS_DARK;
+	public SpawnSpots spawnSpots = SpawnSpots.OFF;
 
 	public enum Quality {
 		FANCY,
@@ -217,15 +217,15 @@ public final class Settings {
 			settings.renderStyle = settings.outlines ? RenderStyle.OUTLINED : RenderStyle.PLAIN;
 			settings.outlines = null;
 		}
-		if (settings.renderStyle == null) settings.renderStyle = RenderStyle.PAINTED_NO_OUTLINES;
-		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.DAY;
+		if (settings.renderStyle == null) settings.renderStyle = RenderStyle.PAINTED;
+		if (settings.lighting == null) settings.lighting = EnvironmentLighting.Mode.WORLD;
 		if (settings.fogStyle == null) settings.fogStyle = FogStyle.CLOUDS;
 		if (settings.mapDirection == null) settings.mapDirection = MapDirection.NORTH;
 		if (settings.minimapSize == null) {
 			settings.minimapSize = Size.MEDIUM;
 		}
 		if (settings.spawnSpots == null) {
-			settings.spawnSpots = SpawnSpots.ALWAYS_DARK;
+			settings.spawnSpots = SpawnSpots.OFF;
 		}
 		if (settings.minimapCorner == null) {
 			settings.minimapCorner = Corner.TOP_RIGHT;

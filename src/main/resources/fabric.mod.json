@@ -2,15 +2,16 @@
 	"schemaVersion": 1,
 	"id": "diorama",
 	"version": "${version}",
-	"name": "Diorama",
-	"description": "A ray-traced, angled voxel map and minimap.",
+	"name": "Mappa Mundi",
+	"description": "A ray-traced, angled voxel map and minimap, painted like an old atlas: a book of settings over the world map, banner waypoints, drifting clouds, coasts and day and night. A fork of Diorama by Dara Adedeji.",
 	"authors": [
+		"Konrad Reinhardt",
 		"Dara Adedeji"
 	],
 	"contact": {
-		"homepage": "https://modrinth.com/mod/diorama-map",
-		"sources": "https://github.com/SunkenInTime/minecraft-orthogonal-map",
-		"issues": "https://github.com/SunkenInTime/minecraft-orthogonal-map/issues"
+		"homepage": "https://github.com/KonradReinhardt/diorama",
+		"sources": "https://github.com/KonradReinhardt/diorama",
+		"issues": "https://github.com/KonradReinhardt/diorama/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/diorama/icon.png",

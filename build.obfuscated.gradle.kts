@@ -7,7 +7,7 @@ plugins {
 // 1.21.8 can tell the 1.21.6 jar is theirs.
 version = "${property("mod_version")}+${findProperty("minecraft_label") ?: sc.current.version}"
 group = property("mod_group") as String
-base.archivesName = "diorama"
+base.archivesName = "mappa-mundi"
 
 loom {
 	mods {

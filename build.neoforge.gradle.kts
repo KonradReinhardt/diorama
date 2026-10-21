@@ -4,11 +4,11 @@ plugins {
 	id("net.neoforged.moddev")
 }
 
-// The loader goes in the version, so the jar's name (diorama-0.2.1+neoforge-1.21.1.jar) tells
+// The loader goes in the version, so the jar's name (mappa-mundi-1.0.0+neoforge-1.21.1.jar) tells
 // a player it is the NeoForge one, and for which Minecraft versions.
 version = "${property("mod_version")}+neoforge-${findProperty("minecraft_label") ?: sc.current.version}"
 group = property("mod_group") as String
-base.archivesName = "diorama"
+base.archivesName = "mappa-mundi"
 
 // The client game tests run on src/gameshim, the test-only stand-in for Fabric's client game test
 // API that the Fabric jars before 1.21.4 use too. Neither goes in the release jar.

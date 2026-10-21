@@ -1,8 +1,10 @@
 <img src="assets/icon.png" width="64" height="64" alt="">
 
-# Diorama
+# Mappa Mundi
 
-Diorama is a client-side mod for Minecraft, on Fabric for 1.21 to 26.3 and on NeoForge for 1.21 to 26.3, that draws your world as an angled voxel map, like a baked diorama, in a minimap and a fullscreen map you can pan and zoom.
+Mappa Mundi is a fork of [Diorama](https://github.com/SunkenInTime/diorama) by Dara Adedeji, painted like an old atlas: a book of settings over the world map, banner waypoints, painted and antique map styles, drifting clouds, coasts and day and night. Inside, the mod keeps Diorama's id and folders (`diorama`), so maps, waypoints and settings saved by Diorama carry over; install one or the other, not both.
+
+It is a client-side mod for Minecraft, on Fabric for 1.21 to 26.3 and on NeoForge for 1.21 to 26.3, that draws your world as an angled voxel map, like a baked diorama, in a minimap and a fullscreen map you can pan and zoom.
 
 The map is ray traced from the chunk data your client already has. The camera looks down at 45°, north by default (East, South and West are in the settings), so you see block tops and the faces turned toward you. Each pixel's ray walks the real blocks, so overhangs, bridges and tree canopies come out right. A second ray toward a low sun casts long shadows, more rays measure how much sky each spot can see so the ground under trees and overhangs darkens, and higher ground is a little brighter, so hills still read as hills when you zoom far out. Water gets darker with depth. A "Depth shading" setting turns all of this down to a flatter look. Tiles bake on background threads and only re-bake the parts an edit can affect.
 
@@ -123,7 +125,7 @@ Mod Menu is optional. To verify its entrypoint in development, use
 `DIORAMA_TESTS=modmenu ./gradlew --configure-on-demand -PdioramaModMenuTest=true :26.3:runClientGameTest`.
 
 The fork's branch and validation workflow is documented in [CONTRIBUTING.md](CONTRIBUTING.md), and what each release changed in [CHANGELOG.md](CHANGELOG.md).
-Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lighting, choose World time, Always day (the default from 1.0.0) or Always night. The minimap and world map share this setting. Surface tiles blend their saved day/night colors as the world's sky and weather change; changing the clock does not rebuild terrain or reset exploration. Torches, lanterns and lava illuminate nearby mapped surfaces at night.
+Day/night lighting is available on **Fabric 26.3**. In Settings → Look → Lighting, choose World time (default), Always day or Always night. The minimap and world map share this setting. Surface tiles blend their saved day/night colors as the world's sky and weather change; changing the clock does not rebuild terrain or reset exploration. Torches, lanterns and lava illuminate nearby mapped surfaces at night.
 
 Caves, roofed dimensions and the End retain their existing lighting. Decorative shadows keep a fixed direction; colored-light mods are not modeled. Earlier Fabric versions and NeoForge retain daytime surface rendering until their GPU backends are ported.
 
@@ -138,8 +140,8 @@ Existing `.omt` maps remain intact. New `.omt2` bundles store both endpoints tog
 ## Painted render style
 
 Settings → Look → Render replaces the old outlines toggle with **Plain**, **Outlined** (the
-previous look), **Painted** and **Painted, no outlines** (the same paint without any
-ink lines, the default from 1.0.0). Painted turns explored terrain into a hand-painted
+previous look), **Painted** (the default from 1.0.0) and **Painted, no outlines** (the same paint without any
+ink lines). Painted turns explored terrain into a hand-painted
 fantasy map: block textures and soft shading melt into flat areas of paint, light is cel shaded
 (one sunlit colour, one bluish shadow colour), soft sepia ink lines follow edges and colour
 boundaries, coasts are inked with a line of foam, water steps from pale shallows to deep teal
