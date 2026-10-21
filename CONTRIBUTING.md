@@ -1,6 +1,6 @@
 # Contributing to this fork
 
-`origin` is https://github.com/KonradReinhardt/diorama and `upstream` is https://github.com/SunkenInTime/diorama.
+`origin` is https://github.com/KonradReinhardt/mappa-mundi and `upstream` is https://github.com/SunkenInTime/diorama.
 
 ## Branches
 
