@@ -20,6 +20,20 @@ class CoastMaskTest {
 		assertEquals(5, out[7 * size + 7], 1e-5);
 	}
 
+	@Test void exactAlongAnyDirection() {
+		// A chamfer distance would be off by several percent along these; the transform isn't.
+		int size = 64;
+		byte[] kind = new byte[size * size];
+		kind[0] = LAND;
+		float[] out = new float[size * size];
+		CoastMask.distances(kind, out, size, 0.5F, 0.75F);
+		for (int y = 0; y < size; y += 7) {
+			for (int x = 0; x < size; x += 5) {
+				assertEquals(Math.hypot(x * 0.5, y * 0.75), out[y * size + x], 1e-3, x + "," + y);
+			}
+		}
+	}
+
 	@Test void unknownGroundIsNoShore() {
 		int size = 4;
 		byte[] kind = {WATER, WATER, UNKNOWN, UNKNOWN, WATER, WATER, UNKNOWN, UNKNOWN, WATER, WATER, WATER, WATER, WATER, WATER, WATER, LAND};
@@ -27,5 +41,15 @@ class CoastMaskTest {
 		CoastMask.distances(kind, out, size, 1, 1);
 		assertTrue(out[0] > 3, "the nearest land is the far corner, not the unknown beside it");
 		assertEquals(1, out[3 * size + 2], 1e-5);
+	}
+
+	@Test void openSeaByTheOceanNotInARiver() {
+		// By an ocean, open water lies OPEN blocks out, so the two distances add up to about that.
+		assertEquals(1, CoastMask.openSea(2, CoastMask.OPEN - 2), 1e-9);
+		assertEquals(1, CoastMask.openSea(0, CoastMask.OPEN), 1e-9);
+		// A river ten blocks wide has no open water anywhere near.
+		assertEquals(0, CoastMask.openSea(3, 60), 1e-9);
+		double lake = CoastMask.openSea(3, CoastMask.OPEN + 4);
+		assertTrue(lake > 0 && lake < 1, "a lake with a small open middle gets some waves");
 	}
 }

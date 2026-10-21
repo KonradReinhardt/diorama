@@ -57,6 +57,7 @@ public final class MapTile {
 			this.surfaceKnown = null;
 			this.surfaceWater = null;
 			this.surfaceShore = null;
+			this.shoreLevels = null;
 			if (dev.diorama.bake.Surface.anyKnown(image.surface())) {
 				this.patchSurface(image.surface(), 0, 0, Projection.TILE_PIXELS);
 			}
@@ -145,6 +146,57 @@ public final class MapTile {
 				else this.surfaceShore[i >> 6] &= ~bit;
 			}
 		}
+		this.shoreLevels = null;
+	}
+
+	/**
+	 * Whether any pixel in the square of 2^level pixels holding pixel (px, py) is shore, for level 0
+	 * to {@link #SHORE_LEVELS}. A coast mask texel that spans several pixels asks this, so a shore a
+	 * pixel thin is never missed, whatever the zoom.
+	 */
+	public boolean shoreWithin(int px, int py, int level) {
+		if (this.surfaceShore == null) {
+			return false;
+		}
+		if (level == 0) {
+			return (this.surface(px, py) & dev.diorama.bake.Surface.SHORE) != 0;
+		}
+		if (this.shoreLevels == null) {
+			this.shoreLevels = shoreLevels(this.surfaceShore);
+		}
+		int edge = Projection.TILE_PIXELS >> level;
+		int i = (py >> level) * edge + (px >> level);
+		return (this.shoreLevels[level][i >> 6] & 1L << (i & 63)) != 0;
+	}
+
+	/** The coarsest level {@link #shoreWithin} answers for: squares of 32 pixels, 8 map units. */
+	public static final int SHORE_LEVELS = 5;
+	/** Bitsets of shore squares by level, worked out when first asked; see {@link #shoreWithin}. */
+	private long @Nullable [][] shoreLevels;
+
+	private static long[][] shoreLevels(long[] shore) {
+		long[][] levels = new long[SHORE_LEVELS + 1][];
+		levels[0] = shore;
+		for (int level = 1; level <= SHORE_LEVELS; level++) {
+			int below = Projection.TILE_PIXELS >> (level - 1), edge = below / 2;
+			long[] from = levels[level - 1], to = new long[Math.max(1, edge * edge / 64)];
+			for (int y = 0; y < edge; y++) {
+				for (int x = 0; x < edge; x++) {
+					int a = 2 * y * below + 2 * x, b = a + below;
+					boolean any = bit(from, a) || bit(from, a + 1) || bit(from, b) || bit(from, b + 1);
+					if (any) {
+						int i = y * edge + x;
+						to[i >> 6] |= 1L << (i & 63);
+					}
+				}
+			}
+			levels[level] = to;
+		}
+		return levels;
+	}
+
+	private static boolean bit(long[] bits, int i) {
+		return (bits[i >> 6] & 1L << (i & 63)) != 0;
 	}
 
 	/** The {@link dev.diorama.bake.Surface} bits of one pixel; 0 when unknown. */

@@ -72,6 +72,7 @@ final class CoastScenario {
 			look(context, u, v, 4);
 			context.takeScreenshot("coast-4-off");
 			tower(context, world);
+			sea(context, world);
 		} finally {
 			context.runOnClient(mc -> {
 				Settings.get().mapCoast = was[0];
@@ -115,6 +116,56 @@ final class CoastScenario {
 			context.takeScreenshot("coast-tower-off");
 		} finally {
 			server.runCommand("fill " + (x - 13) + " " + (y - 1) + " " + (z - 13) + " " + (x + 13) + " " + (y + 24) + " " + (z + 13) + " air");
+		}
+	}
+
+	/**
+	 * A stretch of open sea high in the air, wide enough for waves, with a sand beach along its east
+	 * side and a small island: captured at four zooms, each twice a second apart, for the waves and
+	 * for lines one art pixel thick at every zoom.
+	 */
+	private static void sea(ClientGameTestContext context, TestSingleplayerContext world) {
+		int[] at = context.computeOnClient(mc -> new int[] {mc.player.getBlockX() - 60, mc.player.getBlockZ() + 10});
+		int x = at[0], z = at[1], y = 150;
+		var server = world.getServer();
+		try {
+			server.runCommand("fill " + (x - 35) + " " + (y - 1) + " " + (z - 35) + " " + (x + 35) + " " + y + " " + (z + 35) + " stone");
+			server.runCommand("fill " + (x - 34) + " " + y + " " + (z - 34) + " " + (x + 34) + " " + y + " " + (z + 34) + " water");
+			server.runCommand("fill " + (x + 18) + " " + y + " " + (z - 34) + " " + (x + 34) + " " + y + " " + (z + 34) + " sand");
+			server.runCommand("fill " + (x + 22) + " " + (y + 1) + " " + (z - 34) + " " + (x + 34) + " " + (y + 1) + " " + (z + 34) + " grass_block");
+			server.runCommand("fill " + (x - 12) + " " + y + " " + (z - 4) + " " + (x - 8) + " " + y + " " + (z + 3) + " sand");
+			context.waitTicks(120);
+			context.runOnClient(mc -> Settings.get().mapCoast = true);
+			double u = Projection.u(x + 12, z), v = Projection.worldV(x + 12, y + 1, z);
+			look(context, u, v, 4);
+			// The beach's edge must be shore: the sand block beside the water, at its own height.
+			double bu = Projection.u(x + 18.5, z + 0.5), bv = Projection.worldV(x + 18.5, y + 1, z + 0.5);
+			String beach = context.computeOnClient(mc -> {
+				var key = new TileKey(TileKey.SURFACE, (int) Math.floor(bu / Projection.TILE_UNITS), (int) Math.floor(bv / Projection.TILE_UNITS));
+				MapTile tile = MapSession.get().map().peek(key);
+				if (tile == null) return "no tile";
+				int px = (int) ((bu - key.minU()) * Projection.PIXELS_PER_UNIT), py = (int) ((bv - key.minV()) * Projection.PIXELS_PER_UNIT);
+				StringBuilder row = new StringBuilder();
+				boolean shore = false;
+				for (int dx = -8; dx <= 8; dx++) {
+					int bits = px + dx < 0 || px + dx >= Projection.TILE_PIXELS ? -1 : tile.surface(px + dx, py);
+					shore |= bits > 0 && (bits & Surface.SHORE) != 0;
+					row.append(bits).append(' ');
+				}
+				return shore ? null : row.toString();
+			});
+			if (beach != null) {
+				throw new AssertionError("No shore across the beach; surface bits: " + beach);
+			}
+			for (double zoom : new double[] {4, 2, 1, 0.5}) {
+				look(context, u, v, zoom);
+				for (int frame = 0; frame < 2; frame++) {
+					context.takeScreenshot("coast-sea-" + zoom + "-" + frame);
+					context.waitTicks(20);
+				}
+			}
+		} finally {
+			server.runCommand("fill " + (x - 35) + " " + (y - 1) + " " + (z - 35) + " " + (x + 35) + " " + (y + 1) + " " + (z + 35) + " air");
 		}
 	}
 
