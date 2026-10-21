@@ -235,9 +235,10 @@ void main() {
     float rush = smoothstep(0.0, 0.06, surge) * (1.0 - smoothstep(0.06, 0.5, surge));
     // Foam is the water's edge itself, one art pixel at every zoom: water with land beside it, in
     // any of the four directions, that is the shore and not land standing over water it hides
-    // (or ground not explored), which lie far from any shore.
-    bool edge = !waterAt(c + vec2(step.x, 0.0)) || !waterAt(c - vec2(step.x, 0.0))
-        || !waterAt(c + vec2(0.0, step.y)) || !waterAt(c - vec2(0.0, step.y));
+    // (or ground not explored), which lie far from any shore. Only the open sea washes foam up;
+    // rivers and ponds keep their ripples alone.
+    bool edge = sea > 0.0 && (!waterAt(c + vec2(step.x, 0.0)) || !waterAt(c - vec2(step.x, 0.0))
+        || !waterAt(c + vec2(0.0, step.y)) || !waterAt(c - vec2(0.0, step.y)));
     bool foam = edge && d < max(2.0 * pixel, 1.0 + texel);
 
     vec3 white = sepia ? vec3(0.97, 0.93, 0.82) : vec3(0.95, 0.98, 1.0);
@@ -245,10 +246,11 @@ void main() {
     vec3 night = mix(vec3(0.30, 0.34, 0.48), vec3(1.0), daylight);
     vec4 color = vec4(0.0);
     if (foam) {
-        // Breathing with the swell, brightest as a wave breaks; up close, broken here and there.
+        // A light wash rather than a line drawn round the land: breathing with the swell, brightest
+        // as a wave breaks; up close, broken here and there.
         float gaps = (0.30 - 0.15 * swell) * (1.0 - 0.6 * waves * rush) * detail;
         if (noise(p + vec2(seconds * 32.0 / 120.0, 0.0), 8.0, 3) >= gaps) {
-            color = vec4(white, max(0.6 + 0.25 * swell, 0.95 * waves * rush));
+            color = vec4(white, sea * max(0.22 + 0.16 * swell, 0.6 * waves * rush));
         }
     }
     if (color.a == 0.0 && waves > 0.0 && phase < ROLL) {

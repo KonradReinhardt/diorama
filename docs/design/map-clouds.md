@@ -44,7 +44,7 @@ Clouds don't cover the map evenly. A weather field anchored to the world (the fo
 over 8192 blocks) decides where they gather: in clear weather a few patches some hundreds of
 blocks across, in rain most of the map (rain comes from `EnvironmentLighting`, so it only counts
 where day and night lighting is supported). Each cloud has a cell of its own, 128 blocks square,
-and fewer than half the cells have one, placed anywhere within 38 blocks of the cell's middle, so
+and about half the cells have one, placed anywhere within 38 blocks of the cell's middle, so
 they are scattered rather than lined up and never crowd each other. Sizes lean small (a radius of
 3.5 to 9.5 blocks, mostly near the low end), and each has its own shape: a tall middle puff, lower
 ones either side at hashed distances and heights, sometimes one in front and a taller one behind.

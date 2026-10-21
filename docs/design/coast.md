@@ -23,7 +23,8 @@ line a set distance from the shore is foreshortened like the blocks are.
 The look holds together at every zoom. Every line is one art pixel thick: the shader samples the
 distance at the next art pixel across and down, and draws a line where it is within half of that
 change, so how many blocks a pixel spans never makes lines thicker or thinner. Foam is the water's
-edge itself, one art pixel wide: a water pixel with a pixel that isn't water beside it, in any of
+edge itself, one art pixel wide, where the water is open sea: a water pixel with a pixel that
+isn't water beside it, in any of
 the four directions, and close to a shore (so not beside land that only hides water, or beside
 unexplored ground). Everything is only drawn on water: a mask texel spanning several blocks says which of its four
 by four parts are water, so foam never covers land. Ripples that would crowd closer than three
@@ -32,10 +33,12 @@ further out as they spread; the breaking of foam into clumps, which would only s
 pixel spans more than a block, fades out, and so do ocean waves once they would be smaller than a
 pixel. Far out the coast is a pixel line of foam with ripples around it.
 
-- **Foam**: a white line one art pixel wide along the water's edge, brightening and fading with
-  the swell every four seconds. Each stretch of coast keeps its own beat (world-anchored noise), so
+- **Foam**, on the open sea only: a light white wash one art pixel wide along the water's edge,
+  translucent so it reads as surf rather than a line drawn round the land, brightening and fading
+  with the swell every four seconds. Each stretch of coast keeps its own beat (world-anchored noise), so
   the swell rolls along the shore. Up close it breaks here and there.
-- **Ripples** on calm water (rivers, ponds, sheltered water): pale dashed lines, 3.5 blocks apart,
+- **Ripples** on calm water (rivers, ponds, sheltered water, which have no foam): pale dashed
+  lines, 3.5 blocks apart,
   rolling toward the shore at 0.7 blocks a second from 11 blocks out, fainter further out.
 - **Ocean waves** on open sea: every 7.5 seconds a wave rises 16 blocks out, a broken white crest
   with the lighter water of its back a pixel seaward, growing as it rolls in. Near the shore it

@@ -174,7 +174,7 @@ float known(vec2 c) {
 float coverAt(vec2 p) {
     vec4 n = textureLod(Sampler1, p / REGION_PERIOD, 0.0);
     float weather = n.g * 0.65 + n.b * 0.35;
-    return smoothstep(0.48 - 0.4 * rain, 0.64 - 0.4 * rain, weather);
+    return smoothstep(0.45 - 0.4 * rain, 0.61 - 0.4 * rain, weather);
 }
 
 // A hash of a cell, repeating every DRIFT blocks across and REGION_PERIOD down.
@@ -196,12 +196,12 @@ vec4 near[NEAR];
 int nearCount;
 
 // Adds the puffs of the cloud in a drifting cell to the near ones, if it could reach u between
-// depths w0 and w1: each the (u, w) of its middle, its height and its radius. Fewer than half the
+// depths w0 and w1: each the (u, w) of its middle, its height and its radius. About half the
 // cells have a cloud, placed anywhere in the cell, most of them small, each of its own shape: a
 // tall middle puff, lower ones either side, sometimes one in front and a taller one behind. A
 // cloud grows from nothing as its cell drifts into cloudy weather and shrinks away as it leaves.
 void addCloud(vec2 cell, float u, float w0, float w1) {
-    if (cellHash(cell, 8u) > 0.42) return;
+    if (cellHash(cell, 8u) > 0.52) return;
     vec2 middle = (cell + 0.5) * CELL + (vec2(cellHash(cell, 1u), cellHash(cell, 2u)) * 2.0 - 1.0) * JITTER;
     float size = cellHash(cell, 4u);
     float r = 3.5 + 6.0 * size * size;
