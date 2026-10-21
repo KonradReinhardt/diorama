@@ -16,7 +16,8 @@ padrões, usando os padrões registrados no jogo (incluindo os de datapacks e mo
 
 - `Waypoint` guarda nome, iniciais, posição, dimensão, `color` (paleta de 16 cores),
   visibilidade e tipo (`MANUAL`, `DEATH`). `WaypointStore` salva tudo em
-  `.minecraft/diorama/<mundo>/waypoints.json` via Gson.
+  `waypoints.json` na pasta do mundo via Gson (`saves/<mundo>/diorama/` no singleplayer,
+  `.minecraft/diorama/<mundo>/` em servidores).
 - `WaypointOverlay` desenha um círculo colorido com as iniciais, e uma seta na borda
   quando o waypoint está fora da vista. O mapa mundi e o minimapa usam o mesmo código.
 - `WaypointEditScreen` edita nome, iniciais e cor. `WaypointHud` desenha no mundo.

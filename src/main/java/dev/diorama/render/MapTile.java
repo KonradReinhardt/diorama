@@ -17,6 +17,20 @@ public final class MapTile {
         return (texture == null ? 0 : plane) + (nightTexture == null ? 0 : plane)
             + (overlay == null ? 0 : TextureMemory.bytes(Projection.TILE_PIXELS, 1));
     }
+
+    /**
+     * Whether night planes go to the GPU. The map always bakes and saves both lighting endpoints,
+     * but drawn only by day (the Day lighting setting, or a backend without night) the night one
+     * would double every tile's memory for nothing. Set by {@link MapLevel#update}, which reloads
+     * the tiles when it changes.
+     */
+    static volatile boolean nightPlanes = true;
+
+    /** What a tile with terrain takes on the GPU at most: its planes, and an overlay if one is drawn. */
+    public static long bytesEach(boolean overlay) {
+        long plane = TextureMemory.bytes(Projection.TILE_PIXELS, Mipmaps.LEVELS);
+        return plane * (nightPlanes ? 2 : 1) + (overlay ? TextureMemory.bytes(Projection.TILE_PIXELS, 1) : 0);
+    }
 	private byte @Nullable [] coverage;
 	/** {@link Overlays} bits per pixel from the bakes that recorded them, or null. */
 	private byte @Nullable [] info;
@@ -41,8 +55,8 @@ public final class MapTile {
 				return;
 			}
 			this.ensureTexture(image);
-            if (this.nightTexture != null && image.nightMips() == null) { this.nightTexture.close(); this.nightTexture = null; }
-            if (image.nightMips() != null && this.nightTexture == null) this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
+            if (this.nightTexture != null && (image.nightMips() == null || !nightPlanes)) { this.nightTexture.close(); this.nightTexture = null; }
+            if (image.nightMips() != null && nightPlanes && this.nightTexture == null) this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
 			int size = Projection.TILE_PIXELS;
 			for (int level = 0; level < Mipmaps.LEVELS; level++) {
 				this.texture.write(level, 0, 0, size >> level, image.mips()[level]);
@@ -75,7 +89,7 @@ public final class MapTile {
 				this.texture.write(level, 0, 0, size >> level, new int[(size >> level) * (size >> level)]);
 			}
 		}
-        if (this.nightTexture == null && image.patches().stream().anyMatch(p -> p.nightMips() != null)) {
+        if (this.nightTexture == null && nightPlanes && image.patches().stream().anyMatch(p -> p.nightMips() != null)) {
             this.nightTexture = MapTexture.create("diorama night", Projection.TILE_PIXELS, Mipmaps.LEVELS);
             for (int level = 0; level < Mipmaps.LEVELS; level++) {
                 int edge = Projection.TILE_PIXELS >> level;

@@ -37,7 +37,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class MapLevel implements ChunkSource {
 	private static final int MAX_CHUNKS = 4096;
-	private static final int MAX_GPU_TILES = 192;
+	private static final int MAX_GPU_TILES = 320;
 	/** A changed tile waits this long for more changes before re-baking... */
 	private static final long QUIET_MS = 350;
 	/** ...but never longer than this. */
@@ -86,6 +86,12 @@ public final class MapLevel implements ChunkSource {
 	/** Goes up whenever a tile's coverage changes or a tile comes or goes; see {@link #coverageVersion()}. */
 	private long coverageVersion;
 	private final Map<TileKey, Dirty> dirty = new HashMap<>();
+	/**
+	 * Detailed surface tiles whose saved pixels hold everything known about them now: nothing
+	 * changed since a full image of them went to the store. One that leaves the GPU comes back
+	 * from disk, instead of tracing a quarter million rays through chunks still in memory.
+	 */
+	private final Set<TileKey> onDisk = new HashSet<>();
 	private final Map<TileKey, Double> wanted = new HashMap<>();
 	private final Set<TileKey> inFlight = new HashSet<>();
 	private final BakeScheduler scheduler = new BakeScheduler(BAKERS);
@@ -350,6 +356,7 @@ public final class MapLevel implements ChunkSource {
 		}
 		this.retireStore(this.store, false);
 		this.store = this.openStore();
+		this.onDisk.clear();
 		this.unsaved.clear();
 		this.emptyOverviews.clear();
 		for (ChunkSnapshot snapshot : this.chunks.values()) {
@@ -361,6 +368,7 @@ public final class MapLevel implements ChunkSource {
 
 	/** Refresh pixels in place; only a different camera requires throwing away their geometry. */
     public void colorsChanged() {
+        this.onDisk.clear();
         var next = dev.diorama.bake.BakeContext.capture();
         boolean reproject = !this.bakeContext.sameProjection(next);
         this.surfaceGeneration++;
@@ -505,6 +513,7 @@ public final class MapLevel implements ChunkSource {
 		for (int tu = tu0; tu <= tu1; tu++) {
 			for (int tv = tv0; tv <= tv1; tv++) {
 				TileKey key = new TileKey(layer, tu, tv);
+				this.onDisk.remove(key);
 				if (layer == TileKey.SURFACE && this.store != null && terrain) {
 					this.unsaved.put(key, now);
 				}
@@ -620,6 +629,14 @@ public final class MapLevel implements ChunkSource {
 	/** Uploads finished bakes and starts new ones. Call regularly on the render thread. */
 	public void update() {
 		this.frame++;
+		boolean night = dev.diorama.EnvironmentLighting.supported() && dev.diorama.Settings.get().lighting != dev.diorama.EnvironmentLighting.Mode.DAY;
+		if (night != MapTile.nightPlanes) {
+			// Tiles on the GPU gain or lose their night plane: load them again, from disk where current.
+			MapTile.nightPlanes = night;
+			for (TileKey key : this.tiles.keySet()) {
+				this.dirty.computeIfAbsent(key, k -> new Dirty(0)).blocks.set(0, key.lod() > 0 ? 1 : 256);
+			}
+		}
 		TileKey changedOverview;
 		while ((changedOverview = this.overviewChanged.poll()) != null) {
 			this.emptyOverviews.remove(changedOverview);
@@ -685,6 +702,7 @@ public final class MapLevel implements ChunkSource {
 				if (this.store != null) {
 					this.store.baked(image);
 					this.persisted(image.key(), complete && image.isFull());
+					this.stored(image);
 				}
 				continue;
 			}
@@ -698,7 +716,7 @@ public final class MapLevel implements ChunkSource {
 					// The tile was evicted while its patch baked.
 					continue;
 				}
-				tile = new MapTile();
+				tile = new MapTile(); tile.lastDrawn = this.frame;
 				this.tiles.put(image.key(), tile);
 			}
 			tile.upload(image);
@@ -708,6 +726,7 @@ public final class MapLevel implements ChunkSource {
 			if (this.store != null && !image.key().isCave() && image.key().lod() == 0) {
 				this.store.baked(image);
 				this.persisted(image.key(), complete && image.isFull());
+				this.stored(image);
 			}
 		}
 		if (this.trimStuck && System.currentTimeMillis() - this.lastTrimMs >= TRIM_RETRY_MS) {
@@ -826,7 +845,7 @@ public final class MapLevel implements ChunkSource {
         long start = System.nanoTime();
         for (TileImage image : refresh.images.values()) {
             MapTile tile = this.tiles.get(image.key());
-            if (tile == null) { tile = new MapTile(); this.tiles.put(image.key(), tile); }
+            if (tile == null) { tile = new MapTile(); tile.lastDrawn = this.frame; this.tiles.put(image.key(), tile); }
             tile.upload(image);
         }
         this.appearanceRefresh = null;
@@ -862,7 +881,7 @@ public final class MapLevel implements ChunkSource {
             boolean complete = refresh.complete.contains(key);
             TileImage image = refresh.swap(key);
             MapTile tile = this.tiles.get(key);
-            if (tile == null) { tile = new MapTile(); this.tiles.put(key, tile); }
+            if (tile == null) { tile = new MapTile(); tile.lastDrawn = this.frame; this.tiles.put(key, tile); }
             tile.upload(image);
             if (onScreen.contains(key)) shown++;
             if (this.store != null && !key.isCave()) {
@@ -914,13 +933,15 @@ public final class MapLevel implements ChunkSource {
         dev.diorama.bake.BakeContext context = dev.diorama.bake.BakeContext.capture();
         ChunkSource fallback = store != null && key.lod() == 0 && this.terrain != null
             && (redraw || this.appearanceRefresh != null) ? this.withSaved : null;
+        // Overlay bits aren't saved, so a tile drawn with them is traced again.
+        boolean current = blocks == null && fallback == null && overlays == null && store != null && this.onDisk.contains(key);
         this.completeBakes.remove(key);
         this.scheduler.submit(key, generation, () -> {
             // Superseded while queued, as by a new look: the result would be dropped anyway.
             if (generation != this.generation(key)) return TileImage.partial(key, List.of());
             long start = System.nanoTime();
             var saved = store == null ? null : store.readPixels(key);
-            if (blocks == null && fallback == null && !this.chunksReach(key)) {
+            if (blocks == null && fallback == null && (current || !this.chunksReach(key))) {
                 // Nothing loaded can change a pixel: the bake would trace a quarter million empty
                 // rays only to keep every saved pixel. Reopening a map is then just a disk read.
                 if (saved == null) this.completeBakes.put(key, generation);
@@ -937,6 +958,14 @@ public final class MapLevel implements ChunkSource {
             return image;
         });
 	}
+
+    /** A full image went to the store: until something changes under it, the store holds the tile as it is. */
+    private void stored(TileImage image) {
+        TileKey key = image.key();
+        if (image.isFull() && key.lod() == 0 && !key.isCave() && !this.dirty.containsKey(key) && !this.unsaved.containsKey(key)) {
+            this.onDisk.add(key);
+        }
+    }
 
     /** A tile's new pixels went to the store; {@code complete} ones show the current look throughout. */
     private void persisted(TileKey key, boolean complete) {
@@ -1091,7 +1120,8 @@ public final class MapLevel implements ChunkSource {
 	}
 
     private void evict() {
-        this.tiles.evict(this.frame, MAX_GPU_TILES, key -> {
+        // Tiles drawn since the last two updates are in use: updates run per tick, frames between them.
+        this.tiles.evict(this.frame, this.frame - 2, MAX_GPU_TILES, key -> {
             if (this.appearanceRefresh != null) this.appearanceRefresh.evicted(key, image -> {
                 if (this.store != null) this.store.baked(image);
             });

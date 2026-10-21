@@ -20,10 +20,12 @@ class LightingFreshnessTest {
         assertFalse(revisions.accepts(key, lightingJob));
     }
 
-    @Test void pairedTexturesStayWithinTheOriginalMemoryBudget() {
+    @Test void aViewOfPairedTexturesFitsTheBudget() {
         long plane = TextureMemory.bytes(512, 6);
         assertEquals(1397760, plane);
-        assertTrue(192 * 2 * plane > TextureMemory.BUDGET);
-        assertTrue(96 * 2 * plane <= TextureMemory.BUDGET);
+        // A 4K screen at GUI scale 2 and the default zoom asks for 80 tiles (ViewBudgetTest): with
+        // both lighting planes and an overlay they still fit a view's share of the budget.
+        assertTrue(MapViewport.VIEW_BUDGET / (2 * plane + TextureMemory.bytes(512, 1)) >= 80);
+        assertTrue(TextureMemory.BUDGET <= 512L * 1024 * 1024);
     }
 }

@@ -19,7 +19,7 @@ Places the map has no data for sit under animated fog. Underground, the map swit
 - **Overlays** on the fullscreen map: chunk grid, slime chunks (singleplayer) and the spots where monsters can spawn.
 - **Settings** for all of the above, in the fullscreen map's book, and in one screen from a key or Mod Menu.
 
-Saved maps and waypoints live in `.minecraft/diorama/`, one folder per world. On a server, each world behind its address gets its own folder, told apart by the world seed the server sends, so a network's lobby and survival worlds, or a map reset, don't mix.
+Saved maps and waypoints of a singleplayer world live inside its save, in `saves/<world>/diorama/`, so they go wherever the save goes; maps an earlier version kept in `.minecraft/diorama/<world>/` move there the first time the world opens (nothing is deleted, and a world that already has both keeps both). Servers' worlds stay in `.minecraft/diorama/`, one folder per world. On a server, each world behind its address gets its own folder, told apart by the world seed the server sends, so a network's lobby and survival worlds, or a map reset, don't mix.
 
 ## Keys
 
@@ -108,6 +108,14 @@ coverage and terrain, and zoomed out nothing eases.
 
 The map pipeline is `MapSession -> ChunkSnapshot -> MapLevel -> TileBaker -> MapTile/TileStore`.
 `BakeScheduler` owns CPU task results; `TileInvalidation` computes dirty regions; `TileCache` owns GPU eviction.
+
+Big maps: the whole map stays on disk, every tile and overview, with no size limit. On the GPU
+(512 MB budget) a view never asks for more tiles than three quarters of it holds: a large screen
+far out over well explored land switches to overview tiles sooner (`MapViewport.lodFor`), and tiles
+drawn in the last two ticks are never evicted, so nothing on screen is dropped and loaded again in a
+loop. A tile that leaves the GPU unchanged since it was saved comes back from disk instead of being
+traced again (unless overlays are on, whose bits aren't saved). With Day lighting, night planes stay
+on disk only, halving each tile's GPU memory.
 Session retirement freezes chunks and settings and finishes unsaved surface tiles asynchronously. Application shutdown waits for those saves.
 
 When Mod Menu is installed on Fabric, Diorama's configure button opens the settings screen with every setting; the world map's book and that screen are built from the same list (`SettingsCatalog`).

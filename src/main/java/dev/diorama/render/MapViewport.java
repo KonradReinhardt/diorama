@@ -174,15 +174,47 @@ public final class MapViewport {
 	 * behind recent changes.
 	 */
 	public static int lodFor(MapLevel level, View view) {
-		if (view.layer() != TileKey.SURFACE || !level.hasOverviews() || view.zoom() >= DETAILED_ZOOM) {
+		if (view.layer() != TileKey.SURFACE || !level.hasOverviews()) {
 			return 0;
 		}
-		double screenPixelsPerUnit = view.zoom() * Minecraft.getInstance().getWindow().getGuiScale();
 		int lod = 0;
-		while (lod < TileKey.MAX_LOD && Projection.PIXELS_PER_UNIT / (double) (2 << lod) >= screenPixelsPerUnit) {
+		if (view.zoom() < DETAILED_ZOOM) {
+			double screenPixelsPerUnit = view.zoom() * Minecraft.getInstance().getWindow().getGuiScale();
+			while (lod < TileKey.MAX_LOD && Projection.PIXELS_PER_UNIT / (double) (2 << lod) >= screenPixelsPerUnit) {
+				lod++;
+			}
+		}
+		Settings settings = Settings.get();
+		boolean overlay = settings.chunkGrid || settings.slimeChunks || settings.spawnSpots != Settings.SpawnSpots.OFF;
+		return fitting(view, lod, VIEW_BUDGET / MapTile.bytesEach(overlay && lod == 0));
+	}
+
+	/**
+	 * Of the views a world map can show, at most this much of the GPU budget goes to one view's
+	 * tiles; the rest is for the minimap and for tiles seen a moment ago.
+	 */
+	static final long VIEW_BUDGET = TextureMemory.BUDGET * 3 / 4;
+
+	/**
+	 * The level of detail at or above {@code lod} whose tiles across the view, with the ring baked
+	 * just past its edges, number at most {@code tiles}: a big screen far out over well explored
+	 * land switches to overviews sooner, instead of asking for more tiles than the GPU keeps. Pure,
+	 * for tests.
+	 */
+	static int fitting(View view, int lod, long tiles) {
+		while (lod < TileKey.MAX_LOD && tilesAround(view, lod) > Math.max(1, tiles)) {
 			lod++;
 		}
 		return lod;
+	}
+
+	/** The tiles of a level of detail {@link #drawTiles} asks for: those in view and a ring around them. */
+	static long tilesAround(View view, int lod) {
+		double units = (double) Projection.TILE_UNITS * (1 << lod);
+		double u0 = view.minU(), v0 = view.minV();
+		long across = (long) Math.floor((u0 + view.width() / view.zoom()) / units) - (long) Math.floor(u0 / units) + 3;
+		long down = (long) Math.floor((v0 + view.height() / view.zoom()) / units) - (long) Math.floor(v0 / units) + 3;
+		return across * down;
 	}
 
 	/** Whether every tile this view shows has baked at least once. Asks for the ones that haven't. */

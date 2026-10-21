@@ -23,7 +23,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Names the world the client is in, so per-world data (waypoints, the saved map) lands in its
- * own folder: the save folder for singleplayer; for multiplayer, the server address and the
+ * own folder: for singleplayer, {@code diorama} inside the world's save, so the map goes wherever
+ * the save goes (see {@link #folder}); for multiplayer, the server address and the
  * server's name for the world, since one address can lead to several worlds (a network's lobby
  * and survival servers, or a map reset).
  *
@@ -228,9 +229,33 @@ public final class WorldKey {
 		silent = false;
 	}
 
-	/** {@code .minecraft/diorama/<world>}. */
-	public static Path folder(String key) {
-		return Minecraft.getInstance().gameDirectory.toPath().resolve(Diorama.MOD_ID).resolve(key);
+	/** The singleplayer key and folder handed out last, so the save is only looked at once per world. */
+	private static @Nullable String savedKey;
+	private static @Nullable Path savedFolder;
+
+	/**
+	 * The folder for a world's map and waypoints. The singleplayer world being played keeps them in
+	 * its own save, {@code saves/<world>/diorama}: copied, zipped or backed up with it, and gone
+	 * with it. What earlier versions kept in {@code .minecraft/diorama/<world>} moves there the
+	 * first time (see {@link dev.diorama.data.MapFolders#adopt}). Servers' worlds, and any other
+	 * key, stay in {@code .minecraft/diorama/<world>}. Client thread.
+	 */
+	public static synchronized Path folder(String key) {
+		Path shared = Minecraft.getInstance().gameDirectory.toPath().resolve(Diorama.MOD_ID).resolve(key);
+		IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
+		if (server == null) {
+			return shared;
+		}
+		if (key.equals(savedKey) && savedFolder != null) {
+			return savedFolder;
+		}
+		Path save = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
+		if (!key.equals(key("singleplayer", save.getFileName().toString()))) {
+			return shared;
+		}
+		savedKey = key;
+		savedFolder = dev.diorama.data.MapFolders.adopt(shared, save.resolve(Diorama.MOD_ID));
+		return savedFolder;
 	}
 
 	/**

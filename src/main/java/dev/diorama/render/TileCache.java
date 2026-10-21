@@ -11,7 +11,14 @@ final class TileCache extends AbstractMap<TileKey, MapTile> {
     @Override public MapTile get(Object key) { return this.entries.get(key); }
     @Override public boolean containsKey(Object key) { return this.entries.containsKey(key); }
     @Override public MapTile remove(Object key) { return this.entries.remove(key); }
-    void evict(long frame, int maxTiles, Consumer<TileKey> evicted) {
+    /**
+     * Frees the least recently drawn tiles once over {@code maxTiles} or the GPU budget, down to
+     * three quarters of either. Tiles a view drew at or after {@code keepSince} stay whatever the
+     * budget says: dropping a tile on screen only makes it load again the next frame, over and over,
+     * with the fog lifting from it each time. Views pick a level of detail whose tiles fit the
+     * budget ({@code MapViewport.lodFor}), so what they draw stays bounded.
+     */
+    void evict(long frame, long keepSince, int maxTiles, Consumer<TileKey> evicted) {
 		int resident = 0;
         long bytes = this.values().stream().mapToLong(MapTile::gpuBytes).sum();
 		for (MapTile tile : this.values()) {
@@ -27,6 +34,9 @@ final class TileCache extends AbstractMap<TileKey, MapTile> {
 		Iterator<Map.Entry<TileKey, MapTile>> it = entries.iterator();
 		while (it.hasNext()) {
 			Map.Entry<TileKey, MapTile> e = it.next();
+			if (e.getValue().lastDrawn >= keepSince) {
+				break;
+			}
 			boolean stale = frame - e.getValue().lastDrawn > 3600;
 			if (resident <= maxTiles * 3 / 4 && bytes <= TextureMemory.BUDGET * 3 / 4 && !stale) {
 				break;
