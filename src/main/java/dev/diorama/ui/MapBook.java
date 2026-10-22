@@ -2,6 +2,7 @@ package dev.diorama.ui;
 
 import dev.diorama.Settings;
 import dev.diorama.SettingsScreen;
+import dev.diorama.region.MapRegion;
 import dev.diorama.render.Spring;
 import dev.diorama.waypoint.Waypoint;
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ public final class MapBook {
 	/** The sections, top to bottom along the ribbons. */
 	public enum Section {
 		BANNERS("diorama.book.banners", 0xFFD8453A, "white_banner"),
+		REGIONS("diorama.book.regions", 0xFF8E5BC4, "feather"),
 		LOOK("diorama.book.look", 0xFF4A86D8, "filled_map"),
 		LAYERS("diorama.book.layers", 0xFF5AAE4C, "lantern"),
 		RADAR("diorama.book.radar", 0xFFE8B83A, "spyglass"),
@@ -66,6 +68,12 @@ public final class MapBook {
 		void shiftSlice(int delta);
 
 		void centerOn(Waypoint waypoint);
+
+		/** Glides the view to a region's middle. */
+		void centerOn(MapRegion region);
+
+		/** Shuts the book and turns the region tools on: the lasso, or the edit tool on {@code region}. */
+		void drawRegions(@Nullable MapRegion region);
 	}
 
 	/** Text on a page; {@code width} above 0 centres it on that band. */
@@ -95,6 +103,7 @@ public final class MapBook {
 
 	private final Host host;
 	private final BannersPage banners = new BannersPage();
+	private final RegionsPage regions = new RegionsPage();
 	private boolean open;
 	private Section section = lastSection;
 	private int tab = lastTab;
@@ -163,9 +172,11 @@ public final class MapBook {
 		if (this.open) {
 			this.page(new BookWidgets.Mark(layout.close().x(), layout.close().y(), BookSprites.CLOSE, BookSprites.CLOSE_HOVER,
 				Component.translatable("diorama.book.close"), this::close));
-			if (this.section == Section.BANNERS) {
-				BookWidgets.Art[] icons = {BANNER_ICON, BookWidgets.item(BookSprites.stack("loom"))};
-				String[] names = {"diorama.book.list", "diorama.book.options"};
+			if (tabbed(this.section)) {
+				BookWidgets.Art[] icons = this.section == Section.BANNERS
+					? new BookWidgets.Art[] {BANNER_ICON, BookWidgets.item(BookSprites.stack("loom"))}
+					: new BookWidgets.Art[] {BookWidgets.item(BookSprites.stack("feather")), BookWidgets.item(BookSprites.stack("cartography_table"))};
+				String[] names = {"diorama.book.list", this.section == Section.BANNERS ? "diorama.book.options" : "diorama.book.regions.options"};
 				for (int i = 0; i < names.length; i++) {
 					int index = i;
 					this.page(new BookWidgets.Tab(layout.left().x() + 4 + i * (BookLayout.TAB_W + 2), layout.tabY(), icons[i],
@@ -179,6 +190,13 @@ public final class MapBook {
 						this.banners.build(this, flow);
 					} else {
 						BookPages.bannerOptions(flow);
+					}
+				}
+				case REGIONS -> {
+					if (this.tab == 0) {
+						this.regions.build(this, flow);
+					} else {
+						BookPages.regionOptions(flow);
 					}
 				}
 				case LOOK -> BookPages.look(flow);
@@ -235,9 +253,20 @@ public final class MapBook {
 		Settings.get().save();
 	}
 
+	/** Whether a section has tabs along the book's top: a list and its options. */
+	private static boolean tabbed(Section s) {
+		return s == Section.BANNERS || s == Section.REGIONS;
+	}
+
+	/** Writes what the pages changed but haven't written: a waypoint's fields, a region's name. */
+	private void commit() {
+		this.banners.commit();
+		this.regions.commit();
+	}
+
 	private void ribbon(Section s) {
 		if (s == Section.MINIMAP) {
-			this.banners.commit();
+			this.commit();
 			net.minecraft.client.Minecraft.getInstance().gui.setScreen(new SettingsScreen(this.host.screen(), SettingsCatalog.Section.MINIMAP));
 			return;
 		}
@@ -251,7 +280,7 @@ public final class MapBook {
 	/** Opens the book at a section (and tab), or turns to it if it is open. */
 	public void show(Section s, int tab) {
 		if (s != this.section || tab != this.tab) {
-			this.banners.commit();
+			this.commit();
 			this.sheet = 0;
 		}
 		this.section = s;
@@ -277,7 +306,7 @@ public final class MapBook {
 		if (!this.open) {
 			return;
 		}
-		this.banners.commit();
+		this.commit();
 		this.open = false;
 		// The pages fade with their widgets; they go once the book has shut.
 		this.stale = true;
@@ -296,9 +325,21 @@ public final class MapBook {
 		this.show(Section.BANNERS, 0);
 	}
 
+	/** The regions section with this region picked, as a click on it on the map asks. */
+	public void showRegion(MapRegion region) {
+		this.regions.select(region);
+		this.show(Section.REGIONS, 0);
+	}
+
+	/** The regions section with a region just drawn, its name to write. */
+	public void newRegion(MapRegion region) {
+		this.regions.name(region);
+		this.show(Section.REGIONS, 0);
+	}
+
 	/** Saves edits not yet written; the map screen calls this as it is left. */
 	public void removed() {
-		this.banners.commit();
+		this.commit();
 	}
 
 	/** Whether a point is on the open book, so the map under it takes no clicks or scrolls. */
@@ -308,7 +349,7 @@ public final class MapBook {
 			return false;
 		}
 		BookLayout.Rect c = layout.cover();
-		boolean tabs = this.section == Section.BANNERS && y >= layout.tabY() && y < c.y() && x >= c.x() && x < c.right();
+		boolean tabs = tabbed(this.section) && y >= layout.tabY() && y < c.y() && x >= c.x() && x < c.right();
 		return c.contains(x, y) || tabs;
 	}
 
@@ -394,6 +435,11 @@ public final class MapBook {
 
 	public boolean drafting() {
 		return this.banners.drafting();
+	}
+
+	/** The region the regions section shows, or null. */
+	public @Nullable MapRegion pickedRegion() {
+		return this.regions.picked();
 	}
 
 	/** For tests: the ribbon of a section. */

@@ -6,6 +6,8 @@ import dev.diorama.MapSession;
 import dev.diorama.preview.SeedPreview;
 import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileKey;
+import dev.diorama.region.MapRegion;
+import dev.diorama.region.RegionStore;
 import dev.diorama.render.gpu.MapCanvas;
 import dev.diorama.render.gpu.MapEffect;
 import dev.diorama.render.gpu.MapTexture;
@@ -93,6 +95,15 @@ public final class MapViewport {
 	private final boolean minimap;
 	/** Where this view's water meets the land, for the coast effect. */
 	private final CoastMask coast = new CoastMask();
+	/** The regions over this view, for the regions effect. */
+	private final RegionMask regions = new RegionMask();
+	/** The region drawn brighter: the one the eraser points at, the one being edited, the one the book shows. */
+	private java.util.@Nullable UUID highlight;
+	/** The regions drawn last frame, for their labels. */
+	private List<MapRegion> shown = List.of();
+	/** A region being edited, drawn instead of the one kept with its id, and how many changes it has had. */
+	private @Nullable MapRegion preview;
+	private long previewVersion;
 
 	/** The world map's. */
 	public MapViewport() {
@@ -183,11 +194,26 @@ public final class MapViewport {
 			MapCanvas.of(graphics).effect(MapEffect.COAST, coast.texture(), FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
 				coast.u0(), coast.v0(), coast.u1(), coast.v1(), coastParams(coast, fog.pixelCode(), lighting));
 		}
+		RegionMask.Pass regions = this.prepareRegions(view);
+		if (regions != null) {
+			if (MapEffect.supported()) {
+				MapCanvas.of(graphics).effect(MapEffect.REGIONS, regions.texture(), FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+					regions.u0(), regions.v0(), regions.u1(), regions.v1(), regionParams(regions, fog.pixelCode(), lighting, false));
+			} else {
+				MapCanvas.of(graphics).rect(regions.texture(), Sampling.CLAMP_LINEAR, view.x(), view.y(), view.x() + view.width(), view.y() + view.height(),
+					regions.u0(), regions.v0(), regions.u1(), regions.v1(), -1);
+			}
+		}
 		if (this.cloudsShown(level, view)) {
 			MapCanvas.of(graphics).effect(MapEffect.CLOUDS, this.maskTexture, FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
 				fog.u0(), fog.v0(), fog.u1(), fog.v1(), fog.clouds());
 		}
 		this.drawFog(graphics, view, fog, false);
+		if (regions != null && MapEffect.supported()) {
+			// Borders run on over the fog, fainter; fills stay under it.
+			MapCanvas.of(graphics).effect(MapEffect.REGIONS, regions.texture(), FogTextures.noise(), view.x(), view.y(), view.width(), view.height(),
+				regions.u0(), regions.v0(), regions.u1(), regions.v1(), regionParams(regions, fog.pixelCode(), lighting, true));
+		}
 		graphics.disableScissor();
 	}
 
@@ -393,6 +419,68 @@ public final class MapViewport {
 		int v = (int) (Math.floorMod((long) coast.originV(), 768L) / 4);
 		int day = Math.round(Math.max(0, Math.min(1, lighting.daylight())) * 15);
 		return (texel << 4 | day) << 24 | (u | (sepia ? 64 : 0)) << 16 | v << 8 | pixelCode & 63;
+	}
+
+	/**
+	 * The regions pass's vertex colour, laid out as the coast's: the mask's texel size (log2 of map
+	 * pixels, bits 4-7) and daylight in alpha, the mask origin modulo 256 and 768 units in fours in
+	 * red and green, lines only in red's bit 6, the art pixel and its phase in blue, and the border
+	 * band in blue's bits 6 and 7. Each region's style is in the mask.
+	 */
+	static int regionParams(RegionMask.Pass pass, int pixelCode, dev.diorama.EnvironmentLighting lighting, boolean linesOnly) {
+		int texel = Integer.numberOfTrailingZeros((int) Math.round(pass.texel() / RegionMask.FINEST));
+		int u = (int) (Math.floorMod((long) pass.originU(), 256L) / 4);
+		int v = (int) (Math.floorMod((long) pass.originV(), 768L) / 4);
+		int day = Math.round(Math.max(0, Math.min(1, lighting.daylight())) * 15);
+		int band = Settings.get().regionBand.ordinal();
+		return (texel << 4 | day) << 24 | (u | (linesOnly ? 64 : 0)) << 16 | v << 8 | pixelCode & 63 | band << 6;
+	}
+
+
+
+	/** The regions of this dimension this view shows, and their mask, or null when it shows none. */
+	private RegionMask.@Nullable Pass prepareRegions(View view) {
+		Settings settings = Settings.get();
+		RegionStore store = (this.minimap ? settings.minimapRegions : settings.mapRegions) ? RegionStore.get() : null;
+		String dimension = dev.diorama.waypoint.Waypoints.dimension();
+		if (store == null || dimension == null) {
+			this.shown = List.of();
+			return null;
+		}
+		List<MapRegion> shown = new ArrayList<>();
+		this.shown = shown;
+		MapRegion preview = this.preview;
+		for (MapRegion region : store.in(dimension)) {
+			if (preview != null && preview.id.equals(region.id)) {
+				region = preview;
+			}
+			if (region.visible && (!this.minimap || region.onMinimap)) {
+				shown.add(region);
+			}
+		}
+		return this.regions.prepare(view, shown, store.revision(), preview == null ? 0 : this.previewVersion, this.highlight, settings.regionStyle,
+			Minecraft.getInstance().getWindow().getGuiScale());
+	}
+
+	/** Draws this region brighter from the next frame, or none. */
+	public void highlight(java.util.@Nullable UUID region) {
+		this.highlight = region;
+	}
+
+	/** Draws {@code region} in place of the region kept with its id, until it is null again; {@code version} goes up as it changes. */
+	public void preview(@Nullable MapRegion region, long version) {
+		this.preview = region;
+		this.previewVersion = version;
+	}
+
+	/** The regions drawn last frame, the one being edited as it is now. */
+	public List<MapRegion> shownRegions() {
+		return this.shown;
+	}
+
+	/** The region drawn at a map point last frame, or null. */
+	public @Nullable MapRegion regionAt(double u, double v) {
+		return this.regions.at(u, v);
 	}
 
 	/** Whether clouds drift over this view: asked for, and over a surface under an open sky. */
@@ -874,6 +962,7 @@ public final class MapViewport {
 			this.maskTexture = null;
 		}
 		this.coast.close();
+		this.regions.close();
 		this.maskInputs = null;
 		this.cartoInputs = null;
 		this.reveal.reset();

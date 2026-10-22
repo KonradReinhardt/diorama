@@ -36,8 +36,10 @@ public final class DioramaClient {
 	public static final KeyMapping ZOOM_OUT = new KeyMapping("key.diorama.zoom_out", InputConstants.KEY_MINUS, CATEGORY);
 	public static final KeyMapping SETTINGS = new KeyMapping("key.diorama.settings", InputConstants.UNKNOWN.getValue(), CATEGORY);
 	public static final KeyMapping TOGGLE_MINIMAP = new KeyMapping("key.diorama.toggle_minimap", InputConstants.UNKNOWN.getValue(), CATEGORY);
+	/** Opens the map with the region tools on, or turns them on and off on the map. */
+	public static final KeyMapping REGIONS = new KeyMapping("key.diorama.regions", InputConstants.UNKNOWN.getValue(), CATEGORY);
 	/** Every key binding, for the loader to register. */
-	public static final List<KeyMapping> KEY_MAPPINGS = List.of(OPEN_MAP, NEW_WAYPOINT, WAYPOINT_LIST, ZOOM_IN, ZOOM_OUT, SETTINGS, TOGGLE_MINIMAP);
+	public static final List<KeyMapping> KEY_MAPPINGS = List.of(OPEN_MAP, NEW_WAYPOINT, WAYPOINT_LIST, ZOOM_IN, ZOOM_OUT, SETTINGS, TOGGLE_MINIMAP, REGIONS);
 
 	private DioramaClient() {
 	}
@@ -67,9 +69,17 @@ public final class DioramaClient {
 	/** Called at the end of every client tick. */
 	public static void tick(Minecraft mc) {
 		MapSession.tick(mc);
+		dev.diorama.ui.RegionNotice.tick(mc);
 		while (OPEN_MAP.consumeClick()) {
 			if (mc.gui.screen() == null && mc.level != null && ServerRules.minimapAllowed()) {
 				mc.gui.setScreen(new MapScreen());
+			}
+		}
+		while (REGIONS.consumeClick()) {
+			if (mc.gui.screen() == null && mc.level != null && ServerRules.minimapAllowed()) {
+				MapScreen screen = new MapScreen();
+				mc.gui.setScreen(screen);
+				screen.startRegions();
 			}
 		}
 		while (NEW_WAYPOINT.consumeClick()) {

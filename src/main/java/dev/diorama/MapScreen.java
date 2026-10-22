@@ -12,6 +12,8 @@ import dev.diorama.ui.BookWidgets;
 import dev.diorama.ui.MapBook;
 import dev.diorama.ui.MapMenu;
 import dev.diorama.ui.OpeningZoom;
+import dev.diorama.ui.RegionMode;
+import dev.diorama.region.MapRegion;
 import dev.diorama.waypoint.Waypoint;
 import dev.diorama.waypoint.WaypointOverlay;
 import dev.diorama.waypoint.WaypointStore;
@@ -41,9 +43,10 @@ import com.mojang.blaze3d.platform.InputConstants;
 /**
  * The fullscreen map: drag to pan, scroll to zoom, C for caves, PgUp/PgDn to move the slice,
  * right-click to plant a waypoint, click a waypoint to pick it. Its menus are a {@link MapBook}
- * over the map, opened by the ribbons at its right edge. It opens with a short zoom in.
+ * over the map, opened by the ribbons at its right edge. It opens with a short zoom in. In
+ * {@link RegionMode} the left button draws regions instead, and the map pans with the others.
  */
-public final class MapScreen extends Screen implements MapBook.Host {
+public final class MapScreen extends Screen implements RegionMode.Host {
 	/** How far out the saved surface map zooms; overview tiles make it cheap. */
 	private static final double MIN_ZOOM = 0.04;
 
@@ -70,6 +73,10 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	/** The press started on the book, so it neither pans nor clicks the map. */
 	private boolean pressOnBook;
 	private final MapBook book = new MapBook(this);
+	/** Drawing regions, while it is on. */
+	private final RegionMode regions = new RegionMode(this);
+	/** The book opened to name a region just drawn: shutting it goes back to drawing. */
+	private boolean backToRegions;
 	private final OpeningZoom opening = new OpeningZoom();
 	/** init() has run once: later runs (a resize, coming back from a screen) don't zoom in again. */
 	private boolean opened;
@@ -114,6 +121,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			}
 		}
 		this.book.build(this.width, this.height);
+		this.regions.build(this.width, this.height);
 		this.help = this.addRenderableWidget(new BookWidgets.Mark(6, this.height - 18, BookSprites.HELP, BookSprites.HELP_HOVER,
 			Component.translatable("diorama.book.help_name"), null));
 		this.help.setTooltip(Tooltip.create(Component.translatable("diorama.book.help")));
@@ -186,12 +194,26 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		double drawnZoom = Math.max(this.minZoom(), this.zoom * this.opening.factor(zoomNow));
 		MapViewport.View view = new MapViewport.View(0, 0, this.width, this.height, this.centerU, this.centerV, drawnZoom, this.layer);
 		if (!this.smoothZoom.moving() && !this.opening.running(zoomNow) && this.panTarget == null) view = view.pixelPerfect();
+		// Regions are drawn on the surface, with the book shut.
+		if (this.backToRegions && !this.book.isOpen()) {
+			this.backToRegions = false;
+			this.regions.enter();
+		}
+		if (this.regions.active() && (this.book.isOpen() || this.layer != TileKey.SURFACE)) {
+			this.regions.leave();
+		}
+		// Nothing on the map under the book, a ribbon or the region tools is pointed at.
+		boolean onMap = !this.book.covers(mouseX, mouseY) && !this.book.onRibbon(mouseX, mouseY) && !this.regions.covers(mouseX, mouseY);
+		this.regions.frame(this.viewport, mouseX, mouseY, onMap,
+			this.book.isOpen() && this.book.section() == MapBook.Section.REGIONS ? this.book.pickedRegion() : null);
 		this.viewport.draw(graphics, session.map(), view, overlayBits(session));
 		this.drawReveal(graphics, view, player, mouseX, mouseY);
+		if (Settings.get().regionLabels) {
+			dev.diorama.render.RegionLabels.draw(graphics, view, this.viewport.shownRegions(), Settings.get());
+		}
+		this.regions.draw(graphics, view, mouseX, mouseY);
 		Radar.Blip hovered = null;
 		this.blips = List.of();
-		// Nothing on the map under the book or a ribbon is pointed at.
-		boolean onMap = !this.book.covers(mouseX, mouseY) && !this.book.onRibbon(mouseX, mouseY);
 		if (ServerRules.radarAllowed()) {
 			this.blips = Radar.collect(view, a, true);
 			Radar.draw(graphics, view, this.blips, true, false);
@@ -217,6 +239,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			graphics.setTooltipForNextFrame(this.font, WaypointOverlay.describe(hoveredPin.waypoint(), player), mouseX, mouseY);
 		} else if (hovered != null) {
 			graphics.setTooltipForNextFrame(this.font, Radar.describe(hovered, player), mouseX, mouseY);
+		} else if (onMap && !this.regions.active() && !this.book.isOpen()) {
+			MapRegion region = this.regionUnder(mouseX, mouseY);
+			if (region != null) {
+				graphics.setTooltipForNextFrame(this.font, Component.literal(region.name), mouseX, mouseY);
+			}
 		}
 
 		if (!this.book.isOpen()) {
@@ -236,7 +263,8 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			this.say(Component.translatable("diorama.reveal." + outcome.name().toLowerCase(java.util.Locale.ROOT)));
 		}
 		Component shownNote = this.revealCorner != null ? this.revealHint(mouseX, mouseY)
-			: this.note != null && System.currentTimeMillis() < this.noteUntil ? this.note : null;
+			: this.note != null && System.currentTimeMillis() < this.noteUntil ? this.note
+			: this.regions.active() ? this.regions.hint() : null;
 		if (shownNote != null) {
 			// Under the status slip, which can reach the middle of a narrow screen.
 			int w = this.font.width(shownNote) + 12;
@@ -247,6 +275,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		// The book and its widgets draw over the map and its labels.
 		BookSprites.above(graphics);
 		this.book.drawBehind(graphics);
+		this.regions.drawPanel(graphics);
 		super.extractRenderState(graphics, mouseX, mouseY, a);
 	}
 
@@ -258,7 +287,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		//? if >=1.21.9 {
 		if (this.panning) {
 			graphics.requestCursor(CursorTypes.RESIZE_ALL);
-		} else if (onMap && this.revealCorner != null) {
+		} else if (onMap && (this.revealCorner != null || this.regions.active())) {
 			graphics.requestCursor(CursorTypes.CROSSHAIR);
 		} else if (onMap && overPin) {
 			graphics.requestCursor(CursorTypes.POINTING_HAND);
@@ -321,8 +350,15 @@ public final class MapScreen extends Screen implements MapBook.Host {
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		return this.keyDown(event.key(), DioramaClient.WAYPOINT_LIST.matches(event), DioramaClient.OPEN_MAP.matches(event))
-			|| super.keyPressed(event);
+		this.modifier(event.key(), true);
+		return this.keyDown(event.key(), event.modifiers(), DioramaClient.WAYPOINT_LIST.matches(event), DioramaClient.OPEN_MAP.matches(event),
+			DioramaClient.REGIONS.matches(event)) || super.keyPressed(event);
+	}
+
+	@Override
+	public boolean keyReleased(KeyEvent event) {
+		this.modifier(event.key(), false);
+		return super.keyReleased(event);
 	}
 	//?} else {
 	/*@Override
@@ -342,10 +378,35 @@ public final class MapScreen extends Screen implements MapBook.Host {
 
 	@Override
 	public boolean keyPressed(int key, int scancode, int modifiers) {
-		return this.keyDown(key, DioramaClient.WAYPOINT_LIST.matches(key, scancode), DioramaClient.OPEN_MAP.matches(key, scancode))
-			|| super.keyPressed(key, scancode, modifiers);
+		this.modifier(key, true);
+		return this.keyDown(key, modifiers, DioramaClient.WAYPOINT_LIST.matches(key, scancode), DioramaClient.OPEN_MAP.matches(key, scancode),
+			DioramaClient.REGIONS.matches(key, scancode)) || super.keyPressed(key, scancode, modifiers);
+	}
+
+	@Override
+	public boolean keyReleased(int key, int scancode, int modifiers) {
+		this.modifier(key, false);
+		return super.keyReleased(key, scancode, modifiers);
 	}
 	*///?}
+
+	/** Ctrl, Shift and Alt as this screen saw them pressed, beside the event's own modifier bits. */
+	private boolean control, shift, alt;
+
+	private void modifier(int key, boolean down) {
+		if (key == InputConstants.KEY_LCONTROL || key == InputConstants.KEY_RCONTROL) {
+			this.control = down;
+		} else if (key == InputConstants.KEY_LSHIFT || key == InputConstants.KEY_RSHIFT) {
+			this.shift = down;
+		} else if (key == InputConstants.KEY_LALT || key == InputConstants.KEY_RALT) {
+			this.alt = down;
+		}
+	}
+
+	/** The modifiers held, as GLFW's bits. */
+	private int held() {
+		return (this.shift ? 1 : 0) | (this.control ? 2 : 0) | (this.alt ? 4 : 0);
+	}
 
 	/** A press; {@code widgetTook} if a widget (the settings button) took it. */
 	private boolean clicked(boolean widgetTook, double x, double y, int button) {
@@ -356,7 +417,7 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		// A click away from the right-click menu shuts it; a right-click opens it again where it lands.
 		this.pressClosedMenu = this.menu != null && button != InputConstants.MOUSE_BUTTON_RIGHT;
 		this.closeMenu();
-		this.pressOnBook = this.book.covers(x, y);
+		this.pressOnBook = this.book.covers(x, y) || this.regions.covers(x, y);
 		if (!this.pressOnBook) {
 			// A click on the map leaves the book's fields.
 			this.setFocused(null);
@@ -365,6 +426,9 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		this.pressY = y;
 		this.dragged = false;
 		this.panning = false;
+		if (!this.pressOnBook && this.regions.active() && button == InputConstants.MOUSE_BUTTON_LEFT) {
+			this.regions.press(x, y, this.held());
+		}
 		return true;
 	}
 
@@ -379,7 +443,22 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			this.pressClosedMenu = false;
 			return true;
 		}
-		if (this.dragged || Math.hypot(x - this.pressX, y - this.pressY) > 3) {
+		boolean moved = this.dragged || Math.hypot(x - this.pressX, y - this.pressY) > 3;
+		if (this.regions.active()) {
+			// The left button draws; a right click lets the stroke under way go.
+			if (button == InputConstants.MOUSE_BUTTON_LEFT) {
+				this.regions.release(x, y, moved, this.held());
+				return true;
+			}
+			if (button == InputConstants.MOUSE_BUTTON_RIGHT && !moved && this.regions.drawing()) {
+				this.regions.cancelStroke();
+				return true;
+			}
+			if (button == InputConstants.MOUSE_BUTTON_RIGHT && !moved && this.regions.rightClick(x, y)) {
+				return true;
+			}
+		}
+		if (moved) {
 			return true;
 		}
 		if (this.revealCorner != null) {
@@ -400,6 +479,12 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			if (pin != null) {
 				BookWidgets.pageTurn(this.minecraft.getSoundManager());
 				this.book.showWaypoint(pin.waypoint());
+				return true;
+			}
+			MapRegion region = this.regionUnder(x, y);
+			if (region != null) {
+				BookWidgets.pageTurn(this.minecraft.getSoundManager());
+				this.book.showRegion(region);
 			}
 			return true;
 		}
@@ -553,6 +638,12 @@ public final class MapScreen extends Screen implements MapBook.Host {
 				}));
 			}
 		}
+		if (this.layer == TileKey.SURFACE && !this.regions.active()) {
+			entries.add(new MapMenu.Entry(Component.translatable("diorama.menu.draw_region"), BookWidgets.item(BookSprites.stack("lead")), () -> {
+				this.closeMenu();
+				this.startRegions();
+			}));
+		}
 		this.menu = new MapMenu(target, entries, (int) screenX, (int) screenY);
 		BookWidgets.card(this.minecraft.getSoundManager());
 		this.rebuild();
@@ -584,7 +675,8 @@ public final class MapScreen extends Screen implements MapBook.Host {
 	}
 
 	/** A short note at the top of the map for two seconds. */
-	private void say(Component text) {
+	@Override
+	public void say(Component text) {
 		this.note = text;
 		this.noteUntil = System.currentTimeMillis() + 2000;
 	}
@@ -622,7 +714,15 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		if (Math.hypot(x - this.pressX, y - this.pressY) > 3) {
 			this.dragged = true;
 		}
-		if (button == InputConstants.MOUSE_BUTTON_LEFT && this.dragged) {
+		if (this.regions.active() && button == InputConstants.MOUSE_BUTTON_LEFT) {
+			this.regions.drag(x, y);
+			return true;
+		}
+		// Drawing regions, the map pans with the right or middle button instead of the left.
+		boolean panButton = this.regions.active()
+			? button == InputConstants.MOUSE_BUTTON_RIGHT || button == InputConstants.MOUSE_BUTTON_MIDDLE
+			: button == InputConstants.MOUSE_BUTTON_LEFT;
+		if (panButton && this.dragged) {
 			this.panning = true;
 			this.smoothZoom.reset(this.zoom);
 			this.opening.cancel();
@@ -649,8 +749,11 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		return true;
 	}
 
-	/** A key press, and whether it is bound to the waypoint list or the map; false leaves it to the screen. */
-	private boolean keyDown(int key, boolean waypointListKey, boolean mapKey) {
+	/**
+	 * A key press with GLFW's modifier bits, and whether it is bound to the waypoint list, the map
+	 * or the region tools; false leaves it to the screen.
+	 */
+	private boolean keyDown(int key, int modifiers, boolean waypointListKey, boolean mapKey, boolean regionKey) {
 		// Escape shuts the right-click menu first, then the book, and the map only once both are shut.
 		if (key == InputConstants.KEY_ESCAPE && this.menu != null) {
 			this.closeMenu();
@@ -658,6 +761,15 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		if (key == InputConstants.KEY_ESCAPE && this.revealCorner != null) {
 			this.revealCorner = null;
+			return true;
+		}
+		// Then the stroke under way, then the region tools.
+		if (key == InputConstants.KEY_ESCAPE && this.regions.drawing()) {
+			this.regions.cancelStroke();
+			return true;
+		}
+		if (key == InputConstants.KEY_ESCAPE && this.regions.active()) {
+			this.regions.leave();
 			return true;
 		}
 		if (key == InputConstants.KEY_ESCAPE && this.book.isOpen()) {
@@ -678,6 +790,17 @@ public final class MapScreen extends Screen implements MapBook.Host {
 		}
 		if (mapKey) {
 			this.onClose();
+			return true;
+		}
+		if (regionKey) {
+			if (this.regions.active()) {
+				this.regions.leave();
+			} else {
+				this.startRegions();
+			}
+			return true;
+		}
+		if (this.regions.active() && this.regions.key(key, modifiers | this.held())) {
 			return true;
 		}
 		LocalPlayer player = this.minecraft.player;
@@ -793,6 +916,65 @@ public final class MapScreen extends Screen implements MapBook.Host {
 			Projection.u(waypoint.x + 0.5, waypoint.z + 0.5),
 			Projection.worldV(waypoint.x + 0.5, waypoint.y, waypoint.z + 0.5)
 		};
+	}
+
+	/** Turns the region tools on, shutting the book, which they would sit under. */
+	public void startRegions() {
+		if (this.book.isOpen()) {
+			this.book.close();
+		}
+		this.regions.enter();
+	}
+
+	@Override
+	public void drawRegions(@Nullable MapRegion region) {
+		if (this.book.isOpen()) {
+			this.book.close();
+		}
+		if (region == null) {
+			this.regions.pick(dev.diorama.region.RegionTool.Tool.LASSO);
+			this.regions.enter();
+		} else {
+			this.regions.edit(region);
+		}
+	}
+
+	@Override
+	public void created(MapRegion region) {
+		// Left first, so the widgets are built once, with the name field taking the keyboard.
+		this.regions.leave();
+		this.backToRegions = true;
+		this.book.newRegion(region);
+	}
+
+	/** Glides the view to where a region's name is written, and stops following the player. */
+	@Override
+	public void centerOn(MapRegion region) {
+		double[] at = region.anchor();
+		this.following = false;
+		this.smoothZoom.reset(this.zoom);
+		this.panTarget = new double[] {Projection.u(at[0], at[1]), Projection.worldV(at[0], at[2], at[1])};
+	}
+
+	/** The region drawn under a screen point, or null. */
+	private @Nullable MapRegion regionUnder(double screenX, double screenY) {
+		MapViewport.View view = this.lastView;
+		if (view == null) {
+			return null;
+		}
+		double u = view.centerU() + (screenX - view.x() - view.width() / 2.0) / view.zoom();
+		double v = view.centerV() + (screenY - view.y() - view.height() / 2.0) / view.zoom();
+		return this.viewport.regionAt(u, v);
+	}
+
+	/** For tests: the region tools. */
+	public RegionMode regions() {
+		return this.regions;
+	}
+
+	/** For tests: the map drawn last frame. */
+	public MapViewport viewport() {
+		return this.viewport;
 	}
 
 	/** For tests: the book over the map. */

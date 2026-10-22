@@ -122,7 +122,7 @@ public final class WaypointOverlay {
 		Minecraft mc = Minecraft.getInstance();
 		Font font = mc.font;
 		Settings settings = Settings.get();
-		boolean sepia = settings.sepiaBanners && settings.fogStyle == Settings.FogStyle.ANCIENT_MAP;
+		boolean sepia = settings.bannersInSepia();
 		int frame = BannerAtlas.frameNow(settings.animateBanners);
 		BannerAtlas atlas = BannerAtlas.shared();
 		graphics.enableScissor(view.x(), view.y(), view.x() + view.width(), view.y() + view.height());

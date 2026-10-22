@@ -13,7 +13,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Every setting as a button that cycles its value, built from {@link SettingsCatalog}: in three
- * columns, Minimap, Radar with Overlays and Banners, and Waypoints with Look; or, given sections,
+ * columns, Minimap, Radar with Overlays, Banners and Regions, and Waypoints with Look (four, with Regions beside
+ * Waypoints, on screens too short for three); or, given sections,
  * only those, in one column (the world map's book sends the minimap's settings here).
  */
 public final class SettingsScreen extends Screen {
@@ -21,9 +22,18 @@ public final class SettingsScreen extends Screen {
 	/** The full screen's columns, left to right. */
 	private static final Section[][] COLUMNS = {
 		{Section.MINIMAP},
-		{Section.RADAR, Section.OVERLAYS, Section.BANNERS},
+		{Section.RADAR, Section.OVERLAYS, Section.BANNERS, Section.REGIONS},
 		{Section.WAYPOINTS, Section.LOOK},
 	};
+	/** The same in four columns, for screens too short for three. */
+	private static final Section[][] FOUR_COLUMNS = {
+		{Section.MINIMAP},
+		{Section.RADAR, Section.OVERLAYS, Section.BANNERS},
+		{Section.WAYPOINTS, Section.REGIONS},
+		{Section.LOOK},
+	};
+	/** Rows no shorter than this, or the buttons' text won't fit. */
+	private static final int SMALLEST_ROW = 10;
 
 	/** Sized in init() to fit the screen: at 427x240 the full-size layout would run off it. */
 	private int buttonWidth = MAX_BUTTON_WIDTH;
@@ -32,6 +42,8 @@ public final class SettingsScreen extends Screen {
 
 	private final @Nullable Screen parent;
 	private final Section[][] columns;
+	/** The columns laid out: {@link #columns}, or four of them where three don't fit. */
+	private Section[][] laid;
 	private final List<Header> headers = new ArrayList<>();
 
 	private record Header(Component text, int x, int y) {
@@ -50,6 +62,7 @@ public final class SettingsScreen extends Screen {
 		super(title);
 		this.parent = parent;
 		this.columns = columns;
+		this.laid = columns;
 	}
 
 	@Override
@@ -57,31 +70,23 @@ public final class SettingsScreen extends Screen {
 		this.headers.clear();
 		Settings s = Settings.get();
 		int gap = 6;
-		int count = this.columns.length;
-		this.buttonWidth = Math.min(MAX_BUTTON_WIDTH, (this.width - (count - 1) * gap - 16) / count);
-		// The tallest column must clear Done: its headers, the gaps between them and its rows.
-		int rows = 0;
-		int headers = 0;
-		for (Section[] column : this.columns) {
-			int columnRows = 0;
-			for (Section section : column) {
-				columnRows += shown(s, section).size();
-			}
-			if (columnRows > rows) {
-				rows = columnRows;
-				headers = column.length;
-			}
+		this.laid = this.columns;
+		int fullRow = this.rowFor(s, this.laid);
+		if (fullRow < SMALLEST_ROW && this.columns == COLUMNS) {
+			this.laid = FOUR_COLUMNS;
+			fullRow = this.rowFor(s, this.laid);
 		}
-		int heading = headers * 16 + (headers - 1) * 4;
-		boolean compact = 30 + heading + rows * 22 > this.height - 30;
-		this.row = compact ? Math.min(19, Math.max(10, (this.height - 22 - heading - 30) / rows)) : 22;
+		int count = this.laid.length;
+		this.buttonWidth = Math.min(MAX_BUTTON_WIDTH, (this.width - (count - 1) * gap - 16) / count);
+		boolean compact = fullRow < 22;
+		this.row = compact ? Math.min(19, Math.max(SMALLEST_ROW, fullRow)) : 22;
 		this.buttonHeight = compact ? this.row - 1 : 20;
 		int left = this.width / 2 - (this.buttonWidth * count + gap * (count - 1)) / 2;
 		int top = compact ? 22 : 30;
 		for (int c = 0; c < count; c++) {
 			int x = left + c * (this.buttonWidth + gap);
 			int y = top;
-			for (Section section : this.columns[c]) {
+			for (Section section : this.laid[c]) {
 				y = this.header(section.key, x, y == top ? y : y + 4);
 				for (SettingsCatalog.Entry entry : shown(s, section)) {
 					y = this.cycle(x, y, entry);
@@ -91,6 +96,29 @@ public final class SettingsScreen extends Screen {
 
 		this.addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> this.onClose())
 			.bounds(this.width / 2 - 100, this.height - 26, 200, 20).build());
+	}
+
+	/**
+	 * The row height every column of a layout fits with above Done: 22, a full button row, where
+	 * there is room; else what the tallest column (its rows, headers and the gaps between them)
+	 * leaves, which may be under {@link #SMALLEST_ROW}.
+	 */
+	private int rowFor(Settings s, Section[][] columns) {
+		int row = 22;
+		for (Section[] column : columns) {
+			int rows = 0;
+			for (Section section : column) {
+				rows += shown(s, section).size();
+			}
+			if (rows == 0) {
+				continue;
+			}
+			int heading = column.length * 16 + (column.length - 1) * 4;
+			if (30 + heading + rows * 22 > this.height - 30) {
+				row = Math.min(row, (this.height - 22 - heading - 30) / rows);
+			}
+		}
+		return row;
 	}
 
 	private static List<SettingsCatalog.Entry> shown(Settings s, Section section) {

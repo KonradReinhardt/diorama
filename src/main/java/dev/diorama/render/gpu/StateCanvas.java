@@ -92,7 +92,11 @@ final class StateCanvas implements MapCanvas {
 	@Override
 	public void effect(MapEffect effect, MapTexture mask, MapTexture noise, int x, int y, int width, int height, float u0, float v0, float u1, float v1, int params) {
 		this.graphics.guiRenderState.addGuiElement(QuadElement.rect(
-			effect == MapEffect.CLOUDS ? DioramaPipelines.CLOUDS : DioramaPipelines.COAST,
+			switch (effect) {
+				case CLOUDS -> DioramaPipelines.CLOUDS;
+				case COAST -> DioramaPipelines.COAST;
+				case REGIONS -> DioramaPipelines.REGIONS;
+			},
 			StateTexture.pair((StateTexture) mask, Sampling.CLAMP_LINEAR, (StateTexture) noise, Sampling.REPEAT_LINEAR),
 			new Matrix3x2f(this.graphics.pose()),
 			x, y, x + width, y + height,

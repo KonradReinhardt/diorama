@@ -58,6 +58,7 @@ public final class DioramaNeoForge {
 			event.registerPipeline(DioramaPipelines.FOG);
 			event.registerPipeline(DioramaPipelines.CLOUDS);
 			event.registerPipeline(DioramaPipelines.COAST);
+			event.registerPipeline(DioramaPipelines.REGIONS);
 		});
 		//?}
 		// Above the whole vanilla HUD, in the same order as on Fabric: waypoint labels, then the

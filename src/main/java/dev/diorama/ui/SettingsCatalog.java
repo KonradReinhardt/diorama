@@ -27,6 +27,7 @@ public final class SettingsCatalog {
 		OVERLAYS("diorama.settings.overlays"),
 		BANNERS("diorama.settings.banners"),
 		WAYPOINTS("diorama.settings.waypoints"),
+		REGIONS("diorama.settings.regions"),
 		LOOK("diorama.settings.look");
 
 		public final String key;
@@ -96,6 +97,7 @@ public final class SettingsCatalog {
 		out.add(toggle("diorama.settings.coordinates", Section.MINIMAP, "coordinates", () -> s.coordinates, v -> s.coordinates = v));
 		out.add(toggle("diorama.settings.biome", Section.MINIMAP, "biome", () -> s.biome, v -> s.biome = v));
 		out.add(toggle("diorama.settings.auto_caves", Section.MINIMAP, "autoCaves", () -> s.autoCaves, v -> s.autoCaves = v));
+		out.add(toggle("diorama.settings.regions_minimap", Section.MINIMAP, "minimapRegions", () -> s.minimapRegions, v -> s.minimapRegions = v));
 		out.add(shownIf(toggle("diorama.settings.minimap_clouds", Section.MINIMAP, "minimapClouds", () -> s.minimapClouds, v -> s.minimapClouds = v),
 			MapEffect::supported));
 
@@ -118,6 +120,12 @@ public final class SettingsCatalog {
 		out.add(toggle("diorama.settings.animate_banners", Section.BANNERS, "animateBanners", () -> s.animateBanners, v -> s.animateBanners = v));
 		out.add(toggle("diorama.settings.sepia_banners", Section.BANNERS, "sepiaBanners", () -> s.sepiaBanners, v -> s.sepiaBanners = v));
 		out.add(tooltip(toggle("diorama.settings.extra_banner_layers", Section.BANNERS, "extraBannerLayers", () -> s.extraBannerLayers, v -> s.extraBannerLayers = v)));
+
+		out.add(toggle("diorama.settings.regions_map", Section.REGIONS, "mapRegions", () -> s.mapRegions, v -> s.mapRegions = v));
+		out.add(toggle("diorama.settings.region_labels", Section.REGIONS, "regionLabels", () -> s.regionLabels, v -> s.regionLabels = v));
+		out.add(toggle("diorama.settings.region_notice", Section.REGIONS, "regionEnterNotice", () -> s.regionEnterNotice, v -> s.regionEnterNotice = v));
+		out.add(tooltip(choice("diorama.settings.region_style", Section.REGIONS, "regionStyle", dev.diorama.region.RegionStyle.values(), () -> s.regionStyle, v -> s.regionStyle = v)));
+		out.add(tooltip(choice("diorama.settings.region_band", Section.REGIONS, "regionBand", Settings.RegionBand.values(), () -> s.regionBand, v -> s.regionBand = v)));
 
 		out.add(toggle("diorama.settings.waypoints_map", Section.WAYPOINTS, "waypointsOnMap", () -> s.waypointsOnMap, v -> s.waypointsOnMap = v));
 		out.add(toggle("diorama.settings.waypoints_world", Section.WAYPOINTS, "waypointsInWorld", () -> s.waypointsInWorld, v -> s.waypointsInWorld = v));

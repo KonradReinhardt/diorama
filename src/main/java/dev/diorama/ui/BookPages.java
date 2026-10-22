@@ -29,13 +29,13 @@ final class BookPages {
 		flow.title(Component.translatable(MapBook.Section.LOOK.key));
 		Entry render = entry("render_style");
 		flow.heading(Component.translatable(render.key()));
-		flow.slots(pictures(render, true), THUMB_SLOT_W, THUMB_SLOT_H);
+		flow.slots(pictures(render, BookSprites::renderThumb), THUMB_SLOT_W, THUMB_SLOT_H);
 		valueLine(flow, render);
 		// The look is baked into the tiles, so they are traced again; the view goes first.
 		flow.paragraph(Component.translatable("diorama.book.look.render_hint"));
 		Entry fog = entry("fog_style");
 		flow.heading(Component.translatable(fog.key()));
-		flow.slots(pictures(fog, false), THUMB_SLOT_W, THUMB_SLOT_H);
+		flow.slots(pictures(fog, BookSprites::fogThumb), THUMB_SLOT_W, THUMB_SLOT_H);
 		valueLine(flow, fog);
 		flow.setting(entry("antique_tint"), null);
 		flow.setting(entry("seed_preview"), null);
@@ -69,11 +69,11 @@ final class BookPages {
 	}
 
 	/** The pictures of a style setting's values, one slot each. */
-	private static List<PageFlow.Choice> pictures(Entry entry, boolean render) {
+	private static List<PageFlow.Choice> pictures(Entry entry, java.util.function.IntFunction<BookSprites.Region> thumbs) {
 		List<PageFlow.Choice> choices = new ArrayList<>();
 		for (int i = 0; i < entry.count(); i++) {
 			int value = i;
-			BookSprites.Region thumb = render ? BookSprites.renderThumb(i) : BookSprites.fogThumb(i);
+			BookSprites.Region thumb = thumbs.apply(i);
 			choices.add(new PageFlow.Choice(SettingsScreen.valueName(entry, i),
 				(graphics, x, y, w, h, alpha) -> BookSprites.sprite(graphics, thumb, x + 2, y + 2, BookWidgets.fade(-1, alpha)),
 				() -> entry.value() == value, () -> entry.choose(value)));
@@ -132,6 +132,29 @@ final class BookPages {
 		flow.breakPage();
 		flow.heading(Component.translatable("diorama.book.radar.about"));
 		flow.paragraph(Component.translatable("diorama.book.radar.hint"));
+	}
+
+	/**
+	 * The regions' options: their style as pictures, picked straight to a value, the one place it
+	 * is chosen; then the rest.
+	 */
+	static void regionOptions(PageFlow flow) {
+		flow.title(Component.translatable("diorama.book.regions.options"));
+		Entry style = entry("region_style");
+		flow.heading(Component.translatable(style.key()));
+		flow.slots(pictures(style, BookSprites::regionThumb), THUMB_SLOT_W, THUMB_SLOT_H);
+		valueLine(flow, style);
+		flow.gap(2);
+		for (Entry e : SettingsCatalog.in(Settings.get(), SettingsCatalog.Section.REGIONS)) {
+			if (!e.field().equals("regionStyle")) {
+				flow.setting(e, null);
+			}
+		}
+		// The minimap's own, offered here too beside the world map's.
+		flow.setting(entry("regions_minimap"), null);
+		flow.breakPage();
+		flow.heading(Component.translatable("diorama.book.regions.tools"));
+		flow.paragraph(Component.translatable("diorama.book.regions.tools_hint"));
 	}
 
 	static void bannerOptions(PageFlow flow) {

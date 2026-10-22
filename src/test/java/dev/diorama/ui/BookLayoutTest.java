@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BookLayoutTest {
-	private static final int RIBBONS = 5;
+	private static final int RIBBONS = 6;
 
 	@Test
 	void fitsCommonScreensWithTwoPages() {
