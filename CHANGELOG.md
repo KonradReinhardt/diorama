@@ -1,12 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- **Regions.** Draw regions on the world map with a lasso, a polygon or a chunk brush; edit their corners, move them, add to them with Shift and cut them with Alt, erase them, undo and redo. A Regions ribbon in the book lists them nearest first and sets each one's name, dye, fill, where it shows and its banner (from the loom, the banner in hand or a waypoint's).
-- Regions are drawn in a style of their own, picked from pictures (Marker, Political, Watercolor, Wash, Engraving, Illuminated), with an optional border band in their dye that fades inwards, on by default. Names and banners are written on the world map where they fit; the region you stand in shows under the minimap; an optional notice names the region you walk into. Shader pass from 1.21.6; older versions draw a flat look.
-- Regions are saved per world in `regions.json` beside the waypoints, in world coordinates on the height of the ground they were drawn on; a file from a newer version is shown but never written over.
-- The "Sepia banners" option turns region banners sepia too.
-
 ## 1.0.0
 
 Mappa Mundi's first stable release, a fork of Diorama by Dara Adedeji under a name of its own (the mod
@@ -30,6 +23,11 @@ Since upstream 0.2.1:
 - **Mod Menu** entry on Fabric (optional, not bundled).
 
 New in this release:
+
+- **Regions.** Draw regions on the world map with a lasso, a polygon or a chunk brush; edit their corners, move them, add to them with Shift and cut them with Alt, erase them, undo and redo. A Regions ribbon in the book lists them nearest first and sets each one's name, dye, fill, where it shows and its banner (from the loom, the banner in hand or a waypoint's). The idea, and its lasso, polygon, eraser and undo, come from [MapScribble](https://github.com/radishsprouts/MapScribble) by radishsprouts (MIT), notes drawn on JourneyMap's map; no code is shared.
+- Regions are drawn in a style of their own, picked from pictures (Marker, Political, Watercolor, Wash, Engraving, Illuminated), with a border band in their dye that fades inwards, as strategy games draw territories (on by default). Names and banners are written on the world map where they fit; the region you stand in shows under the minimap; an optional notice names the region you walk into. Shader pass from 1.21.6; older versions draw a flat look.
+- Regions are saved per world in `regions.json` beside the waypoints, in world coordinates on the height of the ground they were drawn on; a file from a newer version is shown but never written over.
+- The "Sepia banners" option turns region banners sepia too, and the full settings screen lays out in four columns where three don't fit.
 
 - The pointer turns into a hand over everything that can be clicked (book controls, the right-click menu, banners on the map, dye swatches), "not allowed" over switched-off controls, a crosshair while picking a region's corner and a cross of arrows while dragging the map. The game only lets mods pick the pointer from 1.21.9.
 - Sounds the interface missed: clicking a banner on the map turns the book's page, the right-click menu opens with a soft paper sound, the book's page arrows and close mark turn a page, Esc and the waypoint key turn it as they shut or open the book, revealing a region starts with the spyglass and ends with the cartography table, the dye swatches click and the banner editor sounds like the loom.

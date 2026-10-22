@@ -9,8 +9,9 @@ the minimap).
 ## Goal
 
 The player draws regions on the world map — a kingdom, a farm district, a claim, "here be
-dragons" — each with a colour and an optional banner, in the spirit of MapScribble
-(<https://github.com/radishsprouts/MapScribble>), but native to this map:
+dragons" — each with a colour and an optional banner, in the spirit of
+[MapScribble](https://github.com/radishsprouts/MapScribble) by radishsprouts (MIT, notes drawn on
+JourneyMap's map, credited in the README; no code is shared), but native to this map:
 
 - Freehand and point-by-point outlines, closed into filled regions; edit, move and delete them, with
   undo and redo.

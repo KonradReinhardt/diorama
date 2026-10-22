@@ -237,3 +237,11 @@ Regions are kept in world coordinates, each corner on the height of the ground i
 `regions.json` beside `waypoints.json`, client-side only. See [the design](docs/design/map-regions.md)
 and [validation results](docs/testing/map-regions.md).
 
+## Credits
+
+- [Diorama](https://github.com/SunkenInTime/diorama) by Dara Adedeji (MIT), which Mappa Mundi is a
+  fork of.
+- [MapScribble](https://github.com/radishsprouts/MapScribble) by radishsprouts (MIT), notes drawn on
+  JourneyMap's map, which inspired the regions: their idea, and the lasso, polygon, eraser and undo
+  they are drawn with. No code is shared.
+
